@@ -9,3 +9,14 @@ def test_reference_tables_registered():
     cols = {c.name for c in tables["accounts"].columns}
     assert {"id", "bank_id", "entity_id", "risk_score", "risk_category"} <= cols
     assert "province" in {c.name for c in tables["entities"].columns}
+
+
+def test_transaction_tables_registered():
+    from garda_ai_backend.schema import Transaction, TransactionEvent
+    tables = Base.metadata.tables
+    txn_cols = {c.name for c in tables["transactions"].columns}
+    assert {"id", "event_time", "from_account", "to_account",
+            "amount_paid", "is_laundering"} <= txn_cols
+    ev_cols = {c.name for c in tables["transaction_events"].columns}
+    assert {"seq", "transaction_id", "surfaced_at",
+            "fraud_score", "typology", "status"} <= ev_cols
