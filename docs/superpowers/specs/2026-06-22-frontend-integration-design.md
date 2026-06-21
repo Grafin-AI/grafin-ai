@@ -3,7 +3,7 @@
 **Date:** 2026-06-22
 **Status:** Approved (brainstorming)
 **Repo:** `garda-ai-dashboard-web`
-**Anchor spec:** `garda-ai-deploy/docs/specs/2026-06-22-system-architecture-design.md`
+**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
 
 Replace every hardcoded mock array with real data from `garda-ai-backend`, add auth, and make the live monitor stream over WebSocket — without redesigning the existing UI. Components keep their markup; only their data source changes.
 
