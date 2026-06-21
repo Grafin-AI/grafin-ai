@@ -81,7 +81,11 @@ PII shown is whatever the API returns (already masked server-side); the frontend
 - `useLiveTransactions` resync logic unit-tested (cursor, reconnect backfill, bounded list).
 - Auth flow + role-gated UI tests.
 
-## 10. Out of scope here
+## 10. C4 documentation (deliverable)
+
+After integration, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `garda-ai-dashboard-web/docs/c4/`. System-wide Context + Container live in `garda-ai-deploy/docs/c4/`.
+
+## 11. Out of scope here
 
 - API/aggregation, auth issuance, masking → `garda-ai-backend`.
 - Scoring/replay → `garda-ai-pipeline`.
