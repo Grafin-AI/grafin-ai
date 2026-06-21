@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,5 +11,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
