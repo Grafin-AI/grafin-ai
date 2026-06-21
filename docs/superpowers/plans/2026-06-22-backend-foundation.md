@@ -858,7 +858,7 @@ git commit -m "docs(c4): backend component + code documentation"
 
 ## Self-Review
 
-**Spec coverage** (against `docs/specs/2026-06-22-backend-api-design.md`):
+**Spec coverage** (against `docs/superpowers/specs/2026-06-22-backend-api-design.md`):
 - §2 schema (all 9 tables + indexes) → Tasks 3–5, 7. ✅
 - §1 stack/layering, config → Tasks 1–2, 6. ✅
 - §8 observability (`/healthz`, `/readyz`, `/metrics`, structlog) → Tasks 8–9. ✅

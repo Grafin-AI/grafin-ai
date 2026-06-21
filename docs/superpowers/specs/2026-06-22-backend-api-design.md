@@ -3,7 +3,7 @@
 **Date:** 2026-06-22
 **Status:** Approved (brainstorming)
 **Repo:** `garda-ai-backend`
-**Anchor spec:** `garda-ai-deploy/docs/specs/2026-06-22-system-architecture-design.md`
+**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
 
 The backend is the API gateway. It owns the canonical database schema + migrations, serves every dashboard view via server-side aggregation, relays the live feed over WebSocket, and enforces auth/RBAC + PII masking. It does **not** score transactions (pipeline does) and never ships raw 5M-row result sets.
 
