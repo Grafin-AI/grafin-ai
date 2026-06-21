@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
@@ -10,5 +11,5 @@ class SimState(Base):
     __tablename__ = "sim_state"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     sim_now: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    speed: Mapped[float] = mapped_column(Numeric, default=1.0)
+    speed: Mapped[Decimal] = mapped_column(Numeric, default=1.0)
     running: Mapped[bool] = mapped_column(Boolean, default=False)
