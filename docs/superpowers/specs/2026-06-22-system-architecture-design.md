@@ -5,9 +5,9 @@
 **Scope:** Cross-cutting anchor spec for the Garda AI real-time AML detection platform. Owns the system-wide contracts that the per-repo specs depend on.
 
 Related specs:
-- `garda-ai-backend/docs/specs/2026-06-22-backend-api-design.md`
-- `garda-ai-pipeline/docs/specs/2026-06-22-pipeline-scoring-design.md`
-- `garda-ai-dashboard-web/docs/specs/2026-06-22-frontend-integration-design.md`
+- `garda-ai-backend/docs/superpowers/specs/2026-06-22-backend-api-design.md`
+- `garda-ai-pipeline/docs/superpowers/specs/2026-06-22-pipeline-scoring-design.md`
+- `garda-ai-dashboard-web/docs/superpowers/specs/2026-06-22-frontend-integration-design.md`
 
 ---
 

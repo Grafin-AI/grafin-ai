@@ -1,7 +1,7 @@
 # Garda AI — C4 Level 2: Container
 
 **Date:** 2026-06-22
-**Source:** Authored from the approved design (`docs/specs/2026-06-22-system-architecture-design.md`). Component + Code levels are generated per repo (bottom-up) after implementation.
+**Source:** Authored from the approved design (`docs/superpowers/specs/2026-06-22-system-architecture-design.md`). Component + Code levels are generated per repo (bottom-up) after implementation.
 
 ## Containers
 
