@@ -140,7 +140,11 @@ All responses are Pydantic models → typed OpenAPI. Aggregates are Redis-cached
 
 - TDD (backend-development): unit (services with fake repos), integration (testcontainers Postgres + Redis), contract (OpenAPI schema snapshot), auth/RBAC + masking tests. pytest + httpx async client.
 
-## 10. Out of scope here
+## 10. C4 documentation (deliverable)
+
+After implementation, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `garda-ai-backend/docs/c4/`. System-wide Context + Container live in `garda-ai-deploy/docs/c4/`.
+
+## 11. Out of scope here
 
 - Scoring logic and replay loop → `garda-ai-pipeline`.
 - Deployment manifests, Prometheus/Grafana provisioning → `garda-ai-deploy`.
