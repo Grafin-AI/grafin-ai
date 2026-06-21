@@ -10,6 +10,9 @@ from garda_ai_backend.schema import Base
 # Disable Ryuk reaper sidecar — not needed for local test runs and
 # causes port-mapping errors when the Ryuk container cannot bind.
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+os.environ.setdefault(
+    "GARDA_DATABASE_URL", "postgresql+asyncpg://garda:garda@localhost:5432/garda"
+)
 
 
 @pytest.fixture(scope="session")
