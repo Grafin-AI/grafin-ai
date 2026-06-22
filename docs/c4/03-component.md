@@ -17,7 +17,10 @@ The **Backend API** container is one of two application containers in the Garda 
 - Authenticates users via argon2id + JWT access/refresh token pairs with single-use rotation
 - Enforces role-based access control on protected endpoints
 - Stores revocable refresh-token JTIs and per-IP login rate-limit counters in Redis
-- Will serve REST aggregation endpoints and a WebSocket live-feed relay in future phases (not yet implemented)
+- Serves REST aggregation endpoints for all dashboard views, role-gated and temporally bounded by the simulation clock
+- Masks PII (entity names, account IDs) in user-risk responses based on caller role
+- Caches aggregate query results in Redis, keyed to the current simulation timestamp
+- A WebSocket live-feed relay is planned for a future phase (not yet implemented)
 
 This document zooms into the **components within that container**. All components run in the same Python process.
 
@@ -30,10 +33,13 @@ This document zooms into the **components within that container**. All component
 | **Configuration** | `config.py` | Typed, environment-driven settings; singleton access; fail-closed JWT secret validator |
 | **Persistence / Schema** | `db.py`, `schema/` (6 files) | Async DB engine + session factory; canonical ORM data model (9 tables) |
 | **Observability** | `observability.py` | Isolated Prometheus registry + metrics; structured JSON logging setup |
-| **HTTP App** | `main.py` | FastAPI ASGI app; liveness, readiness, and metrics endpoints; mounts auth router |
+| **HTTP App** | `main.py` | FastAPI ASGI app; liveness, readiness, and metrics endpoints; mounts all routers |
 | **Authentication & RBAC** | `api/auth.py`, `api/deps.py`, `api/schemas.py`, `services/auth.py`, `security/passwords.py`, `security/tokens.py`, `security/refresh_store.py`, `repositories/users.py` | Login, refresh (rotation), logout, me; JWT issuance + validation; role-gated access; revocable refresh tokens; login rate-limiting |
 | **Redis Integration** | `redis_client.py`, `security/refresh_store.py`, `api/ratelimit.py` | Async Redis singleton; revocable refresh-JTI store (atomic consume); fixed-window rate limiting |
 | **Seed / Bootstrap** | `seed.py` | Idempotent DB seed: default admin user + simulation state singleton |
+| **View / Read API** | `api/sim.py`, `api/metrics.py`, `api/analytics.py`, `api/geo.py`, `api/transactions.py`, `api/users_view.py`, `api/alerts.py`, `api/system.py`, `api/view_schemas.py`, `repositories/sim.py`, `repositories/metrics.py`, `repositories/analytics.py`, `repositories/geo.py`, `repositories/transactions.py`, `repositories/users_view.py`, `repositories/alerts.py`, `api/deps.py` (`SimNowDep`) | Server-side aggregation of all dashboard data over `transaction_events` filtered by `surfaced_at <= sim_now`; role-gated; simulation clock as the temporal boundary |
+| **PII Masking** | `api/masking.py` | Masks entity names and account/payment IDs in user-risk serialization; applied in router layer, not in repositories |
+| **Aggregate Caching** | `api/cache.py` | `sim_now`-keyed cache-aside over Redis for aggregate endpoints (metrics, analytics, geo); transactions/live and user-risk are uncached |
 
 ---
 
@@ -210,14 +216,14 @@ Configures stdlib `logging` and `structlog` with structured JSON processors. Cal
 
 ### Purpose
 
-The ASGI entry-point for the Backend API container. Creates and owns the `FastAPI` application instance, wires together all other components at startup, and exposes the currently implemented HTTP endpoints: a liveness probe, a readiness probe, a Prometheus metrics scrape endpoint, and the auth router mounted at `/api/v1/auth`.
+The ASGI entry-point for the Backend API container. Creates and owns the `FastAPI` application instance, wires together all components at startup, and mounts all implemented routers. Exposes infrastructure endpoints (liveness, readiness, Prometheus scrape) directly; delegates all API routes to their respective component routers.
 
 ### Software Features
 
 - **Import-time initialisation**: Calls `get_settings()` and `configure_logging()` as module-level side effects, ensuring logging is active before any request arrives and before the ASGI server calls any lifecycle hook.
-- **Auth router mounting**: Includes the Authentication & RBAC component's `router` (prefix `/api/v1/auth`) so all auth endpoints are served by this process.
+- **Router mounting**: Includes all nine component routers — `auth`, `sim`, `metrics`, `analytics`, `geo`, `transactions`, `users_view`, `alerts`, `system` — so all API endpoints are served by this process.
 - **Liveness probe (`GET /healthz`)**: Returns `{"status": "ok"}` unconditionally. Does not touch the database; safe to call before PostgreSQL is available.
-- **Readiness probe (`GET /readyz`)**: Executes `SELECT 1` against PostgreSQL using an ad-hoc session from `_maker()`. Returns HTTP 200 `{"status": "ready"}` on success, or HTTP 503 `{"status": "not-ready"}` on any exception.
+- **Readiness probe (`GET /readyz`)**: Executes `SELECT 1` against PostgreSQL and `PING` against Redis. Returns HTTP 200 `{"status": "ready"}` on success, or HTTP 503 `{"status": "not-ready"}` on any exception.
 - **Metrics endpoint (`GET /metrics`)**: Serialises the Observability component's `REGISTRY` via `prometheus_client.generate_latest()` and returns the Prometheus text exposition format with the correct `Content-Type`.
 
 ### Code Elements
@@ -231,9 +237,17 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 | Method | Path | Description | Response |
 |---|---|---|---|
 | `GET` | `/healthz` | Liveness probe | `200 {"status": "ok"}` |
-| `GET` | `/readyz` | Readiness probe (DB ping) | `200 {"status": "ready"}` or `503 {"status": "not-ready"}` |
+| `GET` | `/readyz` | Readiness probe (DB + Redis ping) | `200 {"status": "ready"}` or `503 {"status": "not-ready"}` |
 | `GET` | `/metrics` | Prometheus scrape | `200` Prometheus text format |
 | — | `/api/v1/auth/*` | Auth endpoints (delegated) | See Authentication & RBAC component |
+| — | `/api/v1/sim/*` | Simulation control (delegated) | See View / Read API component |
+| — | `/api/v1/metrics/*` | Metrics aggregation (delegated) | See View / Read API component |
+| — | `/api/v1/analytics/*` | Analytics aggregation (delegated) | See View / Read API component |
+| — | `/api/v1/geo/*` | Geo aggregation (delegated) | See View / Read API component |
+| — | `/api/v1/transactions/*` | Transaction views (delegated) | See View / Read API component |
+| — | `/api/v1/users/*` | User risk views (delegated) | See View / Read API component |
+| — | `/api/v1/alerts/*` | Alert views (delegated) | See View / Read API component |
+| — | `/api/v1/system/*` | System health (delegated) | See View / Read API component |
 
 ### Dependencies
 
@@ -241,6 +255,8 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 - **Persistence / Schema component**: `_maker()` called inside `GET /readyz` to open an ad-hoc database session
 - **Observability component**: `configure_logging()` called at import time; `REGISTRY` passed to `generate_latest()` in `GET /metrics`
 - **Authentication & RBAC component**: auth `router` included via `app.include_router()`
+- **View / Read API component**: all eight view routers included via `app.include_router()`
+- **Redis Integration component**: `get_redis()` called inside `GET /readyz` to ping Redis
 - **External — Prometheus**: scrapes `GET /metrics` on the configured interval
 
 ---
@@ -255,7 +271,7 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 
 ### Purpose
 
-Implements the complete authentication and authorisation lifecycle for the platform. Handles credential verification (Argon2id), JWT access/refresh token issuance, single-use refresh token rotation, token revocation on logout, identity injection into request handlers, and role-based access control gating. Login attempts are rate-limited per source IP.
+Implements the complete authentication and authorisation lifecycle for the platform. Handles credential verification (Argon2id), JWT access/refresh token issuance, single-use refresh token rotation, token revocation on logout, identity injection into request handlers, and role-based access control gating. Login attempts are rate-limited per source IP. The `require_role` and `CurrentUserDep` factories defined here are also consumed by the View / Read API component to gate dashboard endpoints.
 
 This component spans the HTTP router layer (`api/`), the service layer (`services/`), the security primitives (`security/`), and the data access layer (`repositories/`) — all tightly coupled around the single concern of auth.
 
@@ -273,7 +289,7 @@ This component spans the HTTP router layer (`api/`), the service layer (`service
 ### Code Elements
 
 - [`api/auth.py`](../../garda_ai_backend/api/auth.py) — `router`; routes: `POST /login`, `POST /refresh`, `POST /logout`, `GET /me`
-- [`api/deps.py`](../../garda_ai_backend/api/deps.py) — `CurrentUser`, `get_current_user`, `require_role`, `get_auth_service`; type aliases: `SessionDep`, `RedisDep`, `SettingsDep`, `AuthServiceDep`, `CurrentUserDep`
+- [`api/deps.py`](../../garda_ai_backend/api/deps.py) — `CurrentUser`, `get_current_user`, `require_role`, `get_auth_service`, `get_sim_now`, `SimNowDep`; type aliases: `SessionDep`, `RedisDep`, `SettingsDep`, `AuthServiceDep`, `CurrentUserDep`
 - [`api/schemas.py`](../../garda_ai_backend/api/schemas.py) — `LoginRequest`, `RefreshRequest`, `TokenResponse`, `MeResponse`
 - [`services/auth.py`](../../garda_ai_backend/services/auth.py) — `AuthService`, `TokenPair`, `AuthError`
 - [`security/passwords.py`](../../garda_ai_backend/security/passwords.py) — `hash_password`, `verify_password`, `dummy_verify`
@@ -299,10 +315,11 @@ This component spans the HTTP router layer (`api/`), the service layer (`service
 | `CurrentUserDep` | Inject authenticated `CurrentUser(id, role)` into any route |
 | `require_role("admin")` | Wrap `CurrentUserDep`; raises HTTP 403 if role not permitted |
 | `AuthServiceDep` | Inject a fully wired `AuthService` |
+| `SimNowDep` | Inject current simulation clock datetime; raises HTTP 404 if uninitialized |
 
 ### Dependencies
 
-- **Persistence / Schema component**: `UserRepository` reads/writes the `users` table via `AsyncSession`
+- **Persistence / Schema component**: `UserRepository` reads/writes the `users` table via `AsyncSession`; `SimRepository` reads `sim_state` for `SimNowDep`
 - **Redis Integration component**: `RefreshTokenStore` and `RateLimiter` both consume the Redis client (`RedisDep`)
 - **Configuration component**: `get_settings()` provides JWT secret and TTL values
 
@@ -318,15 +335,14 @@ This component spans the HTTP router layer (`api/`), the service layer (`service
 
 ### Purpose
 
-Provides the async Redis client singleton and the two Redis-backed behaviours currently implemented: **revocable refresh-token JTI storage** and **fixed-window per-IP rate limiting**. This component acts as the adapter layer between the application and the Redis container provisioned by `garda-ai-deploy`.
-
-Aggregate caching and pub/sub subscription (for the future WebSocket relay) are architecturally planned but not yet implemented.
+Provides the async Redis client singleton and the Redis-backed behaviours currently implemented: **revocable refresh-token JTI storage**, **fixed-window per-IP rate limiting**, and **aggregate response caching**. This component acts as the adapter layer between the application and the Redis container provisioned by `garda-ai-deploy`. The Aggregate Caching component (`api/cache.py`) uses the Redis client provided here.
 
 ### Software Features
 
 - **Async Redis singleton** (`redis_client.py`): `get_redis()` returns a lazily constructed `redis.asyncio.Redis` client with `decode_responses=True`. URL sourced from `Settings.redis_url`.
 - **Refresh JTI store** (`security/refresh_store.py`): `RefreshTokenStore` persists valid refresh-token JTIs at `refresh:{jti}` with TTL matching the JWT expiry. `consume()` uses Redis `GETDEL` for atomic single-use enforcement — two concurrent refresh requests cannot both spend the same token.
 - **Fixed-window rate limiter** (`api/ratelimit.py`): `RateLimiter` increments `ratelimit:{key}` via `INCR`, sets TTL on first increment, and raises HTTP 429 when the window limit is exceeded. Currently applied to `POST /api/v1/auth/login` at 10 requests / 60 s per IP.
+- **Aggregate cache backing store**: The `agg:{key}` key namespace is used by `api/cache.py` (`cached_json`) to store serialised JSON of aggregate query results. Redis is the storage medium; the caching logic lives in the Aggregate Caching component.
 
 ### Code Elements
 
@@ -338,7 +354,7 @@ Aggregate caching and pub/sub subscription (for the future WebSocket relay) are 
 
 #### `get_redis() -> Redis`
 
-Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used as the source of the `RedisDep` FastAPI dependency injected into `AuthService` and `RateLimiter`.
+Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used as the source of the `RedisDep` FastAPI dependency injected into `AuthService`, `RateLimiter`, and `cached_json`.
 
 #### `RefreshTokenStore`
 
@@ -358,7 +374,7 @@ Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used a
 ### Dependencies
 
 - **Configuration component**: `get_settings().redis_url` consumed on first `get_redis()` call
-- **External — Redis**: connects via `redis.asyncio.Redis`; uses `SET`, `GET`, `DEL`, `GETDEL`, `INCR`, `EXPIRE`
+- **External — Redis**: connects via `redis.asyncio.Redis`; uses `SET`, `GET`, `DEL`, `GETDEL`, `INCR`, `EXPIRE`, `PING`
 
 ---
 
@@ -401,26 +417,211 @@ Creates the simulation state singleton if absent.
 
 ---
 
+## Component: View / Read API
+
+### Overview
+
+- **Name**: View / Read API
+- **Type**: Application (dashboard read layer)
+- **Technology**: Python 3.12+, FastAPI, SQLAlchemy 2.0 (async), pydantic
+
+### Purpose
+
+Serves all dashboard read endpoints for the Garda AI AML platform. Every endpoint aggregates `transaction_events` rows filtered to `surfaced_at <= sim_now`, where `sim_now` is the current simulation clock value injected via the shared `SimNowDep` dependency. This temporal boundary is the single point that makes all dashboard data consistent with the label-replay simulation phase.
+
+All endpoints require an authenticated caller (`CurrentUserDep`). The simulation control mutation endpoint (`POST /api/v1/sim/control`) is additionally admin-only (`require_role("admin")`). Aggregate results for metrics, analytics, and geo are cached in Redis keyed by `sim_now` to avoid repeated heavy queries on consecutive requests with the same clock value. Transaction live-feed and user-risk endpoints are uncached because their result sets change with cursor/filter parameters.
+
+The component is composed of eight FastAPI routers and seven query repositories. Response shapes are declared in the shared `view_schemas.py` module.
+
+### Endpoint Groups
+
+| Router prefix | File | Endpoints | Cached |
+|---|---|---|---|
+| `/api/v1/sim` | `api/sim.py` | `GET /state`, `POST /control` (admin-only) | No |
+| `/api/v1/metrics` | `api/metrics.py` | `GET /overview`, `GET /volume`, `GET /heatmap` | Yes (TTL 5 s) |
+| `/api/v1/analytics` | `api/analytics.py` | `GET /fraud` | Yes (TTL 5 s) |
+| `/api/v1/geo` | `api/geo.py` | `GET /provinces` | Yes (TTL 10 s) |
+| `/api/v1/transactions` | `api/transactions.py` | `GET /live`, `GET /{transaction_id}` | No |
+| `/api/v1/users` | `api/users_view.py` | `GET /risk`, `GET /{entity_id}/profile` | No |
+| `/api/v1/alerts` | `api/alerts.py` | `GET /` (list), `POST /{alert_id}/ack` | No |
+| `/api/v1/system` | `api/system.py` | `GET /health` | No |
+
+### Software Features
+
+- **Temporal boundary via `SimNowDep`**: All view queries receive `sim_now` from a single shared dependency (`get_sim_now` in `api/deps.py`) that reads `SimState.sim_now` from the database and raises HTTP 404 if uninitialised. All repositories apply `WHERE surfaced_at <= sim_now` to their core fact queries.
+- **Simulation state read/write** (`api/sim.py`, `repositories/sim.py`): `GET /state` returns the current clock state (any authenticated user). `POST /control` allows an admin to toggle `running`, set `speed`, or advance/rewind `sim_now` directly. `SimRepository` handles the state UPSERT.
+- **Metrics aggregations** (`api/metrics.py`, `repositories/metrics.py`): Overview (total count, flagged, blocked, total amount, fraud rate), volume time-series (hour / day / month granularity for 24h / weekly / monthly / yearly windows), and 7×24 activity heatmap. All backed by `MetricsRepository`.
+- **Fraud analytics** (`api/analytics.py`, `repositories/analytics.py`): Typology distribution (count + amount per typology), and confusion-matrix-derived detection metrics (precision, recall, F1) computed from `is_laundering` ground truth vs. `status` prediction. Backed by `AnalyticsRepository`.
+- **Geo distribution** (`api/geo.py`, `repositories/geo.py`): Province-level fraud counts (flagged + blocked events joined through account → entity → province). Risk level derived by count thresholds (≥100: high, ≥20: medium, else low). Backed by `GeoRepository`.
+- **Transaction live-feed** (`api/transactions.py`, `repositories/transactions.py`): Cursor-paginated live window (`after_seq` / `limit`) and single-transaction detail endpoint. `TransactionsRepository` joins `transaction_events` → `transactions` → `banks`.
+- **User risk profiles** (`api/users_view.py`, `repositories/users_view.py`): Risk-list endpoint (optional `risk` category filter, `limit`) and per-entity profile. `UserRiskRepository` joins entities → accounts → transactions → events. PII (entity name) masked in the router layer via `mask_name` (see PII Masking component); admin callers with `unmasked=true` receive plaintext.
+- **Alert management** (`api/alerts.py`, `repositories/alerts.py`): Alert list (all or active-only) and acknowledgement mutation (`POST /{alert_id}/ack`). `AlertsRepository` reads and writes the `alerts` table.
+- **System health** (`api/system.py`): Authenticated health endpoint (`GET /api/v1/system/health`) checking DB connectivity, Redis connectivity, and the count of surfaced events up to `sim_now`.
+- **View schemas** (`api/view_schemas.py`): Pydantic models for all request and response shapes: `SimStateResponse`, `SimControlRequest`, `MetricsOverviewResponse`, `VolumeResponse`, `HeatmapResponse`, `FraudAnalyticsResponse`, `GeoResponse`, `LiveResponse`, `TransactionDetail`, `UserRiskResponse`, `AlertsResponse`, `SystemHealthResponse`.
+
+### Code Elements
+
+**Routers**
+- [`api/sim.py`](../../garda_ai_backend/api/sim.py) — `router`; `GET /state`, `POST /control`
+- [`api/metrics.py`](../../garda_ai_backend/api/metrics.py) — `router`; `GET /overview`, `GET /volume`, `GET /heatmap`
+- [`api/analytics.py`](../../garda_ai_backend/api/analytics.py) — `router`; `GET /fraud`
+- [`api/geo.py`](../../garda_ai_backend/api/geo.py) — `router`; `GET /provinces`
+- [`api/transactions.py`](../../garda_ai_backend/api/transactions.py) — `router`; `GET /live`, `GET /{transaction_id}`
+- [`api/users_view.py`](../../garda_ai_backend/api/users_view.py) — `router`; `GET /risk`, `GET /{entity_id}/profile`
+- [`api/alerts.py`](../../garda_ai_backend/api/alerts.py) — `router`; `GET /`, `POST /{alert_id}/ack`
+- [`api/system.py`](../../garda_ai_backend/api/system.py) — `router`; `GET /health`
+
+**Repositories**
+- [`repositories/sim.py`](../../garda_ai_backend/repositories/sim.py) — `SimRepository` (get_state, get_sim_now, update_state)
+- [`repositories/metrics.py`](../../garda_ai_backend/repositories/metrics.py) — `MetricsRepository` (overview, volume, heatmap)
+- [`repositories/analytics.py`](../../garda_ai_backend/repositories/analytics.py) — `AnalyticsRepository` (typology_distribution, confusion_counts)
+- [`repositories/geo.py`](../../garda_ai_backend/repositories/geo.py) — `GeoRepository` (province_fraud_counts)
+- [`repositories/transactions.py`](../../garda_ai_backend/repositories/transactions.py) — `TransactionsRepository` (live_window, detail)
+- [`repositories/users_view.py`](../../garda_ai_backend/repositories/users_view.py) — `UserRiskRepository` (risk_list, profile)
+- [`repositories/alerts.py`](../../garda_ai_backend/repositories/alerts.py) — `AlertsRepository` (list_alerts, acknowledge)
+
+**Shared**
+- [`api/view_schemas.py`](../../garda_ai_backend/api/view_schemas.py) — all Pydantic request/response models for view endpoints
+- [`api/deps.py`](../../garda_ai_backend/api/deps.py) — `SimNowDep`, `CurrentUserDep`, `require_role` (shared with Authentication & RBAC)
+
+### Public Interface
+
+#### HTTP endpoints
+
+| Method | Path | Auth | Description | Response |
+|---|---|---|---|---|
+| `GET` | `/api/v1/sim/state` | Any authenticated | Current simulation clock state | `200 SimStateResponse` or `404` |
+| `POST` | `/api/v1/sim/control` | Admin only | Update `running`, `speed`, or `sim_now` | `200 SimStateResponse` |
+| `GET` | `/api/v1/metrics/overview` | Any authenticated | Total transactions, flagged, blocked, amount, fraud rate | `200 MetricsOverviewResponse` |
+| `GET` | `/api/v1/metrics/volume` | Any authenticated | Time-series volume (`range` query: 24h/weekly/monthly/yearly) | `200 VolumeResponse` |
+| `GET` | `/api/v1/metrics/heatmap` | Any authenticated | 7×24 activity heatmap | `200 HeatmapResponse` |
+| `GET` | `/api/v1/analytics/fraud` | Any authenticated | Typology distribution + detection metrics (precision/recall/F1) | `200 FraudAnalyticsResponse` |
+| `GET` | `/api/v1/geo/provinces` | Any authenticated | Province-level fraud counts with risk levels | `200 GeoResponse` |
+| `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) | `200 LiveResponse` |
+| `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail | `200 TransactionDetail` or `404` |
+| `GET` | `/api/v1/users/risk` | Any authenticated | Entity risk list (`risk`, `unmasked`, `limit`) | `200 UserRiskResponse` |
+| `GET` | `/api/v1/users/{entity_id}/profile` | Any authenticated | Single entity risk profile | `200 RiskProfile` or `404` |
+| `GET` | `/api/v1/alerts` | Any authenticated | Alert list (`status=all\|active`) | `200 AlertsResponse` |
+| `POST` | `/api/v1/alerts/{id}/ack` | Any authenticated | Acknowledge an alert | `200 AlertItem` or `404` |
+| `GET` | `/api/v1/system/health` | Any authenticated | DB + Redis health + surfaced-events count | `200 SystemHealthResponse` |
+
+### Dependencies
+
+- **Persistence / Schema component**: all seven repositories use `AsyncSession`; ORM models `TransactionEvent`, `Transaction`, `Bank`, `Entity`, `Account`, `Alert`, `SimState`
+- **Authentication & RBAC component**: `CurrentUserDep`, `require_role` from `api/deps.py`; `SimNowDep` also lives in `api/deps.py`
+- **Aggregate Caching component**: `cached_json` used by metrics, analytics, and geo routers
+- **PII Masking component**: `mask_name` called in `api/users_view.py` before serializing `RiskProfile`
+- **Redis Integration component**: `RedisDep` injected into cached endpoints to pass to `cached_json`
+
+---
+
+## Component: PII Masking
+
+### Overview
+
+- **Name**: PII Masking
+- **Type**: Library (data sanitisation utility)
+- **Technology**: Python 3.12+
+
+### Purpose
+
+Provides pure functions for masking personally identifiable information before it is returned to API callers. Applied in the router layer (not in repositories), ensuring that PII sanitisation is a presentation-layer concern that can be bypassed by privileged callers (`unmasked=true` + admin role) without changing the underlying query logic.
+
+Currently applied exclusively in `api/users_view.py` during `RiskProfile` serialization.
+
+### Software Features
+
+- **Name masking** (`mask_name`): Masks each word of an entity name to its initial character followed by four asterisks. Example: `"Ahmad Setiawan"` → `"A**** S****"`.
+- **Account ID masking** (`mask_account_id`): Retains the last four characters of an account or payment ID; masks all preceding characters with `*`. IDs of four or fewer characters are fully masked.
+- **Payment ID masking** (`mask_payment_id`): Delegates to `mask_account_id` — same masking rule applied to payment reference strings.
+
+### Code Elements
+
+- [`api/masking.py`](../../garda_ai_backend/api/masking.py) — `mask_name`, `mask_account_id`, `mask_payment_id`
+
+### Public Interface
+
+| Function | Signature | Description |
+|---|---|---|
+| `mask_name` | `(name: str) -> str` | Mask each word to initial + `****` |
+| `mask_account_id` | `(account_id: str) -> str` | Keep last 4 chars; mask the rest |
+| `mask_payment_id` | `(payment_id: str) -> str` | Alias of `mask_account_id` |
+
+### Dependencies
+
+- **External**: none (pure Python)
+- **Components used**: none (consumed by View / Read API)
+
+---
+
+## Component: Aggregate Caching
+
+### Overview
+
+- **Name**: Aggregate Caching
+- **Type**: Library (cache-aside decorator)
+- **Technology**: Python 3.12+, redis[asyncio]
+
+### Purpose
+
+Provides a single `cached_json` helper that implements a cache-aside pattern over Redis for aggregate query results. Results are serialised to JSON, stored under the `agg:{key}` namespace with a configurable TTL, and returned directly on subsequent requests with the same key. The cache key is always constructed to include `sim_now.isoformat()`, so cached results are automatically invalidated when the simulation clock advances.
+
+Applied to the three heaviest aggregate endpoint groups: metrics (TTL 5 s), analytics (TTL 5 s), and geo (TTL 10 s). Transaction live-feed endpoints and user-risk endpoints are explicitly not cached because their result sets are parametrised by cursor/filter arguments that make key construction impractical without per-request granularity.
+
+### Software Features
+
+- **Cache-aside read-through** (`cached_json`): Checks `agg:{key}` in Redis. On a hit, deserialises and returns the cached value. On a miss, calls the async `compute` callable, serialises the result via `json.dumps(..., default=str)`, stores it with the given TTL, and returns the fresh value.
+- **`sim_now`-keyed cache invalidation**: Callers include `sim_now.isoformat()` in the key (e.g., `f"overview:{sim_now.isoformat()}"`), so a new simulation tick produces a new key and the stale entry simply expires by TTL.
+- **`default=str` serialisation**: Handles non-JSON-native types (notably `datetime` objects returned by SQLAlchemy) without requiring callers to pre-serialise their results.
+
+### Code Elements
+
+- [`api/cache.py`](../../garda_ai_backend/api/cache.py) — `cached_json`
+
+### Public Interface
+
+#### `cached_json(redis, key, ttl, compute) -> Any`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `redis` | `Redis` | Async Redis client (from `RedisDep`) |
+| `key` | `str` | Cache key suffix; stored as `agg:{key}` |
+| `ttl` | `int` | Seconds until the cached entry expires |
+| `compute` | `Callable[[], Awaitable[Any]]` | Async factory called on a cache miss |
+
+Returns the cached or freshly computed value.
+
+### Dependencies
+
+- **Redis Integration component**: `redis.asyncio.Redis` client passed in by caller
+- **External**: `redis[asyncio]`, `json`
+- **Components used**: none (consumed by View / Read API)
+
+---
+
 ## Component Diagram
 
-The diagram below shows all seven components within the Backend API container, their internal relationships, and their connections to external systems and other containers.
+The diagram below shows all ten components within the Backend API container, their internal relationships, and their connections to external systems and other containers.
 
 ```mermaid
 C4Component
     title Component Diagram — Backend API Container (garda-ai-backend)
 
     Container_Boundary(api, "Backend API · FastAPI / asyncpg / redis-py") {
-        Component(httpApp, "HTTP App", "FastAPI", "ASGI entry-point. Liveness (/healthz), readiness (/readyz), Prometheus scrape (/metrics). Mounts auth router.")
+        Component(httpApp, "HTTP App", "FastAPI", "ASGI entry-point. Liveness (/healthz), readiness (/readyz), Prometheus scrape (/metrics). Mounts all routers.")
         Component(config, "Configuration", "pydantic-settings", "Typed, cached settings from GARDA_* env vars. JWT secret + Redis URL. Fail-closed secret validator.")
         Component(persistence, "Persistence / Schema", "SQLAlchemy 2.0 + asyncpg", "Async engine + session factory. Canonical ORM for all 9 tables: banks, entities, accounts, transactions, transaction_events, alerts, users, sim_state.")
         Component(observability, "Observability", "prometheus-client + structlog", "Isolated Prometheus registry + garda_http_requests_total counter. Structured JSON logging.")
-        Component(auth, "Authentication & RBAC", "FastAPI + PyJWT + argon2-cffi", "Login/refresh/logout/me endpoints. Argon2id password verify. JWT issuance + validation. Single-use refresh rotation. Role-gated DI (require_role). Login rate-limiting.")
+        Component(auth, "Authentication & RBAC", "FastAPI + PyJWT + argon2-cffi", "Login/refresh/logout/me. Argon2id password verify. JWT issuance + validation. Single-use refresh rotation. Role-gated DI (require_role / CurrentUserDep / SimNowDep). Login rate-limiting.")
         Component(redis, "Redis Integration", "redis[asyncio]", "Async Redis singleton. Refresh-JTI store (atomic GETDEL). Fixed-window rate limiter (INCR/EXPIRE).")
         Component(seed, "Seed / Bootstrap", "Python asyncio", "Idempotent DB seed: default admin user + SimState singleton. Run at deploy time.")
+        Component(viewApi, "View / Read API", "FastAPI + SQLAlchemy", "8 routers + 7 repositories. Aggregates transaction_events WHERE surfaced_at <= sim_now. Endpoints: sim, metrics, analytics, geo, transactions, users, alerts, system. /sim/control is admin-only.")
+        Component(masking, "PII Masking", "Python", "mask_name / mask_account_id. Applied in users_view router before RiskProfile serialization. Admin callers with unmasked=true bypass masking.")
+        Component(cache, "Aggregate Caching", "redis[asyncio] + json", "cached_json cache-aside over Redis. sim_now-keyed. Applied to metrics, analytics, geo (TTL 5-10 s). Transactions/live and user-risk are uncached.")
     }
 
     ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth for all platform data")
-    ContainerDb(redisDb, "Redis", "Redis", "Refresh-JTI store; rate-limit counters")
+    ContainerDb(redisDb, "Redis", "Redis", "Refresh-JTI store; rate-limit counters; agg:* cache entries")
     Container_Ext(prom, "Prometheus", "Prometheus", "Scrapes /metrics from Backend API")
     Container_Ext(worker, "Pipeline Worker", "Python / asyncpg", "ETL, replay clock, scoring engine — reads/writes same DB schema")
 
@@ -428,19 +629,29 @@ C4Component
     Rel(httpApp, persistence, "Opens ad-hoc session for /readyz", "in-process")
     Rel(httpApp, observability, "Configures logging at import time; serves REGISTRY on /metrics", "in-process")
     Rel(httpApp, auth, "Mounts auth router", "in-process")
+    Rel(httpApp, viewApi, "Mounts 8 view routers", "in-process")
+    Rel(httpApp, redis, "Pings Redis for /readyz", "in-process")
 
     Rel(persistence, config, "Reads database_url on first engine construction", "in-process")
     Rel(redis, config, "Reads redis_url on first client construction", "in-process")
 
-    Rel(auth, persistence, "UserRepository reads/writes users table", "in-process / SQL")
+    Rel(auth, persistence, "UserRepository reads/writes users table; SimRepository reads sim_state for SimNowDep", "in-process / SQL")
     Rel(auth, redis, "RefreshTokenStore (JTI save/consume/revoke); RateLimiter (login check)", "in-process")
     Rel(auth, config, "Reads JWT secret + TTL settings", "in-process")
+
+    Rel(viewApi, persistence, "7 repositories query transaction_events, transactions, alerts, sim_state, entities, accounts, banks", "in-process / SQL")
+    Rel(viewApi, auth, "Uses CurrentUserDep, require_role, SimNowDep from api/deps.py", "in-process")
+    Rel(viewApi, cache, "metrics, analytics, geo routers call cached_json", "in-process")
+    Rel(viewApi, masking, "users_view router calls mask_name for RiskProfile serialization", "in-process")
+
+    Rel(cache, redis, "GET / SET agg:* keys with TTL", "in-process")
 
     Rel(seed, persistence, "ensure_admin, ensure_sim_state via AsyncSession", "in-process / SQL")
     Rel(seed, auth, "Uses hash_password from security/passwords", "in-process")
 
     Rel(persistence, pg, "Reads and writes", "SQL / asyncpg (pool: 10+5)")
-    Rel(redis, redisDb, "INCR, EXPIRE, SET, GET, DEL, GETDEL", "redis-py async")
+    Rel(redis, redisDb, "INCR, EXPIRE, SET, GET, DEL, GETDEL, PING", "redis-py async")
+    Rel(cache, redisDb, "GET / SET agg:* (via Redis Integration client)", "redis-py async")
     Rel(prom, httpApp, "Scrapes", "HTTP GET /metrics")
     Rel(worker, pg, "Reads and writes (sole writer of transactions/events)", "SQL / asyncpg")
 ```
@@ -449,15 +660,11 @@ C4Component
 
 ## Planned Components (Not Yet Implemented)
 
-The following components are planned for future phases but have **no implementation in this codebase** as of 2026-06-22.
+The following component is planned for a future phase but has **no implementation in this codebase** as of 2026-06-22.
 
-| Planned Component | Schema Evidence | Notes |
-|---|---|---|
-| **REST API — Aggregations** | `transaction_events`, `alerts`, `accounts` tables ready for query | No view endpoints (`/transactions`, `/alerts`, `/accounts`, etc.) exist |
-| **WebSocket Relay** | `transaction_events.seq` cursor design in container spec | No WebSocket route or Redis subscriber exists |
-| **PII Masking** | `entities.name`, `accounts.id` are obvious PII fields | No masking layer exists |
-| **Simulation Control API** | `sim_state` table (singleton, `running`, `speed`, `sim_now`) | No route for simulation control exists; `seed.py` seeds initial state only |
-| **Aggregate Caching** | Redis provisioned; `redis_client.py` available | No cache-aside or read-through layer over query results exists |
+| Planned Component | Phase | Schema Evidence | Notes |
+|---|---|---|---|
+| **WebSocket Relay** | Plan 2C | `transaction_events.seq` cursor design in container spec | No WebSocket route, Redis pub/sub subscriber, or SSE stream exists |
 
 ---
 
@@ -467,16 +674,17 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 
 | Container-level responsibility | Status | Implementing component |
 |---|---|---|
-| REST aggregations for every view | Not implemented | — (planned: REST API Aggregations) |
-| WebSocket live-feed relay | Not implemented | — (planned: WebSocket Relay) |
+| REST aggregations for every view | **Implemented** | View / Read API |
+| WebSocket live-feed relay | Not implemented | — (planned: WebSocket Relay, Plan 2C) |
 | Auth / RBAC | **Implemented** | Authentication & RBAC |
-| PII masking | Not implemented | — (planned: PII Masking) |
-| Owns DB schema + migrations | Implemented | Persistence / Schema |
-| Health / readiness probes | Implemented | HTTP App |
-| Prometheus `/metrics` endpoint | Implemented | HTTP App + Observability |
-| Connects to PostgreSQL | Implemented | Persistence / Schema |
-| Connects to Redis | **Implemented** (JTI store + rate limiting) | Redis Integration |
+| PII masking | **Implemented** | PII Masking (applied in View / Read API — users_view router) |
+| Aggregate caching | **Implemented** | Aggregate Caching (metrics, analytics, geo; transactions/live and user-risk uncached) |
+| Owns DB schema + migrations | **Implemented** | Persistence / Schema |
+| Health / readiness probes | **Implemented** | HTTP App |
+| Prometheus `/metrics` endpoint | **Implemented** | HTTP App + Observability |
+| Connects to PostgreSQL | **Implemented** | Persistence / Schema |
+| Connects to Redis | **Implemented** (JTI store + rate limiting + aggregate cache) | Redis Integration + Aggregate Caching |
 | Login rate-limiting | **Implemented** | Redis Integration (via Authentication & RBAC) |
 | Bootstrap / seed | **Implemented** | Seed / Bootstrap |
 
-The seven implemented components form the foundation and auth layers. Every planned component will depend on Configuration and Persistence / Schema; REST API and WebSocket components will also depend on Redis Integration and Authentication & RBAC.
+Ten components are implemented. The WebSocket Relay is the only remaining planned item.
