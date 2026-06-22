@@ -29,6 +29,7 @@ def pg_url():
 async def session(pg_url):
     engine = create_async_engine(pg_url)
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as s:
