@@ -66,3 +66,15 @@ C4Container
 
 - Containers map 1:1 to repos (polyrepo); Postgres/Redis/Prometheus/Grafana are infra provisioned via `garda-ai-deploy` docker-compose.
 - The scoring engine is a **module inside Pipeline Worker** now; the dashed Phase-2 path promotes it to a standalone Model Service container behind the same `ScoringProvider` interface.
+
+## Implementation status (reconciled 2026-06-22 — all containers built)
+
+| Container | Status | Evidence |
+|---|---|---|
+| Backend API | ✅ implemented | `garda-ai-backend` main, 74 tests; per-repo C4 `docs/c4/` |
+| Pipeline (ETL one-shot + replay worker) | ✅ implemented | `garda-ai-pipeline` main, 31 tests; `garda-etl` + `garda-replay` |
+| Dashboard Web | ✅ implemented | `garda-ai-dashboard-web` main, 11 tests; all views wired |
+| PostgreSQL / Redis | ✅ provisioned | `garda-ai-deploy/docker-compose.yml` (healthchecked) |
+| Prometheus / Grafana | ✅ provisioned | `docker-compose.yml` + `observability/` (scrapes backend `/metrics`) |
+
+The whole stack starts with `make up` (see `garda-ai-deploy/README.md`): backend migrates+seeds, the ETL one-shot loads the dataset, the replay worker streams scored events to Redis `garda:events:live`, and the dashboard consumes REST + the WS relay. The only **not-yet-built** element is the Phase-2 standalone **Trained ML Model Service** (the `MLModelScorer` swaps in behind `ScoringProvider`). Known observability gap: the replay worker has no HTTP `/metrics` endpoint yet, so Prometheus scrapes the backend only.

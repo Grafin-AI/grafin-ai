@@ -1,0 +1,14 @@
+name: pipeline-ci
+on: { push: { paths: ['garda-ai-pipeline/**'] }, pull_request: {} }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+        working-directory: garda-ai-pipeline
+      - run: uv run ruff check garda_ai_pipeline/
+        working-directory: garda-ai-pipeline
+      - run: uv run pytest -q
+        working-directory: garda-ai-pipeline

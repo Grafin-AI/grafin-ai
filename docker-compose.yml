@@ -1,0 +1,87 @@
+name: garda-ai
+
+x-db-url: &db_url postgresql+asyncpg://${POSTGRES_USER:-garda}:${POSTGRES_PASSWORD:-garda}@postgres:5432/${POSTGRES_DB:-garda}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-garda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garda}
+      POSTGRES_DB: ${POSTGRES_DB:-garda}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garda}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: { context: ../garda-ai-backend }
+    environment:
+      GARDA_DATABASE_URL: *db_url
+      GARDA_REDIS_URL: redis://redis:6379/0
+      GARDA_JWT_SECRET: ${GARDA_JWT_SECRET:?set a >=32 char secret}
+      GARDA_ENV: ${GARDA_ENV:-production}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8000:8000"]
+
+  etl:
+    build: { context: .., dockerfile: garda-ai-pipeline/Dockerfile }
+    command: ["uv", "run", "garda-etl"]
+    environment:
+      GARDA_DATABASE_URL: *db_url
+      GARDA_DATA_DIR: /data
+    volumes:
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+    depends_on:
+      backend: { condition: service_started }
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  replay:
+    build: { context: .., dockerfile: garda-ai-pipeline/Dockerfile }
+    command: ["uv", "run", "garda-replay"]
+    environment:
+      GARDA_DATABASE_URL: *db_url
+      GARDA_REDIS_URL: redis://redis:6379/0
+      GARDA_RESET_CLOCK: "true"
+    depends_on:
+      etl: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  frontend:
+    build: { context: ../garda-ai-dashboard-web }
+    depends_on: [backend]
+    ports: ["8080:8080"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on: [prometheus]
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:
