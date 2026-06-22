@@ -44,3 +44,7 @@ C4Context
 - **Phase 1 (now):** scoring derives from the dataset's ground-truth `is_laundering` label (label-replay). The "Trained ML Model Service" relationship is dashed/future.
 - **Phase 2:** the model swaps in behind the `ScoringProvider` interface — no change to actors or other systems.
 - Geography shown to analysts is **synthetic seeded enrichment** (the dataset has no province field).
+
+## Implementation status (reconciled 2026-06-22)
+
+The Garda AI Platform system is **fully built and runnable** (`make up` in `garda-ai-deploy`): frontend, backend, pipeline (ETL + replay), Postgres, Redis, Prometheus, Grafana — see `02-container.md` for the per-container evidence. The dataset is loaded via the one-shot ETL. The **only external system not yet present is the Phase-2 Trained ML Model Service** (dashed above); until then the in-process `LabelReplayScorer` provides scoring and the dashboard honestly labels model accuracy as "Simulated (Phase 1)".
