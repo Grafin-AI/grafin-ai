@@ -60,5 +60,9 @@ async def ws_live(websocket: WebSocket, redis: RedisDep, settings: SettingsDep) 
         reader_task.cancel()
         writer_task.cancel()
         await asyncio.gather(reader_task, writer_task, return_exceptions=True)
-        await pubsub.unsubscribe(LIVE_EVENTS_CHANNEL)
-        await pubsub.aclose()
+        # Best-effort cleanup: the connection may already be broken at this point.
+        try:
+            await pubsub.unsubscribe(LIVE_EVENTS_CHANNEL)
+            await pubsub.aclose()
+        except Exception:  # noqa: BLE001 - cleanup must not raise on a dead socket
+            pass

@@ -33,3 +33,8 @@ def test_rejects_wrong_secret():
 def test_rejects_refresh_token():
     t = create_refresh_token(subject="3", secret=S, ttl_days=7)
     assert authenticate_ws_token(t, S) is None
+
+
+def test_rejects_expired_access_token():
+    t = create_access_token(subject="3", role="analyst", secret=S, ttl_min=-1)
+    assert authenticate_ws_token(t, S) is None
