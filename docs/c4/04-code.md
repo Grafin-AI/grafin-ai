@@ -3,10 +3,10 @@
 ## Overview
 
 - **Name**: Garda AI Backend — Python Package
-- **Description**: Core application package for the Garda AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, and all SQLAlchemy 2.0 ORM models.
+- **Description**: Core application package for the Garda AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, all SQLAlchemy 2.0 ORM models, and a full view-endpoint layer (sim clock, metrics, analytics, geo, transactions, user-risk, alerts, system health).
 - **Location**: [`garda_ai_backend/`](../../garda_ai_backend/)
 - **Language**: Python 3.12+
-- **Purpose**: Serves the API surface for the AML dashboard, persists transaction and alert data, authenticates users via JWT access/refresh token pairs, enforces role-based access control, exposes health and metrics endpoints, and defines the full relational schema used by all platform services.
+- **Purpose**: Serves the API surface for the AML dashboard, persists transaction and alert data, authenticates users via JWT access/refresh token pairs, enforces role-based access control, exposes simulation-clock-gated read aggregates backed by Redis caching, applies PII masking for non-admin roles, and provides health/metrics endpoints for platform observability.
 - **Version**: `0.1.0` (declared in `garda_ai_backend/__init__.py`)
 
 ---
@@ -15,7 +15,7 @@
 
 | Module | File | Responsibility |
 |---|---|---|
-| `config` | `config.py` | Application settings via pydantic-settings; new JWT and Redis fields; fail-closed secret validator |
+| `config` | `config.py` | Application settings via pydantic-settings; JWT and Redis fields; fail-closed secret validator |
 | `db` | `db.py` | Async SQLAlchemy engine and session factory |
 | `redis_client` | `redis_client.py` | Async Redis singleton factory |
 | `observability` | `observability.py` | Prometheus registry, counters, structured logging |
@@ -24,11 +24,29 @@
 | `security.tokens` | `security/tokens.py` | JWT access/refresh token creation and decode; `InvalidToken` |
 | `security.refresh_store` | `security/refresh_store.py` | Redis-backed refresh JTI store with atomic consume |
 | `repositories.users` | `repositories/users.py` | `UserRepository` — DB access for `User` rows |
+| `repositories.sim` | `repositories/sim.py` | `SimRepository` — get/update singleton `SimState` row |
+| `repositories.metrics` | `repositories/metrics.py` | `MetricsRepository` — overview, volume, heatmap aggregates |
+| `repositories.analytics` | `repositories/analytics.py` | `AnalyticsRepository` — typology distribution and confusion counts |
+| `repositories.geo` | `repositories/geo.py` | `GeoRepository` — province-level fraud counts |
+| `repositories.transactions` | `repositories/transactions.py` | `TransactionsRepository` — live window and detail queries |
+| `repositories.users_view` | `repositories/users_view.py` | `UserRiskRepository` — entity risk-profile aggregates |
+| `repositories.alerts` | `repositories/alerts.py` | `AlertsRepository` — alert list and acknowledge |
 | `services.auth` | `services/auth.py` | `AuthService` — authenticate, token rotation, logout; `TokenPair`, `AuthError` |
 | `api.schemas` | `api/schemas.py` | Pydantic request/response models for the auth API |
-| `api.deps` | `api/deps.py` | FastAPI dependency functions; `CurrentUser`; `require_role` factory |
+| `api.view_schemas` | `api/view_schemas.py` | Pydantic response models for all view endpoints |
+| `api.deps` | `api/deps.py` | FastAPI dependency functions; `CurrentUser`; `SimNowDep`; `require_role` factory |
+| `api.masking` | `api/masking.py` | PII masking helpers: names and account/payment IDs |
+| `api.cache` | `api/cache.py` | `cached_json` — Redis aggregate cache with sim-now-keyed TTL |
 | `api.ratelimit` | `api/ratelimit.py` | `RateLimiter` — Redis fixed-window rate limiting |
 | `api.auth` | `api/auth.py` | Auth router: login / refresh / logout / me |
+| `api.sim` | `api/sim.py` | Sim router: state read / admin control |
+| `api.metrics` | `api/metrics.py` | Metrics router: overview / volume / heatmap (cached) |
+| `api.analytics` | `api/analytics.py` | Analytics router: fraud distribution + precision/recall/F1 (cached) |
+| `api.geo` | `api/geo.py` | Geo router: province fraud counts (cached) |
+| `api.transactions` | `api/transactions.py` | Transactions router: live window / detail (NOT cached) |
+| `api.users_view` | `api/users_view.py` | Users router: risk list / entity profile (role-masked) |
+| `api.alerts` | `api/alerts.py` | Alerts router: list / acknowledge |
+| `api.system` | `api/system.py` | System router: health check |
 | `seed` | `seed.py` | `ensure_admin`, `ensure_sim_state` — idempotent DB seed |
 | `schema.base` | `schema/base.py` | Declarative ORM base |
 | `schema.reference` | `schema/reference.py` | Reference tables: Bank, Entity, Account |
@@ -501,6 +519,334 @@ async def create(
 
 ---
 
+## Module: `repositories.sim`
+
+- **File**: [`garda_ai_backend/repositories/sim.py`](../../garda_ai_backend/repositories/sim.py)
+- **External dependencies**: `sqlalchemy.ext.asyncio.AsyncSession`
+- **Internal dependencies**: `garda_ai_backend.schema.SimState`
+
+### Class: `SimRepository`
+
+```python
+class SimRepository
+```
+
+- **Description**: Data-access object for the singleton `sim_state` row. Used by the sim router for control plane reads/writes and by `get_sim_now` in `deps.py` as the shared simulation clock source for every view aggregate.
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `get_state`
+
+```python
+async def get_state(self) -> SimState | None
+```
+
+- **Description**: Fetches the singleton `SimState` row (id=1) via `session.get`. Returns `None` if the row has not been seeded.
+- **Returns**: `SimState | None`
+
+#### Method: `get_sim_now`
+
+```python
+async def get_sim_now(self) -> datetime | None
+```
+
+- **Description**: Convenience wrapper around `get_state()`. Returns `state.sim_now` or `None` if uninitialized. Used by the `get_sim_now` FastAPI dependency in `deps.py`.
+- **Returns**: `datetime | None`
+
+#### Method: `update_state`
+
+```python
+async def update_state(
+    self,
+    running: bool | None = None,
+    speed: float | None = None,
+    sim_now: datetime | None = None,
+) -> SimState
+```
+
+- **Description**: Applies partial updates to the singleton `SimState` row. Only non-`None` fields are written. Calls `flush()` without committing — the sim router owns the commit.
+- **Parameters**: All optional; only provided values are applied.
+- **Returns**: `SimState` (updated in-session state)
+- **Raises**: `ValueError("sim_state not seeded")` if the row does not exist.
+
+---
+
+## Module: `repositories.metrics`
+
+- **File**: [`garda_ai_backend/repositories/metrics.py`](../../garda_ai_backend/repositories/metrics.py)
+- **External dependencies**: `sqlalchemy` (case, cast, func, select, Integer)
+- **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Cache note**: All three methods are called exclusively through `cached_json` in `api/metrics.py`. Cache keys are sim-now-keyed (`overview:{sim_now}`, `volume:{range}:{sim_now}`, `heatmap:{sim_now}`), TTL = 5 s.
+
+### Class: `MetricsRepository`
+
+```python
+class MetricsRepository
+```
+
+- **Description**: SQL aggregate repository for the metrics dashboard panel. All queries apply the `surfaced_at <= sim_now` filter so results respect the simulation clock boundary.
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `overview`
+
+```python
+async def overview(self, sim_now: datetime) -> dict
+```
+
+- **Description**: Returns a single-row aggregate over all `TransactionEvent` rows with `surfaced_at <= sim_now`, joined to `Transaction` for `amount_paid`. Computes total count, flagged count (status=`"flagged"`), blocked count (status=`"blocked"`), total amount, and fraud rate (flagged+blocked / total).
+- **Parameters**: `sim_now: datetime` — upper bound on `surfaced_at`
+- **Returns**: `dict` with keys `total_transactions`, `flagged`, `blocked`, `total_amount`, `fraud_rate`
+
+#### Method: `volume`
+
+```python
+async def volume(self, lower: datetime, sim_now: datetime, trunc: str) -> list[dict]
+```
+
+- **Description**: Time-bucketed event volume. Groups `TransactionEvent` rows within `[lower, sim_now]` by `date_trunc(trunc, surfaced_at)`, counting total events and flagged/blocked events per bucket.
+- **Parameters**:
+  - `lower: datetime` — window start (derived from range selection in the router)
+  - `sim_now: datetime` — window end / sim clock upper bound
+  - `trunc: str` — PostgreSQL `date_trunc` granularity (`"hour"`, `"day"`, or `"month"`)
+- **Returns**: `list[dict]` with keys `bucket` (ISO string), `count`, `flagged`
+
+#### Method: `heatmap`
+
+```python
+async def heatmap(self, sim_now: datetime) -> list[list[int]]
+```
+
+- **Description**: Builds a 7×24 activity heatmap (day-of-week × hour-of-day) counting all events up to `sim_now`. Returns a 2D list `grid[dow][hour]` where each cell is the event count. Unobserved cells are 0.
+- **Parameters**: `sim_now: datetime`
+- **Returns**: `list[list[int]]` — shape `[7][24]`
+
+---
+
+## Module: `repositories.analytics`
+
+- **File**: [`garda_ai_backend/repositories/analytics.py`](../../garda_ai_backend/repositories/analytics.py)
+- **External dependencies**: `sqlalchemy` (case, func, select)
+- **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Cache note**: Both methods are called through `cached_json` in `api/analytics.py`. Cache key `fraud:{sim_now}`, TTL = 5 s.
+
+### Class: `AnalyticsRepository`
+
+```python
+class AnalyticsRepository
+```
+
+- **Description**: SQL aggregate repository for the fraud analytics panel. Provides typology distribution and confusion matrix counts for precision/recall/F1 calculation. Confusion matrix joins `TransactionEvent.status` (model prediction) against `Transaction.is_laundering` (AMLSim ground-truth label).
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `typology_distribution`
+
+```python
+async def typology_distribution(self, sim_now: datetime) -> list[dict]
+```
+
+- **Description**: Aggregates flagged `TransactionEvent` rows by `typology`, counting occurrences and summing `Transaction.amount_paid`. Filters to rows where `surfaced_at <= sim_now` and `typology IS NOT NULL`. Ordered by count descending.
+- **Parameters**: `sim_now: datetime`
+- **Returns**: `list[dict]` with keys `typology`, `count`, `total_amount`
+
+#### Method: `confusion_counts`
+
+```python
+async def confusion_counts(self, sim_now: datetime) -> dict
+```
+
+- **Description**: Computes true-positive (TP), false-positive (FP), and false-negative (FN) counts by joining `TransactionEvent` (model predictions) to `Transaction.is_laundering` (ground-truth labels). Predicted positive = status in (`"flagged"`, `"blocked"`); actual positive = `is_laundering IS TRUE`. Filters `surfaced_at <= sim_now`.
+- **Parameters**: `sim_now: datetime`
+- **Returns**: `dict` with integer keys `tp`, `fp`, `fn`. Used by `api/analytics.py._metrics()` to derive precision, recall, and F1.
+
+---
+
+## Module: `repositories.geo`
+
+- **File**: [`garda_ai_backend/repositories/geo.py`](../../garda_ai_backend/repositories/geo.py)
+- **External dependencies**: `sqlalchemy` (func, select)
+- **Internal dependencies**: `garda_ai_backend.schema.Account`, `garda_ai_backend.schema.Entity`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Cache note**: Called through `cached_json` in `api/geo.py`. Cache key `geo:{sim_now}`, TTL = 10 s.
+
+### Class: `GeoRepository`
+
+```python
+class GeoRepository
+```
+
+- **Description**: SQL aggregate repository for the geographic fraud distribution panel. Joins transaction events through the account-entity chain to resolve sender province.
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `province_fraud_counts`
+
+```python
+async def province_fraud_counts(self, sim_now: datetime) -> list[dict]
+```
+
+- **Description**: Counts flagged/blocked events per sender province by joining `TransactionEvent → Transaction → Account → Entity`. Applies `surfaced_at <= sim_now`, filters to status in (`"flagged"`, `"blocked"`), excludes rows where `Entity.province IS NULL`. Groups by province, orders by count descending.
+- **Parameters**: `sim_now: datetime`
+- **Returns**: `list[dict]` with keys `province`, `fraud_count`
+
+---
+
+## Module: `repositories.transactions`
+
+- **File**: [`garda_ai_backend/repositories/transactions.py`](../../garda_ai_backend/repositories/transactions.py)
+- **External dependencies**: `sqlalchemy.select`
+- **Internal dependencies**: `garda_ai_backend.schema.Bank`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Cache note**: NOT cached. The live feed must reflect the most recent events in real time; caching would delay the resync source used by the dashboard.
+
+### Class: `TransactionsRepository`
+
+```python
+class TransactionsRepository
+```
+
+- **Description**: SQL query repository for the live transaction feed and per-transaction detail view. Not cached — results are read directly from the database on every request.
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `live_window`
+
+```python
+async def live_window(
+    self, sim_now: datetime, after_seq: int | None, limit: int
+) -> list[dict]
+```
+
+- **Description**: Returns a paginated window of `TransactionEvent` rows up to `sim_now`, joined to `Transaction` and `Bank`. If `after_seq` is provided, returns events with `seq > after_seq` in ascending order (forward-streaming mode for the live feed). If `after_seq` is `None`, returns the most recent events in descending order (initial load). Respects `limit` (max 200 per call).
+- **Parameters**:
+  - `sim_now: datetime` — upper bound on `surfaced_at`
+  - `after_seq: int | None` — cursor for incremental polling; `None` for initial fetch
+  - `limit: int` — maximum number of rows to return
+- **Returns**: `list[dict]` with keys `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`
+
+#### Method: `detail`
+
+```python
+async def detail(self, transaction_id: int) -> dict | None
+```
+
+- **Description**: Fetches full detail for a single transaction by joining `Transaction → Bank` and `Transaction → TransactionEvent`. Returns `None` if the transaction does not exist or has no associated event.
+- **Parameters**: `transaction_id: int`
+- **Returns**: `dict | None` with keys `id`, `bank`, `amount`, `currency`, `type`, `fraud_score`, `typology`, `status`, `is_laundering`, `event_time`
+
+---
+
+## Module: `repositories.users_view`
+
+- **File**: [`garda_ai_backend/repositories/users_view.py`](../../garda_ai_backend/repositories/users_view.py)
+- **External dependencies**: `sqlalchemy` (func, select)
+- **Internal dependencies**: `garda_ai_backend.schema.Account`, `garda_ai_backend.schema.Entity`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Cache note**: NOT cached directly. The router applies role-aware masking post-fetch so the cached form would leak PII; masking must happen in the request context.
+
+### Class: `UserRiskRepository`
+
+```python
+class UserRiskRepository
+```
+
+- **Description**: SQL aggregate repository for the entity risk-profile panel. Joins entities through accounts to transactions and events to compute per-entity risk metrics. The `surfaced_at <= sim_now` filter is applied as an outer-join condition so entities with no visible events are still returned (with zero counts).
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `risk_list`
+
+```python
+async def risk_list(self, sim_now: datetime, risk: str | None, limit: int) -> list[dict]
+```
+
+- **Description**: Aggregates entity-level risk metrics by joining `Entity → Account → Transaction → TransactionEvent` (with `surfaced_at <= sim_now` as an outer-join predicate). Groups by entity + account. Optionally filters by `Account.risk_category`. Orders by `risk_score DESC NULLS LAST`. Returned names are unmasked — the router applies `mask_name` for non-admin callers.
+- **Parameters**:
+  - `sim_now: datetime` — simulation clock upper bound (applied on the join condition)
+  - `risk: str | None` — optional filter on `Account.risk_category`
+  - `limit: int` — maximum rows to return
+- **Returns**: `list[dict]` with keys `entity_id`, `name`, `province`, `risk_level`, `risk_score`, `total_transactions`, `flagged_transactions`, `total_amount`
+
+#### Method: `profile`
+
+```python
+async def profile(self, sim_now: datetime, entity_id: str) -> dict | None
+```
+
+- **Description**: Fetches the risk profile for a single entity by calling `risk_list` with `limit=1000` and filtering the result by `entity_id`. Returns `None` if not found.
+- **Parameters**:
+  - `sim_now: datetime`
+  - `entity_id: str`
+- **Returns**: `dict | None` (same shape as `risk_list` rows)
+
+---
+
+## Module: `repositories.alerts`
+
+- **File**: [`garda_ai_backend/repositories/alerts.py`](../../garda_ai_backend/repositories/alerts.py)
+- **External dependencies**: `sqlalchemy.select`
+- **Internal dependencies**: `garda_ai_backend.schema.Alert`
+
+### Class: `AlertsRepository`
+
+```python
+class AlertsRepository
+```
+
+- **Description**: Data-access object for the `alerts` table. Provides listing (with optional active-only filter) and acknowledgement write operations.
+
+#### Method: `__init__`
+
+```python
+def __init__(self, session: AsyncSession) -> None
+```
+
+#### Method: `list_alerts`
+
+```python
+async def list_alerts(self, active_only: bool) -> list[Alert]
+```
+
+- **Description**: Returns `Alert` ORM objects ordered by `created_at DESC`. If `active_only=True`, adds a `WHERE acknowledged_at IS NULL` predicate to exclude already-acknowledged alerts.
+- **Parameters**: `active_only: bool`
+- **Returns**: `list[Alert]`
+
+#### Method: `acknowledge`
+
+```python
+async def acknowledge(self, alert_id: int, user_id: int) -> Alert | None
+```
+
+- **Description**: Sets `acknowledged_by` and `acknowledged_at` (UTC now) on the given alert. Calls `flush()` without committing — the router owns the commit. Returns `None` if the alert does not exist.
+- **Parameters**:
+  - `alert_id: int`
+  - `user_id: int` — the reviewing analyst's user ID
+- **Returns**: `Alert | None`
+
+---
+
 ## Module: `services.auth`
 
 - **File**: [`garda_ai_backend/services/auth.py`](../../garda_ai_backend/services/auth.py)
@@ -632,11 +978,79 @@ class MeResponse(BaseModel):
 
 ---
 
+## Module: `api.view_schemas`
+
+- **File**: [`garda_ai_backend/api/view_schemas.py`](../../garda_ai_backend/api/view_schemas.py)
+- **External dependencies**: `pydantic` (BaseModel), `datetime`
+
+Pydantic response models for all view endpoints. Every class is a pure `BaseModel` with no custom validators.
+
+### Sim models
+
+| Class | Fields | Used by |
+|---|---|---|
+| `SimStateResponse` | `sim_now: datetime`, `speed: float`, `running: bool` | `GET /api/v1/sim/state`, `POST /api/v1/sim/control` |
+| `SimControlRequest` | `running: bool \| None`, `speed: float \| None`, `sim_now: datetime \| None` | `POST /api/v1/sim/control` (request body) |
+
+### Metrics models
+
+| Class | Fields | Used by |
+|---|---|---|
+| `MetricsOverviewResponse` | `total_transactions: int`, `flagged: int`, `blocked: int`, `total_amount: float`, `fraud_rate: float` | `GET /api/v1/metrics/overview` |
+| `VolumePoint` | `bucket: str`, `count: int`, `flagged: int` | element of `VolumeResponse.series` |
+| `VolumeResponse` | `series: list[VolumePoint]` | `GET /api/v1/metrics/volume` |
+| `HeatmapResponse` | `cells: list[list[int]]` | `GET /api/v1/metrics/heatmap` |
+
+### Analytics models
+
+| Class | Fields | Used by |
+|---|---|---|
+| `TypologyCount` | `typology: str`, `count: int`, `total_amount: float` | element of `FraudAnalyticsResponse.distribution` |
+| `DetectionMetrics` | `precision: float`, `recall: float`, `f1: float` | `FraudAnalyticsResponse.detection` |
+| `FraudAnalyticsResponse` | `distribution: list[TypologyCount]`, `detection: DetectionMetrics` | `GET /api/v1/analytics/fraud` |
+
+### Geo model
+
+| Class | Fields | Used by |
+|---|---|---|
+| `ProvinceFraud` | `name: str`, `fraud_count: int`, `change_pct: float`, `risk_level: str` | element of `GeoResponse.provinces` |
+| `GeoResponse` | `provinces: list[ProvinceFraud]` | `GET /api/v1/geo/provinces` |
+
+### Transaction models
+
+| Class | Fields | Used by |
+|---|---|---|
+| `LiveItem` | `seq: int`, `transaction_id: int`, `bank: str`, `type: str`, `amount: float`, `fraud_score: float`, `typology: str \| None`, `status: str`, `surfaced_at: str` | element of `LiveResponse.items` |
+| `LiveResponse` | `items: list[LiveItem]` | `GET /api/v1/transactions/live` |
+| `TransactionDetail` | `id: int`, `bank: str`, `amount: float`, `currency: str`, `type: str`, `fraud_score: float`, `typology: str \| None`, `status: str`, `is_laundering: bool`, `event_time: str` | `GET /api/v1/transactions/{transaction_id}` |
+
+### User-risk models
+
+| Class | Fields | Used by |
+|---|---|---|
+| `RiskProfile` | `entity_id: str`, `name: str`, `province: str \| None`, `risk_level: str \| None`, `risk_score: float`, `total_transactions: int`, `flagged_transactions: int`, `total_amount: float` | element of `UserRiskResponse.profiles`; `GET /api/v1/users/{entity_id}/profile` |
+| `UserRiskResponse` | `profiles: list[RiskProfile]` | `GET /api/v1/users/risk` |
+
+### Alert model
+
+| Class | Fields | Used by |
+|---|---|---|
+| `AlertItem` | `id: int`, `event_seq: int`, `severity: str`, `typology: str \| None`, `created_at: str`, `acknowledged: bool` | element of `AlertsResponse.alerts`; `POST /api/v1/alerts/{alert_id}/ack` |
+| `AlertsResponse` | `alerts: list[AlertItem]` | `GET /api/v1/alerts` |
+
+### System model
+
+| Class | Fields | Used by |
+|---|---|---|
+| `SystemHealthResponse` | `db_ok: bool`, `redis_ok: bool`, `events_surfaced: int`, `model_accuracy_simulated: bool` | `GET /api/v1/system/health` |
+
+---
+
 ## Module: `api.deps`
 
 - **File**: [`garda_ai_backend/api/deps.py`](../../garda_ai_backend/api/deps.py)
 - **External dependencies**: `fastapi` (Depends, HTTPException, HTTPBearer, HTTPAuthorizationCredentials), `redis.asyncio.Redis`, `sqlalchemy.ext.asyncio.AsyncSession`
-- **Internal dependencies**: `config.Settings`, `config.get_settings`, `db._maker`, `redis_client.get_redis`, `repositories.users.UserRepository`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, decode_token}`, `services.auth.AuthService`
+- **Internal dependencies**: `config.Settings`, `config.get_settings`, `db._maker`, `redis_client.get_redis`, `repositories.sim.SimRepository`, `repositories.users.UserRepository`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, decode_token}`, `services.auth.AuthService`
 
 ### Dataclass: `CurrentUser`
 
@@ -673,6 +1087,17 @@ def get_settings_dep() -> Settings
 
 - **Description**: Thin FastAPI dependency wrapper around `get_settings()`.
 
+### Function: `get_sim_now`
+
+```python
+async def get_sim_now(session: SessionDep) -> datetime
+```
+
+- **Description**: Shared typed dependency that reads the current simulation clock from `SimRepository.get_sim_now()`. All view aggregate routers (metrics, analytics, geo, transactions, users) inject this via `SimNowDep` to obtain the consistent `surfaced_at <= sim_now` upper bound without each re-implementing the lookup. Raises HTTP 404 if the `sim_state` row has not been seeded.
+- **Parameters**: `session: SessionDep` — injected DB session
+- **Returns**: `datetime`
+- **Raises**: `HTTPException(404)` if `sim_state` is uninitialized
+
 ### Annotated Type Aliases
 
 | Name | Type | Description |
@@ -682,6 +1107,7 @@ def get_settings_dep() -> Settings
 | `SettingsDep` | `Annotated[Settings, Depends(get_settings_dep)]` | Inject app settings |
 | `AuthServiceDep` | `Annotated[AuthService, Depends(get_auth_service)]` | Inject a fully wired `AuthService` |
 | `CurrentUserDep` | `Annotated[CurrentUser, Depends(get_current_user)]` | Inject the authenticated user |
+| `SimNowDep` | `Annotated[datetime, Depends(get_sim_now)]` | Inject the current simulation clock timestamp |
 
 ### Function: `get_auth_service`
 
@@ -716,6 +1142,73 @@ def require_role(*roles: str) -> Callable[[CurrentUser], CurrentUser]
 - **Description**: Factory that returns a FastAPI dependency function. The inner `guard` function accepts `CurrentUserDep` and raises HTTP 403 if the user's role is not in `roles`. Usage: `Depends(require_role("admin"))`.
 - **Parameters**: `*roles: str` — one or more permitted role strings
 - **Returns**: `Callable[[CurrentUser], CurrentUser]` — a dependency that passes or raises
+
+---
+
+## Module: `api.masking`
+
+- **File**: [`garda_ai_backend/api/masking.py`](../../garda_ai_backend/api/masking.py)
+- **External dependencies**: none
+- **Internal dependencies**: none
+
+Pure string-transformation functions for PII masking. Applied by `api/users_view.py` when the caller is not an admin or has not requested `unmasked=True`.
+
+### Function: `mask_name`
+
+```python
+def mask_name(name: str) -> str
+```
+
+- **Description**: Masks each whitespace-delimited word to its first character followed by four asterisks. Example: `"Ahmad Setiawan"` → `"A**** S****"`. Returns `""` for empty input.
+- **Parameters**: `name: str`
+- **Returns**: `str`
+
+### Function: `mask_account_id`
+
+```python
+def mask_account_id(account_id: str) -> str
+```
+
+- **Description**: Keeps the last 4 characters of the account ID and replaces all preceding characters with `*`. IDs of 4 characters or fewer are fully masked. Example: `"ACC123456789"` → `"********6789"`.
+- **Parameters**: `account_id: str`
+- **Returns**: `str`
+
+### Function: `mask_payment_id`
+
+```python
+def mask_payment_id(payment_id: str) -> str
+```
+
+- **Description**: Delegates to `mask_account_id`. Provided as a distinct function for semantic clarity in call sites that deal with payment IDs rather than account IDs.
+- **Parameters**: `payment_id: str`
+- **Returns**: `str`
+
+---
+
+## Module: `api.cache`
+
+- **File**: [`garda_ai_backend/api/cache.py`](../../garda_ai_backend/api/cache.py)
+- **External dependencies**: `redis.asyncio.Redis`, `json`
+
+### Function: `cached_json`
+
+```python
+async def cached_json(
+    redis: Redis,
+    key: str,
+    ttl: int,
+    compute: Callable[[], Awaitable[Any]],
+) -> Any
+```
+
+- **Description**: Generic read-through Redis cache for JSON-serialisable aggregates. Attempts to `GET agg:{key}`; on a cache hit, JSON-deserialises and returns the cached value. On a miss, awaits `compute()` to produce the value, serialises it with `json.dumps(default=str)` (handles `datetime` and `Decimal` via `str` fallback), stores the result at `agg:{key}` with expiry `ttl` seconds, and returns the value.
+- **Parameters**:
+  - `redis: Redis` — async Redis client
+  - `key: str` — logical cache key (prefixed with `"agg:"` internally)
+  - `ttl: int` — Redis `EX` value in seconds
+  - `compute: Callable[[], Awaitable[Any]]` — zero-argument async factory called on cache miss
+- **Returns**: `Any` — the cached or freshly computed value
+- **Usage**: All metrics, analytics, and geo router handlers pass a sim-now-stamped key (e.g. `f"overview:{sim_now.isoformat()}"`) so each new simulation tick produces a distinct cache entry.
 
 ---
 
@@ -767,22 +1260,12 @@ async def check(self, key: str) -> None
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 ```
 
-All auth routes are mounted under `/api/v1/auth`.
-
 ### Constants
 
 | Name | Value | Description |
 |---|---|---|
 | `_LOGIN_LIMIT` | `10` | Max login attempts per IP per window |
 | `_LOGIN_WINDOW_SECONDS` | `60` | Rate-limit window duration (1 minute) |
-
-### Dependency: `login_rate_limit`
-
-```python
-async def login_rate_limit(request: Request, redis: RedisDep) -> None
-```
-
-- **Description**: FastAPI dependency applied to `POST /login`. Creates a `RateLimiter` and calls `check(f"login:{client_ip}")`. Limits each IP to 10 login attempts per 60 seconds.
 
 ### Route: `POST /api/v1/auth/login`
 
@@ -791,7 +1274,6 @@ async def login_rate_limit(request: Request, redis: RedisDep) -> None
 async def login(body: LoginRequest, auth: AuthServiceDep) -> TokenResponse
 ```
 
-- **Description**: Calls `auth.authenticate(email, password)`. Returns a `TokenResponse` on success; raises HTTP 401 on `AuthError`.
 - **Rate limited**: 10 requests / 60 s per source IP
 
 ### Route: `POST /api/v1/auth/refresh`
@@ -801,16 +1283,12 @@ async def login(body: LoginRequest, auth: AuthServiceDep) -> TokenResponse
 async def refresh(body: RefreshRequest, auth: AuthServiceDep) -> TokenResponse
 ```
 
-- **Description**: Calls `auth.refresh(refresh_token)`. Issues a new `TokenPair` (rotation). Raises HTTP 401 on `AuthError`.
-
 ### Route: `POST /api/v1/auth/logout`
 
 ```python
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=204)
 async def logout(body: RefreshRequest, auth: AuthServiceDep) -> Response
 ```
-
-- **Description**: Calls `auth.logout(refresh_token)` to revoke the JTI from Redis. Returns HTTP 204 No Content. Logout never raises — invalid tokens are silently ignored.
 
 ### Route: `GET /api/v1/auth/me`
 
@@ -819,7 +1297,342 @@ async def logout(body: RefreshRequest, auth: AuthServiceDep) -> Response
 async def me(user: CurrentUserDep, session: SessionDep) -> MeResponse
 ```
 
-- **Description**: Returns identity fields for the currently authenticated user. Requires a valid Bearer access token (enforced by `CurrentUserDep`). Fetches fresh data from DB via `UserRepository.get_by_id`. Raises HTTP 404 if the user row has been deleted.
+---
+
+## Module: `api.sim`
+
+- **File**: [`garda_ai_backend/api/sim.py`](../../garda_ai_backend/api/sim.py)
+- **External dependencies**: `fastapi` (APIRouter, Depends, HTTPException)
+- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, require_role}`, `api.view_schemas.{SimControlRequest, SimStateResponse}`, `repositories.sim.SimRepository`
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/sim", tags=["sim"])
+```
+
+### Route: `GET /api/v1/sim/state`
+
+```python
+@router.get("/state", response_model=SimStateResponse)
+async def get_state(session: SessionDep, _: CurrentUserDep) -> SimStateResponse
+```
+
+- **Description**: Returns the current simulation clock state. Accessible by any authenticated user. Raises HTTP 404 if `sim_state` has not been seeded.
+- **Role gate**: any authenticated user
+
+### Route: `POST /api/v1/sim/control`
+
+```python
+@router.post("/control", response_model=SimStateResponse)
+async def control(body: SimControlRequest, session: SessionDep, _: AdminDep) -> SimStateResponse
+```
+
+- **Description**: Applies partial updates to the simulation clock (`running`, `speed`, `sim_now`). Commits the change. Only non-`None` fields from the request body are applied.
+- **Role gate**: `admin` only (via `AdminDep = Depends(require_role("admin"))`)
+
+---
+
+## Module: `api.metrics`
+
+- **File**: [`garda_ai_backend/api/metrics.py`](../../garda_ai_backend/api/metrics.py)
+- **External dependencies**: `fastapi` (APIRouter, Query)
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{HeatmapResponse, MetricsOverviewResponse, VolumeResponse}`, `repositories.metrics.MetricsRepository`
+- **Cache**: All three routes use `cached_json` with 5 s TTL. Keys are sim-now-stamped.
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/metrics", tags=["metrics"])
+```
+
+### Constants
+
+```python
+_RANGE_WINDOWS: dict[str, tuple[timedelta, str]] = {
+    "24h": (timedelta(days=1), "hour"),
+    "weekly": (timedelta(days=7), "day"),
+    "monthly": (timedelta(days=30), "day"),
+    "yearly": (timedelta(days=365), "month"),
+}
+```
+
+Maps the `range` query parameter to `(window_timedelta, date_trunc_granularity)`. Defaults to `"24h"` for unknown values.
+
+### Route: `GET /api/v1/metrics/overview`
+
+```python
+@router.get("/overview", response_model=MetricsOverviewResponse)
+async def overview(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> MetricsOverviewResponse
+```
+
+- **Cache key**: `agg:overview:{sim_now.isoformat()}`, TTL 5 s
+- **Role gate**: any authenticated user
+
+### Route: `GET /api/v1/metrics/volume`
+
+```python
+@router.get("/volume", response_model=VolumeResponse)
+async def volume(
+    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep,
+    time_range: str = Query("24h", alias="range"),
+) -> VolumeResponse
+```
+
+- **Cache key**: `agg:volume:{time_range}:{sim_now.isoformat()}`, TTL 5 s
+- **Role gate**: any authenticated user
+
+### Route: `GET /api/v1/metrics/heatmap`
+
+```python
+@router.get("/heatmap", response_model=HeatmapResponse)
+async def heatmap(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> HeatmapResponse
+```
+
+- **Cache key**: `agg:heatmap:{sim_now.isoformat()}`, TTL 5 s
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.analytics`
+
+- **File**: [`garda_ai_backend/api/analytics.py`](../../garda_ai_backend/api/analytics.py)
+- **External dependencies**: `fastapi.APIRouter`
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{DetectionMetrics, FraudAnalyticsResponse, TypologyCount}`, `repositories.analytics.AnalyticsRepository`
+- **Cache**: Single route cached with 5 s TTL.
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+```
+
+### Private Function: `_metrics`
+
+```python
+def _metrics(c: dict) -> dict
+```
+
+- **Description**: Derives precision, recall, and F1 from raw confusion counts `{"tp": int, "fp": int, "fn": int}`. All values are clipped to 0.0 on zero denominators.
+- **Parameters**: `c: dict` — dict with integer keys `tp`, `fp`, `fn`
+- **Returns**: `dict` with float keys `precision`, `recall`, `f1`
+
+### Route: `GET /api/v1/analytics/fraud`
+
+```python
+@router.get("/fraud", response_model=FraudAnalyticsResponse)
+async def fraud(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> FraudAnalyticsResponse
+```
+
+- **Description**: Returns typology distribution and precision/recall/F1 detection metrics. The compute closure calls `AnalyticsRepository.typology_distribution` and `AnalyticsRepository.confusion_counts`, then applies `_metrics()` to derive the detection scores.
+- **Cache key**: `agg:fraud:{sim_now.isoformat()}`, TTL 5 s
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.geo`
+
+- **File**: [`garda_ai_backend/api/geo.py`](../../garda_ai_backend/api/geo.py)
+- **External dependencies**: `fastapi.APIRouter`
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{GeoResponse, ProvinceFraud}`, `repositories.geo.GeoRepository`
+- **Cache**: Single route cached with 10 s TTL.
+
+### Private Function: `_risk_level`
+
+```python
+def _risk_level(count: int) -> str
+```
+
+- **Description**: Maps a fraud event count to a risk level string. Returns `"high"` for count >= 100, `"medium"` for count >= 20, `"low"` otherwise.
+- **Parameters**: `count: int`
+- **Returns**: `str`
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/geo", tags=["geo"])
+```
+
+### Route: `GET /api/v1/geo/provinces`
+
+```python
+@router.get("/provinces", response_model=GeoResponse)
+async def provinces(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> GeoResponse
+```
+
+- **Description**: Returns per-province fraud event counts enriched with a `risk_level` label (derived from `_risk_level`) and a placeholder `change_pct=0.0` (period-over-period change not yet implemented).
+- **Cache key**: `agg:geo:{sim_now.isoformat()}`, TTL 10 s
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.transactions`
+
+- **File**: [`garda_ai_backend/api/transactions.py`](../../garda_ai_backend/api/transactions.py)
+- **External dependencies**: `fastapi` (APIRouter, HTTPException, Query)
+- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, SimNowDep}`, `api.view_schemas.{LiveItem, LiveResponse, TransactionDetail}`, `repositories.transactions.TransactionsRepository`
+- **Cache**: NOT cached. Live feed is a resync source; stale data would break incremental polling.
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
+```
+
+### Route: `GET /api/v1/transactions/live`
+
+```python
+@router.get("/live", response_model=LiveResponse)
+async def live(
+    session: SessionDep,
+    sim_now: SimNowDep,
+    _: CurrentUserDep,
+    after_seq: int | None = None,
+    limit: int = Query(default=50, le=200),
+) -> LiveResponse
+```
+
+- **Description**: Streams recent `TransactionEvent` rows up to `sim_now`. If `after_seq` is supplied, returns events with `seq > after_seq` in ascending order (incremental polling mode). Otherwise returns the most recent `limit` events descending (initial load). Maximum `limit` is 200.
+- **Role gate**: any authenticated user
+
+### Route: `GET /api/v1/transactions/{transaction_id}`
+
+```python
+@router.get("/{transaction_id}", response_model=TransactionDetail)
+async def detail(transaction_id: int, session: SessionDep, _: CurrentUserDep) -> TransactionDetail
+```
+
+- **Description**: Returns full detail for a single transaction. Raises HTTP 404 if not found.
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.users_view`
+
+- **File**: [`garda_ai_backend/api/users_view.py`](../../garda_ai_backend/api/users_view.py)
+- **External dependencies**: `fastapi` (APIRouter, HTTPException)
+- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, SimNowDep}`, `api.masking.mask_name`, `api.view_schemas.{RiskProfile, UserRiskResponse}`, `repositories.users_view.UserRiskRepository`
+- **Cache**: NOT cached (masking is role-dependent and must execute per-request in the authenticated context).
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/users", tags=["users"])
+```
+
+### Private Function: `_shape`
+
+```python
+def _shape(row: dict, user: CurrentUser, unmasked: bool) -> RiskProfile
+```
+
+- **Description**: Applies role-aware masking to an entity row. `name` is returned in plaintext only when both `unmasked=True` and `user.role == "admin"`. In all other cases `mask_name` is applied.
+- **Parameters**:
+  - `row: dict` — raw row from `UserRiskRepository`
+  - `user: CurrentUser` — authenticated caller
+  - `unmasked: bool` — caller-requested flag
+- **Returns**: `RiskProfile`
+
+### Route: `GET /api/v1/users/risk`
+
+```python
+@router.get("/risk", response_model=UserRiskResponse)
+async def risk(
+    session: SessionDep,
+    user: CurrentUserDep,
+    sim_now: SimNowDep,
+    risk: str | None = None,
+    unmasked: bool = False,
+    limit: int = 100,
+) -> UserRiskResponse
+```
+
+- **Description**: Returns a ranked list of entity risk profiles. Optionally filters by `risk_category`. Names are masked unless the caller is an admin and `unmasked=True`.
+- **Role gate**: any authenticated user
+
+### Route: `GET /api/v1/users/{entity_id}/profile`
+
+```python
+@router.get("/{entity_id}/profile", response_model=RiskProfile)
+async def profile(
+    entity_id: str,
+    session: SessionDep,
+    user: CurrentUserDep,
+    sim_now: SimNowDep,
+    unmasked: bool = False,
+) -> RiskProfile
+```
+
+- **Description**: Returns the risk profile for a single entity. Raises HTTP 404 if the entity is not found. Name masking rules are the same as for the list endpoint.
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.alerts`
+
+- **File**: [`garda_ai_backend/api/alerts.py`](../../garda_ai_backend/api/alerts.py)
+- **External dependencies**: `fastapi` (APIRouter, HTTPException)
+- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep}`, `api.view_schemas.{AlertItem, AlertsResponse}`, `repositories.alerts.AlertsRepository`
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
+```
+
+### Private Function: `_item`
+
+```python
+def _item(a: Alert) -> AlertItem
+```
+
+- **Description**: Projects an `Alert` ORM object to an `AlertItem` response model. The `acknowledged` field is derived as `a.acknowledged_at is not None`.
+- **Parameters**: `a: Alert`
+- **Returns**: `AlertItem`
+
+### Route: `GET /api/v1/alerts`
+
+```python
+@router.get("", response_model=AlertsResponse)
+async def list_alerts(session: SessionDep, _: CurrentUserDep, status: str = "all") -> AlertsResponse
+```
+
+- **Description**: Returns alerts ordered by creation time descending. If `status="active"`, excludes acknowledged alerts.
+- **Role gate**: any authenticated user
+
+### Route: `POST /api/v1/alerts/{alert_id}/ack`
+
+```python
+@router.post("/{alert_id}/ack", response_model=AlertItem)
+async def ack(alert_id: int, session: SessionDep, user: CurrentUserDep) -> AlertItem
+```
+
+- **Description**: Marks an alert as acknowledged by the requesting user (sets `acknowledged_by` and `acknowledged_at`). Commits the change. Raises HTTP 404 if the alert does not exist.
+- **Role gate**: any authenticated user
+
+---
+
+## Module: `api.system`
+
+- **File**: [`garda_ai_backend/api/system.py`](../../garda_ai_backend/api/system.py)
+- **External dependencies**: `fastapi.APIRouter`, `sqlalchemy` (func, select, text)
+- **Internal dependencies**: `api.deps.{CurrentUserDep, RedisDep, SessionDep}`, `api.view_schemas.SystemHealthResponse`, `repositories.sim.SimRepository`, `schema.TransactionEvent`
+
+### Object: `router`
+
+```python
+router = APIRouter(prefix="/api/v1/system", tags=["system"])
+```
+
+### Route: `GET /api/v1/system/health`
+
+```python
+@router.get("/health", response_model=SystemHealthResponse)
+async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> SystemHealthResponse
+```
+
+- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts `TransactionEvent` rows with `surfaced_at <= sim_now` as `events_surfaced`. Sets `model_accuracy_simulated=True` unconditionally because Phase 1 uses label-replay rather than a trained model. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
+- **Role gate**: any authenticated user
 
 ---
 
@@ -836,11 +1649,6 @@ async def ensure_admin(session: AsyncSession, email: str, password: str) -> User
 ```
 
 - **Description**: Idempotent admin creation. Checks whether a user with `email` already exists in the DB. If not, creates one with role `"admin"` and an Argon2id-hashed password. Returns the existing or new `User`.
-- **Parameters**:
-  - `session: AsyncSession`
-  - `email: str` — admin email address
-  - `password: str` — cleartext password (hashed before storage)
-- **Returns**: `User`
 - **Dependencies**: `UserRepository`, `hash_password`
 
 ### Function: `ensure_sim_state`
@@ -850,11 +1658,6 @@ async def ensure_sim_state(session: AsyncSession, start: datetime, speed: float)
 ```
 
 - **Description**: Idempotent simulation state creation. Returns the existing singleton `SimState` (id=1) if present, otherwise creates a new one with `running=False`.
-- **Parameters**:
-  - `session: AsyncSession`
-  - `start: datetime` — initial simulated clock time
-  - `speed: float` — initial playback speed multiplier
-- **Returns**: `SimState`
 
 ### Private Function: `_main`
 
@@ -863,7 +1666,6 @@ async def _main() -> None
 ```
 
 - **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@garda.local` / `admin`) and sets the simulation clock to `2025-09-01T00:00:00Z` at 60x speed. Commits the transaction.
-- **Dependencies**: `db._maker`, `ensure_admin`, `ensure_sim_state`
 
 ---
 
@@ -1176,6 +1978,13 @@ flowchart TB
 
     subgraph repositories["repositories/"]
         users_repo["users.py\nUserRepository"]
+        sim_repo["sim.py\nSimRepository"]
+        metrics_repo["metrics.py\nMetricsRepository"]
+        analytics_repo["analytics.py\nAnalyticsRepository"]
+        geo_repo["geo.py\nGeoRepository"]
+        txn_repo["transactions.py\nTransactionsRepository"]
+        user_risk_repo["users_view.py\nUserRiskRepository"]
+        alerts_repo["alerts.py\nAlertsRepository"]
     end
 
     subgraph services["services/"]
@@ -1184,9 +1993,20 @@ flowchart TB
 
     subgraph api["api/"]
         schemas["schemas.py\nLoginRequest / RefreshRequest / TokenResponse / MeResponse"]
-        deps["deps.py\nCurrentUser / get_current_user / require_role / Deps"]
+        view_schemas["view_schemas.py\nSim / Metrics / Analytics / Geo / Txn / UserRisk / Alerts / SystemHealth models"]
+        deps["deps.py\nCurrentUser / SimNowDep / get_current_user / require_role / Deps"]
+        masking["masking.py\nmask_name / mask_account_id / mask_payment_id"]
+        cache_mod["cache.py\ncached_json"]
         ratelimit["ratelimit.py\nRateLimiter"]
         auth_router["auth.py\nrouter — login/refresh/logout/me"]
+        sim_router["sim.py\nrouter — state/control"]
+        metrics_router["metrics.py\nrouter — overview/volume/heatmap"]
+        analytics_router["analytics.py\nrouter — fraud"]
+        geo_router["geo.py\nrouter — provinces"]
+        txn_router["transactions.py\nrouter — live/detail"]
+        users_router["users_view.py\nrouter — risk/profile"]
+        alerts_router["alerts.py\nrouter — list/ack"]
+        system_router["system.py\nrouter — health"]
     end
 
     subgraph schema_pkg["schema/"]
@@ -1215,6 +2035,16 @@ flowchart TB
 
     %% Repository deps
     users_repo --> users_s
+    sim_repo --> sim
+    metrics_repo --> txn
+    analytics_repo --> txn
+    geo_repo --> txn
+    geo_repo --> ref
+    txn_repo --> txn
+    txn_repo --> ref
+    user_risk_repo --> txn
+    user_risk_repo --> ref
+    alerts_repo --> alerts_s
 
     %% API layer deps
     deps --> db
@@ -1224,12 +2054,57 @@ flowchart TB
     deps --> users_repo
     deps --> refresh_store
     deps --> auth_svc
+    deps --> sim_repo
+
+    %% Cache + masking
+    cache_mod --> redis
+    masking -.->|pure functions| users_router
+
+    %% Auth router
     auth_router --> deps
     auth_router --> schemas
     auth_router --> ratelimit
     auth_router --> users_repo
     auth_router --> auth_svc
     ratelimit --> redis
+
+    %% View routers → deps + view_schemas
+    sim_router --> deps
+    sim_router --> view_schemas
+    sim_router --> sim_repo
+
+    metrics_router --> deps
+    metrics_router --> view_schemas
+    metrics_router --> cache_mod
+    metrics_router --> metrics_repo
+
+    analytics_router --> deps
+    analytics_router --> view_schemas
+    analytics_router --> cache_mod
+    analytics_router --> analytics_repo
+
+    geo_router --> deps
+    geo_router --> view_schemas
+    geo_router --> cache_mod
+    geo_router --> geo_repo
+
+    txn_router --> deps
+    txn_router --> view_schemas
+    txn_router --> txn_repo
+
+    users_router --> deps
+    users_router --> view_schemas
+    users_router --> masking
+    users_router --> user_risk_repo
+
+    alerts_router --> deps
+    alerts_router --> view_schemas
+    alerts_router --> alerts_repo
+
+    system_router --> deps
+    system_router --> view_schemas
+    system_router --> sim_repo
+    system_router --> txn
 
     %% Seed deps
     seed --> db
@@ -1260,9 +2135,9 @@ flowchart TB
 | `fastapi` | — | ASGI web framework, route decorators, `Depends`, `HTTPBearer` |
 | `pydantic-settings` | — | `BaseSettings` for environment-driven configuration |
 | `pydantic` | v2 | `BaseModel`, `EmailStr`, `model_validator` |
-| `sqlalchemy` | 2.0+ | Async ORM (mapped-column API), engine, session |
+| `sqlalchemy` | 2.0+ | Async ORM (mapped-column API), engine, session, `case`, `func`, `cast` |
 | `asyncpg` | — | Async PostgreSQL driver (via `postgresql+asyncpg://` URL) |
-| `redis[asyncio]` | — | `redis.asyncio.Redis`; INCR, EXPIRE, GETDEL, SET, GET, DEL |
+| `redis[asyncio]` | — | `redis.asyncio.Redis`; INCR, EXPIRE, GETDEL, SET, GET, DEL, PING |
 | `argon2-cffi` | — | `PasswordHasher` (Argon2id); `VerifyMismatchError` |
 | `PyJWT` | — | JWT encode/decode; `PyJWTError` |
 | `prometheus-client` | — | `CollectorRegistry`, `Counter`, `generate_latest` |
@@ -1276,6 +2151,10 @@ flowchart TB
 - `RefreshTokenStore.consume()` uses Redis `GETDEL` (atomic fetch-and-delete) to prevent refresh token replay: two concurrent refresh requests cannot both consume the same JTI.
 - `Settings._require_strong_jwt_secret_outside_dev` is a fail-closed validator: it prevents the application from starting in any non-development environment without a proper JWT secret (>= 32 characters, not the default placeholder). This is enforced at Pydantic validation time, before the ASGI server begins serving requests.
 - `seed.py` seeds a default admin with password `"admin"`. This is intentionally weak for development; production deployments must rotate this before going live.
-- The `is_laundering` column on `Transaction` carries the IBM AMLSim ground-truth label used during the label-replay phase; it will be supplanted by `fraud_score` in live operation.
+- The `is_laundering` column on `Transaction` carries the IBM AMLSim ground-truth label used during the label-replay phase; it will be supplanted by `fraud_score` in live operation. It is currently used by `AnalyticsRepository.confusion_counts` to derive precision, recall, and F1.
 - `SimState` uses a DB-level `CHECK(id = 1)` constraint to enforce the singleton pattern at the SQL layer, making it safe to `UPSERT` from multiple concurrent processes without a distributed lock.
 - `REQUEST_COUNT` in `observability.py` is defined but not yet incremented — route-level instrumentation is expected in a future iteration.
+- The `surfaced_at <= sim_now` predicate is the central simulation gate: every view aggregate (metrics, analytics, geo, transactions, user-risk) applies it so the dashboard renders the world as it exists at the current simulation clock time. `SimNowDep` in `deps.py` is the single typed source for this value, shared across all eight view routers.
+- Metrics, analytics, and geo aggregates are Redis-cached (`cached_json`, `agg:` prefix) with sim-now-stamped keys so each tick of the simulation clock invalidates prior entries naturally (different key → cache miss → recompute). TTL is 5 s for metrics/analytics and 10 s for geo.
+- The live transaction feed (`GET /api/v1/transactions/live`) is deliberately NOT cached because it acts as the resync source for the dashboard's live panel. Caching would delay event delivery and break incremental polling via `after_seq`.
+- User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.

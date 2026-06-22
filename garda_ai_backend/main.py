@@ -2,7 +2,15 @@ from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
+from garda_ai_backend.api.alerts import router as alerts_view_router
+from garda_ai_backend.api.analytics import router as analytics_router
 from garda_ai_backend.api.auth import router as auth_router
+from garda_ai_backend.api.geo import router as geo_router
+from garda_ai_backend.api.metrics import router as metrics_router
+from garda_ai_backend.api.sim import router as sim_router
+from garda_ai_backend.api.system import router as system_router
+from garda_ai_backend.api.transactions import router as transactions_router
+from garda_ai_backend.api.users_view import router as users_view_router
 from garda_ai_backend.config import get_settings
 from garda_ai_backend.db import _maker
 from garda_ai_backend.observability import REGISTRY, configure_logging
@@ -13,6 +21,14 @@ configure_logging(settings.log_level)
 
 app = FastAPI(title="Garda AI Backend", version="0.1.0")
 app.include_router(auth_router)
+app.include_router(sim_router)
+app.include_router(metrics_router)
+app.include_router(analytics_router)
+app.include_router(geo_router)
+app.include_router(transactions_router)
+app.include_router(users_view_router)
+app.include_router(alerts_view_router)
+app.include_router(system_router)
 
 
 @app.get("/healthz")
