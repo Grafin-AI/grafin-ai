@@ -65,3 +65,13 @@ async def test_logout_revokes(session, redis_client):
     jti = decode_token(pair.refresh_token, secret=SECRET)["jti"]
     await svc.logout(pair.refresh_token)
     assert await RefreshTokenStore(redis_client).is_valid(jti, "1") is False
+
+
+async def test_refresh_token_replay_rejected(session, redis_client):
+    await _seed_user(session)
+    svc = _service(session, redis_client)
+    pair = await svc.authenticate("a@example.com", "pw")
+    await svc.refresh(pair.refresh_token)
+    # presenting the same (now-rotated) refresh token again must be rejected
+    with pytest.raises(AuthError):
+        await svc.refresh(pair.refresh_token)

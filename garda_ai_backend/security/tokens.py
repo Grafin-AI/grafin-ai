@@ -42,6 +42,12 @@ def create_refresh_token(
 
 def decode_token(token: str, secret: str, algorithm: str = "HS256") -> dict:
     try:
-        return jwt.decode(token, secret, algorithms=[algorithm])
+        return jwt.decode(
+            token,
+            secret,
+            algorithms=[algorithm],
+            options={"require": ["exp", "iat", "sub"]},
+            leeway=10,
+        )
     except jwt.PyJWTError as exc:
         raise InvalidToken(str(exc)) from exc

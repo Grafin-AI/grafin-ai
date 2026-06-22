@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import verify_password
+from garda_ai_backend.security.passwords import dummy_verify, verify_password
 from garda_ai_backend.security.refresh_store import RefreshTokenStore
 from garda_ai_backend.security.tokens import (
     InvalidToken,
@@ -51,7 +51,10 @@ class AuthService:
 
     async def authenticate(self, email: str, password: str) -> TokenPair:
         user = await self._users.get_by_email(email)
-        if user is None or not verify_password(password, user.password_hash):
+        if user is None:
+            dummy_verify()  # equalize timing to avoid user enumeration
+            raise AuthError("invalid credentials")
+        if not verify_password(password, user.password_hash):
             raise AuthError("invalid credentials")
         return await self._issue(str(user.id), user.role)
 
@@ -63,9 +66,9 @@ class AuthService:
         if claims.get("type") != "refresh":
             raise AuthError("not a refresh token")
         user_id = claims["sub"]
-        if not await self._refresh_store.is_valid(claims["jti"], user_id):
+        # Atomic single-use consume: closes the validate-then-revoke replay race.
+        if not await self._refresh_store.consume(claims["jti"], user_id):
             raise AuthError("refresh token revoked or unknown")
-        await self._refresh_store.revoke(claims["jti"])  # rotation
         user = await self._users.get_by_id(int(user_id))
         if user is None:
             raise AuthError("user no longer exists")

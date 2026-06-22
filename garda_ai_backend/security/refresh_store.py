@@ -18,5 +18,15 @@ class RefreshTokenStore:
         stored = await self._redis.get(self._key(jti))
         return stored is not None and stored == user_id
 
+    async def consume(self, jti: str, user_id: str) -> bool:
+        """Atomically fetch-and-delete a refresh jti (single-use rotation).
+
+        Returns True only if the jti existed and belonged to ``user_id``. The
+        atomic GETDEL closes the validate-then-revoke race that would otherwise
+        let two concurrent refresh calls both spend the same token.
+        """
+        stored = await self._redis.getdel(self._key(jti))
+        return stored is not None and stored == user_id
+
     async def revoke(self, jti: str) -> None:
         await self._redis.delete(self._key(jti))
