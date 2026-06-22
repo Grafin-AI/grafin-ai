@@ -63,3 +63,32 @@ class ProvinceFraud(BaseModel):
 
 class GeoResponse(BaseModel):
     provinces: list[ProvinceFraud]
+
+
+class LiveItem(BaseModel):
+    seq: int
+    transaction_id: int
+    bank: str
+    type: str
+    amount: float
+    fraud_score: float
+    typology: str | None
+    status: str
+    surfaced_at: str
+
+
+class LiveResponse(BaseModel):
+    items: list[LiveItem]
+
+
+class TransactionDetail(BaseModel):
+    id: int
+    bank: str
+    amount: float
+    currency: str
+    type: str
+    fraud_score: float
+    typology: str | None
+    status: str
+    is_laundering: bool
+    event_time: str

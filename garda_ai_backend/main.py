@@ -7,6 +7,7 @@ from garda_ai_backend.api.auth import router as auth_router
 from garda_ai_backend.api.geo import router as geo_router
 from garda_ai_backend.api.metrics import router as metrics_router
 from garda_ai_backend.api.sim import router as sim_router
+from garda_ai_backend.api.transactions import router as transactions_router
 from garda_ai_backend.config import get_settings
 from garda_ai_backend.db import _maker
 from garda_ai_backend.observability import REGISTRY, configure_logging
@@ -21,6 +22,7 @@ app.include_router(sim_router)
 app.include_router(metrics_router)
 app.include_router(analytics_router)
 app.include_router(geo_router)
+app.include_router(transactions_router)
 
 
 @app.get("/healthz")
