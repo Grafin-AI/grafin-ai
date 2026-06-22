@@ -30,6 +30,7 @@ async def provinces(
         provinces=[
             ProvinceFraud(
                 name=d["province"], fraud_count=d["fraud_count"],
+                # change_pct deferred: needs a prior replay window to diff against (Plan 3)
                 change_pct=0.0, risk_level=_risk_level(d["fraud_count"]),
             )
             for d in data
