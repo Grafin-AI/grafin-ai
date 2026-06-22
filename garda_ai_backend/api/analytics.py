@@ -1,0 +1,39 @@
+from fastapi import APIRouter
+
+from garda_ai_backend.api.cache import cached_json
+from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep, SimNowDep
+from garda_ai_backend.api.view_schemas import (
+    DetectionMetrics,
+    FraudAnalyticsResponse,
+    TypologyCount,
+)
+from garda_ai_backend.repositories.analytics import AnalyticsRepository
+
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+def _metrics(c: dict) -> dict:
+    tp, fp, fn = c["tp"], c["fp"], c["fn"]
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1}
+
+
+@router.get("/fraud", response_model=FraudAnalyticsResponse)
+async def fraud(
+    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep
+) -> FraudAnalyticsResponse:
+    repo = AnalyticsRepository(session)
+
+    async def compute() -> dict:
+        return {
+            "distribution": await repo.typology_distribution(sim_now),
+            "detection": _metrics(await repo.confusion_counts(sim_now)),
+        }
+
+    data = await cached_json(redis, f"fraud:{sim_now.isoformat()}", ttl=5, compute=compute)
+    return FraudAnalyticsResponse(
+        distribution=[TypologyCount(**d) for d in data["distribution"]],
+        detection=DetectionMetrics(**data["detection"]),
+    )

@@ -35,3 +35,31 @@ class VolumeResponse(BaseModel):
 
 class HeatmapResponse(BaseModel):
     cells: list[list[int]]
+
+
+class TypologyCount(BaseModel):
+    typology: str
+    count: int
+    total_amount: float
+
+
+class DetectionMetrics(BaseModel):
+    precision: float
+    recall: float
+    f1: float
+
+
+class FraudAnalyticsResponse(BaseModel):
+    distribution: list[TypologyCount]
+    detection: DetectionMetrics
+
+
+class ProvinceFraud(BaseModel):
+    name: str
+    fraud_count: int
+    change_pct: float
+    risk_level: str
+
+
+class GeoResponse(BaseModel):
+    provinces: list[ProvinceFraud]
