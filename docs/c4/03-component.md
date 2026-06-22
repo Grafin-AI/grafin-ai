@@ -290,7 +290,7 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 | WebSocket live-feed relay | Not implemented | — (planned: WebSocket Relay) |
 | Auth / RBAC | Not implemented | — (planned: Authentication / RBAC) |
 | PII masking | Not implemented | — (planned: PII Masking) |
-| Owns DB schema + migrations | Implemented (schema only; no Alembic migrations yet) | Persistence / Schema |
+| Owns DB schema + migrations | Implemented (schema + Alembic migration applied at init) | Persistence / Schema |
 | Health / readiness probes | Implemented | HTTP App |
 | Prometheus `/metrics` endpoint | Implemented | HTTP App + Observability |
 | Connects to PostgreSQL | Implemented | Persistence / Schema |
