@@ -57,3 +57,12 @@ async def test_heatmap_shape(client):
     cells = r.json()["cells"]
     assert len(cells) == 7
     assert all(len(row) == 24 for row in cells)
+
+
+async def test_volume_range_weekly_buckets_by_day(client):
+    r = await client.get("/api/v1/metrics/volume?range=weekly", headers=_auth())
+    assert r.status_code == 200
+    series = r.json()["series"]
+    # seeded events all fall on 2025-09-01 -> one day bucket
+    assert len(series) == 1
+    assert series[0]["count"] == 4

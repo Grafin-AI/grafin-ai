@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Annotated, Callable
 
 from fastapi import Depends, HTTPException, status
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from garda_ai_backend.config import Settings, get_settings
 from garda_ai_backend.db import _maker
 from garda_ai_backend.redis_client import get_redis
+from garda_ai_backend.repositories.sim import SimRepository
 from garda_ai_backend.repositories.users import UserRepository
 from garda_ai_backend.security.refresh_store import RefreshTokenStore
 from garda_ai_backend.security.tokens import InvalidToken, decode_token
@@ -75,6 +77,23 @@ def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+async def get_sim_now(session: SessionDep) -> datetime:
+    """Shared dependency: the simulation clock, or 404 if uninitialized.
+
+    Every view aggregate filters `surfaced_at <= sim_now`; this is the one
+    typed source so view routers don't each re-implement the lookup.
+    """
+    sim_now = await SimRepository(session).get_sim_now()
+    if sim_now is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="sim not initialized"
+        )
+    return sim_now
+
+
+SimNowDep = Annotated[datetime, Depends(get_sim_now)]
 
 
 def require_role(*roles: str) -> Callable[[CurrentUser], CurrentUser]:

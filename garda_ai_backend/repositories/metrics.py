@@ -35,14 +35,15 @@ class MetricsRepository:
             "fraud_rate": (risky / total) if total else 0.0,
         }
 
-    async def volume(self, sim_now: datetime) -> list[dict]:
-        bucket = func.date_trunc("hour", TransactionEvent.surfaced_at).label("bucket")
+    async def volume(self, lower: datetime, sim_now: datetime, trunc: str) -> list[dict]:
+        bucket = func.date_trunc(trunc, TransactionEvent.surfaced_at).label("bucket")
         flagged = func.sum(
             case((TransactionEvent.status.in_(("flagged", "blocked")), 1), else_=0)
         )
         stmt = (
             select(bucket, func.count().label("count"), func.coalesce(flagged, 0).label("flagged"))
             .where(TransactionEvent.surfaced_at <= sim_now)
+            .where(TransactionEvent.surfaced_at >= lower)
             .group_by(bucket)
             .order_by(bucket)
         )
