@@ -7,7 +7,97 @@ import { TransactionHeatmap } from './components/TransactionHeatmap';
 import { TransactionMonitor } from './components/TransactionMonitor';
 import { FraudAnalytics } from './components/FraudAnalytics';
 import { GeographicMap } from './components/GeographicMap';
+import { AlertsPanel } from './components/AlertsPanel';
 import { UserRiskProfiling } from './components/UserRiskProfiling';
+import { useSystemHealth } from './api/queries';
+import { Skeleton } from './components/ui/skeleton';
+
+function SystemHealthCards() {
+  const { data, isLoading } = useSystemHealth();
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4">
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="p-4 bg-white rounded-lg border">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Database</span>
+          <span className={`text-sm ${data?.db_ok ? 'text-green-600' : 'text-red-600'}`}>
+            {data?.db_ok ? 'Online' : 'Offline'}
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div
+            className={`h-2 rounded-full ${data?.db_ok ? 'bg-green-500' : 'bg-red-500'}`}
+            style={{ width: data?.db_ok ? '100%' : '10%' }}
+          ></div>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {data?.db_ok ? 'Database connection healthy' : 'Database unreachable'}
+        </p>
+      </div>
+
+      <div className="p-4 bg-white rounded-lg border">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Model Accuracy</span>
+          {data?.model_accuracy_simulated ? (
+            <span className="text-sm text-yellow-600">Simulated (Phase 1)</span>
+          ) : (
+            <span className="text-sm text-gray-500">—</span>
+          )}
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div
+            className="bg-yellow-400 h-2 rounded-full"
+            style={{ width: data?.model_accuracy_simulated ? '60%' : '0%' }}
+          ></div>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {data?.model_accuracy_simulated
+            ? 'Label-replay simulation active — accuracy not yet measured'
+            : 'No model accuracy data'}
+        </p>
+      </div>
+
+      <div className="p-4 bg-white rounded-lg border">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Cache (Redis)</span>
+          <span className={`text-sm ${data?.redis_ok ? 'text-green-600' : 'text-red-600'}`}>
+            {data?.redis_ok ? 'Online' : 'Offline'}
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div
+            className={`h-2 rounded-full ${data?.redis_ok ? 'bg-green-500' : 'bg-red-500'}`}
+            style={{ width: data?.redis_ok ? '100%' : '10%' }}
+          ></div>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          {data?.redis_ok ? 'Redis cache operational' : 'Redis unavailable'}
+        </p>
+      </div>
+
+      <div className="p-4 bg-white rounded-lg border">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Events Surfaced</span>
+          <span className="text-sm" style={{color: '#139EF6'}}>
+            {data?.events_surfaced != null ? data.events_surfaced.toLocaleString('id-ID') : '—'}
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div className="h-2 rounded-full" style={{ width: '65%', backgroundColor: '#139EF6' }}></div>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">Total events processed by system</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [currentView, setCurrentView] = useState('/dashboard');
@@ -16,10 +106,10 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       {/* Fixed Sidebar */}
       <Sidebar currentView={currentView} onNavigate={setCurrentView} />
-      
+
       {/* Fixed Header */}
       <Header />
-      
+
       {/* Main Content with proper margins for fixed elements */}
       <main className="ml-64 mt-20 p-6 space-y-6 min-h-screen">
         {/* Conditional Rendering based on current view */}
@@ -69,61 +159,26 @@ export default function App() {
               </div>
               <GeographicMap />
             </div>
-            
+
             {/* System Health Section */}
             <div className="space-y-4">
               <div className="mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">System Health</h2>
                 <p className="text-sm text-gray-500 mt-1">Real-time system performance monitoring</p>
               </div>
-              
-              {/* System Status Cards */}
-              <div className="grid gap-4">
-                <div className="p-4 bg-white rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">API Response Time</span>
-                    <span className="text-sm text-green-600">23ms</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: '85%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Excellent performance</p>
-                </div>
-                
-                <div className="p-4 bg-white rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Model Accuracy</span>
-                    <span className="text-sm text-green-600">99.94%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: '99%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Model performing optimally</p>
-                </div>
-                
-                <div className="p-4 bg-white rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">System Uptime</span>
-                    <span className="text-sm text-green-600">99.99%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: '100%' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Exceptional reliability</p>
-                </div>
 
-                <div className="p-4 bg-white rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Active Connections</span>
-                    <span className="text-sm" style={{color: '#139EF6'}}>1,247</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                    <div className="h-2 rounded-full" style={{ width: '65%', backgroundColor: '#139EF6' }}></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Banks connected to platform</p>
-                </div>
-              </div>
+              {/* System Status Cards */}
+              <SystemHealthCards />
             </div>
+          </section>
+
+          {/* Alerts Section */}
+          <section>
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Recent Alerts</h2>
+              <p className="text-sm text-gray-500 mt-1">Active fraud and system alerts</p>
+            </div>
+            <AlertsPanel />
           </section>
         </>
         ) : currentView === '/user-risk-profiling' ? (

@@ -1,23 +1,19 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { 
-  Users, 
-  AlertTriangle, 
-  TrendingUp, 
-  Building2, 
+import { Skeleton } from './ui/skeleton';
+import {
+  Building2,
   User as UserIcon,
   Search,
   Filter,
   Eye,
-  ChevronDown,
-  Shield,
-  Activity
+  AlertTriangle
 } from 'lucide-react';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -34,322 +30,15 @@ import {
 } from './ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { UserProfileDetailsModal } from './UserProfileDetailsModal';
+import { useUserRisk } from '../api/queries';
+import type { RiskProfile } from '../api/types';
 
-interface RiskProfile {
-  id: string;
-  paymentId: string;
-  entityType: 'Individual' | 'Company';
-  riskLevel: 'Low' | 'Medium' | 'High';
-  riskScore: number;
-  totalTransactions: number;
-  flaggedTransactions: number;
-  lastActivity: string;
-  accountAge: string;
-}
-
-// Mock data for user risk profiles
-const mockProfiles: RiskProfile[] = [
-  {
-    id: '1',
-    paymentId: '••••••••4521',
-    entityType: 'Company',
-    riskLevel: 'High',
-    riskScore: 87,
-    totalTransactions: 1247,
-    flaggedTransactions: 34,
-    lastActivity: '5 min ago',
-    accountAge: '2 years'
-  },
-  {
-    id: '2',
-    paymentId: '••••••••7834',
-    entityType: 'Individual',
-    riskLevel: 'High',
-    riskScore: 78,
-    totalTransactions: 342,
-    flaggedTransactions: 12,
-    lastActivity: '12 min ago',
-    accountAge: '1.5 years'
-  },
-  {
-    id: '3',
-    paymentId: '••••••••2190',
-    entityType: 'Company',
-    riskLevel: 'High',
-    riskScore: 81,
-    totalTransactions: 892,
-    flaggedTransactions: 23,
-    lastActivity: '23 min ago',
-    accountAge: '3 years'
-  },
-  {
-    id: '4',
-    paymentId: '••••••••5612',
-    entityType: 'Individual',
-    riskLevel: 'Medium',
-    riskScore: 54,
-    totalTransactions: 156,
-    flaggedTransactions: 3,
-    lastActivity: '1 hour ago',
-    accountAge: '8 months'
-  },
-  {
-    id: '5',
-    paymentId: '••••••••9087',
-    entityType: 'Company',
-    riskLevel: 'Medium',
-    riskScore: 48,
-    totalTransactions: 567,
-    flaggedTransactions: 5,
-    lastActivity: '2 hours ago',
-    accountAge: '4 years'
-  },
-  {
-    id: '6',
-    paymentId: '••••••••3421',
-    entityType: 'Individual',
-    riskLevel: 'Low',
-    riskScore: 23,
-    totalTransactions: 89,
-    flaggedTransactions: 0,
-    lastActivity: '3 hours ago',
-    accountAge: '6 months'
-  },
-  {
-    id: '7',
-    paymentId: '••••••••8765',
-    entityType: 'Company',
-    riskLevel: 'Low',
-    riskScore: 18,
-    totalTransactions: 234,
-    flaggedTransactions: 1,
-    lastActivity: '4 hours ago',
-    accountAge: '2.5 years'
-  },
-  {
-    id: '8',
-    paymentId: '••••••••6543',
-    entityType: 'Individual',
-    riskLevel: 'Medium',
-    riskScore: 61,
-    totalTransactions: 278,
-    flaggedTransactions: 7,
-    lastActivity: '5 hours ago',
-    accountAge: '1 year'
-  },
-  {
-    id: '9',
-    paymentId: '••••••••1928',
-    entityType: 'Individual',
-    riskLevel: 'High',
-    riskScore: 92,
-    totalTransactions: 512,
-    flaggedTransactions: 45,
-    lastActivity: '15 min ago',
-    accountAge: '9 months'
-  },
-  {
-    id: '10',
-    paymentId: '••••••••3765',
-    entityType: 'Company',
-    riskLevel: 'Medium',
-    riskScore: 58,
-    totalTransactions: 743,
-    flaggedTransactions: 8,
-    lastActivity: '1 hour ago',
-    accountAge: '5 years'
-  },
-  {
-    id: '11',
-    paymentId: '••••••••4982',
-    entityType: 'Individual',
-    riskLevel: 'Low',
-    riskScore: 15,
-    totalTransactions: 67,
-    flaggedTransactions: 0,
-    lastActivity: '6 hours ago',
-    accountAge: '3 months'
-  },
-  {
-    id: '12',
-    paymentId: '••••••••7291',
-    entityType: 'Company',
-    riskLevel: 'High',
-    riskScore: 84,
-    totalTransactions: 1523,
-    flaggedTransactions: 28,
-    lastActivity: '30 min ago',
-    accountAge: '1.8 years'
-  },
-  {
-    id: '13',
-    paymentId: '••••••••5439',
-    entityType: 'Individual',
-    riskLevel: 'Medium',
-    riskScore: 67,
-    totalTransactions: 198,
-    flaggedTransactions: 11,
-    lastActivity: '2 hours ago',
-    accountAge: '1.2 years'
-  },
-  {
-    id: '14',
-    paymentId: '••••••••8012',
-    entityType: 'Company',
-    riskLevel: 'Low',
-    riskScore: 22,
-    totalTransactions: 421,
-    flaggedTransactions: 2,
-    lastActivity: '7 hours ago',
-    accountAge: '6 years'
-  },
-  {
-    id: '15',
-    paymentId: '••••••••2647',
-    entityType: 'Individual',
-    riskLevel: 'High',
-    riskScore: 89,
-    totalTransactions: 456,
-    flaggedTransactions: 38,
-    lastActivity: '45 min ago',
-    accountAge: '7 months'
-  },
-  {
-    id: '16',
-    paymentId: '••••••••9134',
-    entityType: 'Company',
-    riskLevel: 'Medium',
-    riskScore: 52,
-    totalTransactions: 834,
-    flaggedTransactions: 6,
-    lastActivity: '3 hours ago',
-    accountAge: '3.5 years'
-  },
-  {
-    id: '17',
-    paymentId: '••••••••6728',
-    entityType: 'Individual',
-    riskLevel: 'Low',
-    riskScore: 28,
-    totalTransactions: 112,
-    flaggedTransactions: 1,
-    lastActivity: '4 hours ago',
-    accountAge: '1.1 years'
-  },
-  {
-    id: '18',
-    paymentId: '••••••••3856',
-    entityType: 'Company',
-    riskLevel: 'High',
-    riskScore: 79,
-    totalTransactions: 967,
-    flaggedTransactions: 19,
-    lastActivity: '1.5 hours ago',
-    accountAge: '2.2 years'
-  },
-  {
-    id: '19',
-    paymentId: '••••••••5291',
-    entityType: 'Individual',
-    riskLevel: 'Medium',
-    riskScore: 46,
-    totalTransactions: 187,
-    flaggedTransactions: 4,
-    lastActivity: '5 hours ago',
-    accountAge: '10 months'
-  },
-  {
-    id: '20',
-    paymentId: '••••••••7483',
-    entityType: 'Company',
-    riskLevel: 'Low',
-    riskScore: 19,
-    totalTransactions: 298,
-    flaggedTransactions: 0,
-    lastActivity: '8 hours ago',
-    accountAge: '4.5 years'
-  },
-  {
-    id: '21',
-    paymentId: '••••••••4126',
-    entityType: 'Individual',
-    riskLevel: 'High',
-    riskScore: 75,
-    totalTransactions: 329,
-    flaggedTransactions: 16,
-    lastActivity: '20 min ago',
-    accountAge: '1.3 years'
-  },
-  {
-    id: '22',
-    paymentId: '••••••••8957',
-    entityType: 'Company',
-    riskLevel: 'Medium',
-    riskScore: 63,
-    totalTransactions: 1089,
-    flaggedTransactions: 14,
-    lastActivity: '2.5 hours ago',
-    accountAge: '2.8 years'
-  },
-  {
-    id: '23',
-    paymentId: '••••••••2318',
-    entityType: 'Individual',
-    riskLevel: 'Low',
-    riskScore: 31,
-    totalTransactions: 143,
-    flaggedTransactions: 1,
-    lastActivity: '6 hours ago',
-    accountAge: '2 years'
-  },
-  {
-    id: '24',
-    paymentId: '••••••••6074',
-    entityType: 'Company',
-    riskLevel: 'High',
-    riskScore: 86,
-    totalTransactions: 1324,
-    flaggedTransactions: 31,
-    lastActivity: '40 min ago',
-    accountAge: '1.5 years'
-  },
-  {
-    id: '25',
-    paymentId: '••••••••9562',
-    entityType: 'Individual',
-    riskLevel: 'Medium',
-    riskScore: 55,
-    totalTransactions: 234,
-    flaggedTransactions: 5,
-    lastActivity: '3.5 hours ago',
-    accountAge: '1.7 years'
-  }
-];
-
-const riskDistributionData = [
-  { name: 'Low', value: 1334, color: '#10B981' },
-  { name: 'Medium', value: 876, color: '#F59E0B' },
-  { name: 'High', value: 324, color: '#EF4444' }
-];
-
-const riskTrendData = [
-  { month: 'Apr', high: 298, medium: 756, low: 1167 },
-  { month: 'May', high: 312, medium: 823, low: 1254 },
-  { month: 'Jun', high: 287, medium: 891, low: 1269 },
-  { month: 'Jul', high: 334, medium: 867, low: 1305 },
-  { month: 'Aug', high: 324, medium: 876, low: 1334 }
-];
-
-function getRiskLevelColor(level: string) {
+function getRiskLevelColor(level: string | null) {
   switch (level) {
-    case 'High':
-      return 'bg-red-100 text-red-800 border-red-200';
-    case 'Medium':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'Low':
-      return 'bg-green-100 text-green-800 border-green-200';
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'High': return 'bg-red-100 text-red-800 border-red-200';
+    case 'Medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    case 'Low': return 'bg-green-100 text-green-800 border-green-200';
+    default: return 'bg-gray-100 text-gray-800 border-gray-200';
   }
 }
 
@@ -368,34 +57,45 @@ function getRiskScoreBarColor(score: number) {
 export function UserRiskProfiling() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRisk, setFilterRisk] = useState('all');
-  const [filterType, setFilterType] = useState('all');
-  const [selectedProfile, setSelectedProfile] = useState<RiskProfile | null>(null);
+  const [filterType] = useState('all');
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const filteredProfiles = mockProfiles.filter(profile => {
-    const matchesSearch = profile.paymentId.includes(searchTerm) ||
-                         profile.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRisk = filterRisk === 'all' || profile.riskLevel === filterRisk;
-    const matchesType = filterType === 'all' || profile.entityType === filterType;
-    return matchesSearch && matchesRisk && matchesType;
-  });
+  // Pass filterRisk to the hook (API supports ?risk=High/Medium/Low)
+  const { data, isLoading, isError } = useUserRisk(filterRisk === 'all' ? undefined : filterRisk);
+  const profiles: RiskProfile[] = data?.profiles ?? [];
 
-  const totalProfiles = 2534;
-  const highRiskProfiles = 413;
-  const flaggedToday = 23;
-  const avgRiskScore = 42.3;
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter(profile => {
+      const matchesSearch = !searchTerm ||
+        profile.entity_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        profile.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  }, [profiles, searchTerm]);
 
-  const handleViewProfile = (profileId: string) => {
-    const profile = mockProfiles.find(p => p.id === profileId);
-    if (profile) {
-      setSelectedProfile(profile);
-      setIsModalOpen(true);
-    }
+  // Derive risk distribution from real data
+  const riskDistributionData = useMemo(() => {
+    const counts = { Low: 0, Medium: 0, High: 0 };
+    profiles.forEach(p => {
+      const level = p.risk_level as keyof typeof counts;
+      if (level in counts) counts[level]++;
+    });
+    return [
+      { name: 'Low', value: counts.Low, color: '#10B981' },
+      { name: 'Medium', value: counts.Medium, color: '#F59E0B' },
+      { name: 'High', value: counts.High, color: '#EF4444' },
+    ].filter(d => d.value > 0);
+  }, [profiles]);
+
+  const handleViewProfile = (entityId: string) => {
+    setSelectedEntityId(entityId);
+    setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setSelectedProfile(null);
+    setSelectedEntityId(null);
   };
 
   return (
@@ -413,51 +113,69 @@ export function UserRiskProfiling() {
         {/* Risk Distribution Pie Chart */}
         <Card className="p-4">
           <h3 className="font-semibold text-gray-900 mb-1">Risk Level Distribution</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={riskDistributionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {riskDistributionData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+          {isLoading ? (
+            <Skeleton className="h-40 w-full mt-2" />
+          ) : riskDistributionData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={riskDistributionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {riskDistributionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-1 space-y-2">
+                {riskDistributionData.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+                    <span className="flex-1">{item.name}</span>
+                    <span>{item.value}</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-1 space-y-2">
-            {riskDistributionData.map((item, index) => (
-              <div key={index} className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full" style={{backgroundColor: item.color}}></div>
-                <span className="flex-1">{item.name}</span>
-                <span>{item.value}</span>
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400 mt-4 text-center">No data available</p>
+          )}
         </Card>
 
-        {/* Risk Trend Chart */}
+        {/* Risk Breakdown Bar Chart (derived from current profiles) */}
         <Card className="p-4 lg:col-span-2">
-          <h3 className="font-semibold text-gray-900 mb-3">Risk Trend - Last 5 Months</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={riskTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="month" stroke="#6B7280" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#6B7280" style={{ fontSize: '12px' }} />
-                <Tooltip />
-                <Bar dataKey="high" stackId="a" fill="#EF4444" name="High" />
-                <Bar dataKey="medium" stackId="a" fill="#F59E0B" name="Medium" />
-                <Bar dataKey="low" stackId="a" fill="#10B981" name="Low" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <h3 className="font-semibold text-gray-900 mb-3">Risk Level Breakdown (Current Filter)</h3>
+          {isLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : riskDistributionData.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={riskDistributionData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="name" stroke="#6B7280" style={{ fontSize: '12px' }} />
+                  <YAxis stroke="#6B7280" style={{ fontSize: '12px' }} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Profiles">
+                    {riskDistributionData.map((entry, index) => (
+                      <Cell key={`bar-cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-sm text-gray-400">
+              No data available for current filter
+            </div>
+          )}
         </Card>
       </div>
 
@@ -467,7 +185,7 @@ export function UserRiskProfiling() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="Search by name or Payment ID..."
+              placeholder="Search by name or Entity ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -484,16 +202,6 @@ export function UserRiskProfiling() {
               <SelectItem value="Low">Low</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue placeholder="Entity Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Company">Company</SelectItem>
-              <SelectItem value="Individual">Individual</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </Card>
 
@@ -504,7 +212,9 @@ export function UserRiskProfiling() {
             <div>
               <h3 className="font-semibold text-gray-900">Risk Profile List</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Showing {filteredProfiles.length} of {mockProfiles.length} profiles
+                {isLoading
+                  ? 'Loading profiles...'
+                  : `Showing ${filteredProfiles.length} of ${profiles.length} profiles`}
               </p>
             </div>
             <Button variant="outline" className="gap-2">
@@ -518,9 +228,8 @@ export function UserRiskProfiling() {
             <Table>
               <TableHeader className="sticky top-0 bg-white border-b">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Payment ID</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Account Age</TableHead>
+                  <TableHead className="pl-6">Entity ID / Name</TableHead>
+                  <TableHead>Province</TableHead>
                   <TableHead>Risk Score</TableHead>
                   <TableHead>Risk Status</TableHead>
                   <TableHead>
@@ -535,60 +244,82 @@ export function UserRiskProfiling() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {isLoading && Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="pl-6"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                    <TableCell className="pr-6"><Skeleton className="h-8 w-16" /></TableCell>
+                  </TableRow>
+                ))}
+
+                {isError && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-red-500">
+                      <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
+                      Gagal memuat data profil. Silakan refresh halaman.
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {!isLoading && !isError && filteredProfiles.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-400">
+                      Tidak ada profil yang sesuai dengan filter.
+                    </TableCell>
+                  </TableRow>
+                )}
+
                 {filteredProfiles.map((profile) => (
-                  <TableRow key={profile.id} className="hover:bg-gray-50/50">
+                  <TableRow key={profile.entity_id} className="hover:bg-gray-50/50">
                     <TableCell className="pl-6">
-                      <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
-                        {profile.paymentId}
-                      </code>
+                      <div className="flex flex-col gap-1">
+                        <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono text-gray-600">
+                          {profile.entity_id}
+                        </code>
+                        <span className="text-sm font-medium text-gray-900">{profile.name}</span>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="gap-1">
-                        {profile.entityType === 'Company' ? (
-                          <Building2 className="w-3 h-3" />
-                        ) : (
-                          <UserIcon className="w-3 h-3" />
-                        )}
-                        {profile.entityType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-700">{profile.accountAge}</span>
+                      <span className="text-sm text-gray-700">{profile.province ?? '—'}</span>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3 min-w-[120px]">
-                        <span className={`text-sm font-medium ${getRiskScoreTextColor(profile.riskScore)} min-w-[35px]`}>
-                          {Math.round(profile.riskScore)}%
+                        <span className={`text-sm font-medium ${getRiskScoreTextColor(profile.risk_score)} min-w-[35px]`}>
+                          {Math.round(profile.risk_score)}%
                         </span>
                         <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-300 ${getRiskScoreBarColor(profile.riskScore)}`}
-                            style={{ width: `${Math.max(profile.riskScore, 5)}%` }}
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${getRiskScoreBarColor(profile.risk_score)}`}
+                            style={{ width: `${Math.max(Math.min(profile.risk_score, 100), 5)}%` }}
                           />
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge 
-                        className={`text-xs capitalize ${getRiskLevelColor(profile.riskLevel)}`}
+                      <Badge
+                        className={`text-xs capitalize ${getRiskLevelColor(profile.risk_level)}`}
                       >
-                        {profile.riskLevel}
+                        {profile.risk_level ?? 'Unknown'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {profile.totalTransactions.toLocaleString('en-US')}
+                      {profile.total_transactions.toLocaleString('en-US')}
                     </TableCell>
                     <TableCell>
-                      <span className={profile.flaggedTransactions > 0 ? 'text-red-600 font-medium' : ''}>
-                        {profile.flaggedTransactions}
+                      <span className={profile.flagged_transactions > 0 ? 'text-red-600 font-medium' : ''}>
+                        {profile.flagged_transactions}
                       </span>
                     </TableCell>
                     <TableCell className="pr-6">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className="h-8 px-3 text-xs"
-                        onClick={() => handleViewProfile(profile.id)}
+                        onClick={() => handleViewProfile(profile.entity_id)}
                       >
                         <Eye className="w-3 h-3 mr-1" />
                         View
@@ -603,8 +334,8 @@ export function UserRiskProfiling() {
       </Card>
 
       {/* User Profile Details Modal */}
-      <UserProfileDetailsModal 
-        profile={selectedProfile}
+      <UserProfileDetailsModal
+        entityId={selectedEntityId}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
       />

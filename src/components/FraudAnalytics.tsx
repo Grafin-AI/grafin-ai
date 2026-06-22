@@ -1,129 +1,151 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-
-const fraudDistributionData = [
-  { name: 'Low Risk (0-30%)', value: 85.2, color: '#10b981' },
-  { name: 'Medium Risk (31-70%)', value: 12.1, color: '#f59e0b' },
-  { name: 'High Risk (71-100%)', value: 2.7, color: '#ef4444' }
-];
-
-const bankFraudData = [
-  { bank: 'BCA', fraudCount: 145 },
-  { bank: 'Mandiri', fraudCount: 230 },
-  { bank: 'BRI', fraudCount: 312 },
-  { bank: 'BNI', fraudCount: 187 },
-  { bank: 'CIMB', fraudCount: 98 },
-  { bank: 'Danamon', fraudCount: 156 }
-];
-
-const topSuspectedFraudData = [
-  { fraudType: 'Bridge CEX', totalAmount: 45200000000, count: 23 },
-  { fraudType: 'Mule Account', totalAmount: 38500000000, count: 31 },
-  { fraudType: 'Smurfing', totalAmount: 29800000000, count: 45 },
-  { fraudType: 'Trade-Based', totalAmount: 22100000000, count: 18 },
-  { fraudType: 'Layering', totalAmount: 15600000000, count: 27 },
-  { fraudType: 'Card Testing', totalAmount: 8900000000, count: 52 }
-];
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Skeleton } from './ui/skeleton';
+import { useFraudAnalytics } from '../api/queries';
 
 export function FraudAnalytics() {
+  const { data, isLoading, isError } = useFraudAnalytics();
+
+  // Map API field names to component field names at the boundary
+  const topSuspectedFraudData = data?.distribution.map((item) => ({
+    fraudType: item.typology,
+    totalAmount: item.total_amount,
+    count: item.count,
+  })) ?? [];
+
+  const detection = data?.detection;
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card><CardContent className="pt-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+        <Card><CardContent className="pt-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+        <Card><CardContent className="pt-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="col-span-3">
+          <CardContent className="pt-6">
+            <p className="text-sm text-gray-500">Unable to load fraud analytics.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-3">
+      {/* Detection Metrics card replacing the static Fraud Score Distribution */}
       <Card>
         <CardHeader>
-          <CardTitle>Fraud Score Distribution</CardTitle>
+          <CardTitle>Detection Metrics</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={fraudDistributionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {fraudDistributionData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => `${value}%`} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {fraudDistributionData.map((item, index) => (
-              <div key={index} className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                <span className="flex-1">{item.name}</span>
-                <span>{item.value}%</span>
+          {detection ? (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Precision</span>
+                <span className="text-sm font-semibold">{(detection.precision * 100).toFixed(1)}%</span>
               </div>
-            ))}
-          </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${detection.precision * 100}%` }}></div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Recall</span>
+                <span className="text-sm font-semibold">{(detection.recall * 100).toFixed(1)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-green-500 h-2 rounded-full" style={{ width: `${detection.recall * 100}%` }}></div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">F1 Score</span>
+                <span className="text-sm font-semibold">{(detection.f1 * 100).toFixed(1)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${detection.f1 * 100}%` }}></div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 mt-4">No detection metrics available.</p>
+          )}
         </CardContent>
       </Card>
 
+      {/* Fraud count by typology */}
       <Card>
         <CardHeader>
-          <CardTitle>Fraud by Bank</CardTitle>
+          <CardTitle>Fraud by Typology (Count)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={bankFraudData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="bank" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="fraudCount" fill="var(--garda-dark-blue)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {topSuspectedFraudData.length === 0 ? (
+            <p className="text-sm text-gray-500">No data available.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={topSuspectedFraudData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="fraudType" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="count" fill="var(--garda-dark-blue)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
+      {/* Top Suspected Fraud by Amount */}
       <Card>
         <CardHeader>
           <CardTitle>Top Suspected Fraud</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart 
-              data={topSuspectedFraudData}
-              margin={{ top: 15, right: 15, left: 15, bottom: 50 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
-              <XAxis 
-                dataKey="fraudType" 
-                tick={{ fontSize: 9, fill: '#6b7280' }} 
-                angle={-35}
-                textAnchor="end"
-                height={45}
-                interval={0}
-              />
-              <YAxis 
-                tick={{ fontSize: 10, fill: '#6b7280' }} 
-                tickFormatter={(value) => `${(value / 1000000000).toFixed(0)}B`}
-                width={35}
-              />
-              <Tooltip 
-                formatter={(value) => [
-                  `Rp ${(Number(value) / 1000000000).toFixed(1)}B`, 
-                  'Total Amount'
-                ]}
-                labelFormatter={(label) => `Fraud Type: ${label}`}
-                contentStyle={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '12px'
-                }}
-              />
-              <Bar 
-                dataKey="totalAmount" 
-                fill="#139EF6" 
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          {topSuspectedFraudData.length === 0 ? (
+            <p className="text-sm text-gray-500">No data available.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart
+                data={topSuspectedFraudData}
+                margin={{ top: 15, right: 15, left: 15, bottom: 50 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+                <XAxis
+                  dataKey="fraudType"
+                  tick={{ fontSize: 9, fill: '#6b7280' }}
+                  angle={-35}
+                  textAnchor="end"
+                  height={45}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#6b7280' }}
+                  tickFormatter={(value) => `${(value / 1000000000).toFixed(0)}B`}
+                  width={35}
+                />
+                <Tooltip
+                  formatter={(value) => [
+                    `Rp ${(Number(value) / 1000000000).toFixed(1)}B`,
+                    'Total Amount'
+                  ]}
+                  labelFormatter={(label) => `Fraud Type: ${label}`}
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '12px'
+                  }}
+                />
+                <Bar
+                  dataKey="totalAmount"
+                  fill="#139EF6"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>

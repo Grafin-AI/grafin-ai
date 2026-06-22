@@ -3,150 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Progress } from './ui/progress';
 import { Button } from './ui/button';
+import { Skeleton } from './ui/skeleton';
 import { Clock, Building, CreditCard, Activity, TrendingUp, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { UserProfileDetailsModal } from './UserProfileDetailsModal';
-
-interface Transaction {
-  id: string;
-  bank: string;
-  amount: number;
-  fraudScore: number;
-  timestamp: string;
-  status: 'approved' | 'flagged' | 'blocked';
-  type: string;
-  suspectedFraudType: string | null;
-}
-
-const mockTransactions: Transaction[] = [
-  {
-    id: "TXN-001",
-    bank: "Bank BCA",
-    amount: 15000000,
-    fraudScore: 0.95,
-    timestamp: "2 seconds ago",
-    status: "blocked",
-    type: "Transfer",
-    suspectedFraudType: "Bridge CEX Withdrawal"
-  },
-  {
-    id: "TXN-002",
-    bank: "Bank Mandiri",
-    amount: 250000,
-    fraudScore: 0.15,
-    timestamp: "5 seconds ago",
-    status: "approved",
-    type: "Purchase",
-    suspectedFraudType: null
-  },
-  {
-    id: "TXN-003",
-    bank: "Bank BRI",
-    amount: 5000000,
-    fraudScore: 0.78,
-    timestamp: "8 seconds ago",
-    status: "flagged",
-    type: "Withdrawal",
-    suspectedFraudType: "Smurfing"
-  },
-  {
-    id: "TXN-004",
-    bank: "Bank BNI",
-    amount: 150000,
-    fraudScore: 0.05,
-    timestamp: "12 seconds ago",
-    status: "approved",
-    type: "Purchase",
-    suspectedFraudType: null
-  },
-  {
-    id: "TXN-005",
-    bank: "Bank CIMB",
-    amount: 8500000,
-    fraudScore: 0.45,
-    timestamp: "18 seconds ago",
-    status: "approved",
-    type: "Transfer",
-    suspectedFraudType: null
-  },
-  {
-    id: "TXN-006",
-    bank: "Bank Danamon",
-    amount: 750000,
-    fraudScore: 0.25,
-    timestamp: "25 seconds ago",
-    status: "approved",
-    type: "Purchase",
-    suspectedFraudType: null
-  },
-  {
-    id: "TXN-007",
-    bank: "Bank BTN",
-    amount: 2500000,
-    fraudScore: 0.12,
-    timestamp: "32 seconds ago",
-    status: "approved",
-    type: "Transfer",
-    suspectedFraudType: null
-  },
-  {
-    id: "TXN-008",
-    bank: "Bank Permata",
-    amount: 12000000,
-    fraudScore: 0.89,
-    timestamp: "45 seconds ago",
-    status: "flagged",
-    type: "Withdrawal",
-    suspectedFraudType: "Mule Account"
-  },
-  {
-    id: "TXN-009",
-    bank: "Bank OCBC",
-    amount: 3500000,
-    fraudScore: 0.67,
-    timestamp: "1 minute ago",
-    status: "flagged",
-    type: "Transfer",
-    suspectedFraudType: "Layering"
-  },
-  {
-    id: "TXN-010",
-    bank: "Bank Maybank",
-    amount: 890000,
-    fraudScore: 0.72,
-    timestamp: "1 minute ago",
-    status: "blocked",
-    type: "Purchase",
-    suspectedFraudType: "Card Testing"
-  },
-  {
-    id: "TXN-011",
-    bank: "Bank UOB",
-    amount: 6700000,
-    fraudScore: 0.85,
-    timestamp: "2 minutes ago",
-    status: "flagged",
-    type: "Transfer",
-    suspectedFraudType: "Trade-Based Money Laundering"
-  },
-  {
-    id: "TXN-012",
-    bank: "Bank Standard Chartered",
-    amount: 450000,
-    fraudScore: 0.08,
-    timestamp: "2 minutes ago",
-    status: "approved",
-    type: "Purchase",
-    suspectedFraudType: null
-  }
-];
+import { useLiveTransactions } from '../api/useLiveTransactions';
+import type { LiveItem } from '../api/types';
 
 export function TransactionMonitor() {
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const { items } = useLiveTransactions(100);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedProfile, setSelectedProfile] = useState<any>(null);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -164,10 +33,6 @@ export function TransactionMonitor() {
     return 'text-green-600';
   };
 
-
-
-
-
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -177,49 +42,40 @@ export function TransactionMonitor() {
     }).format(amount);
   };
 
-  const formatTime = (timestamp: string) => {
-    return timestamp;
+  const formatTime = (surfacedAt: string) => {
+    try {
+      const date = new Date(surfacedAt);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      if (diffSecs < 60) return `${diffSecs} seconds ago`;
+      const diffMins = Math.floor(diffSecs / 60);
+      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+      const diffHrs = Math.floor(diffMins / 60);
+      return `${diffHrs} hour${diffHrs > 1 ? 's' : ''} ago`;
+    } catch {
+      return surfacedAt;
+    }
   };
 
-  const handleViewTransaction = (transactionId: string) => {
-    const transaction = mockTransactions.find(t => t.id === transactionId);
-    if (transaction) {
-      setSelectedTransaction(transaction);
-      setIsModalOpen(true);
-    }
+  const handleViewTransaction = (transactionId: number) => {
+    setSelectedTransactionId(transactionId);
+    setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setSelectedTransaction(null);
+    setSelectedTransactionId(null);
   };
 
-  const handleOpenUserProfile = (paymentId: string) => {
-    // Generate a mock user profile based on payment ID
-    const mockProfile = {
-      id: `USR-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-      maskedName: 'A****** S******',
-      actualName: 'Ahmad Setiawan',
-      paymentId: paymentId.replace('PAY-', '***-'),
-      actualPaymentId: paymentId,
-      entityType: Math.random() > 0.5 ? 'Individual' : 'Company',
-      riskLevel: Math.random() > 0.6 ? 'High' : Math.random() > 0.3 ? 'Medium' : 'Low',
-      riskScore: Math.random() * 100,
-      totalTransactions: Math.floor(Math.random() * 500) + 50,
-      flaggedTransactions: Math.floor(Math.random() * 50),
-      totalAmount: Math.floor(Math.random() * 500000000) + 10000000,
-      lastActivity: 'Today',
-      location: ['Jakarta', 'Surabaya', 'Bandung', 'Medan'][Math.floor(Math.random() * 4)],
-      accountAge: `${Math.floor(Math.random() * 36) + 1} months`
-    };
-    
-    setSelectedProfile(mockProfile as any);
+  const handleOpenUserProfile = (entityId: string) => {
+    setSelectedEntityId(entityId);
     setIsProfileModalOpen(true);
   };
 
   const handleCloseProfileModal = () => {
     setIsProfileModalOpen(false);
-    setSelectedProfile(null);
+    setSelectedEntityId(null);
   };
 
   return (
@@ -231,7 +87,7 @@ export function TransactionMonitor() {
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               Live Transaction Monitor
               <Badge variant="secondary" className="ml-2">
-                {mockTransactions.length} Active
+                {items.length} Active
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-4 text-sm text-gray-500">
@@ -241,7 +97,7 @@ export function TransactionMonitor() {
               </div>
               <div className="flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                Auto-refresh every 2s
+                Auto-refresh (live WS)
               </div>
             </div>
           </div>
@@ -252,7 +108,7 @@ export function TransactionMonitor() {
               <TableHeader className="sticky top-0 bg-white border-b">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-[140px] pl-6">Transaction ID</TableHead>
-                  <TableHead className="w-[180px]">Source Bank & Type</TableHead>
+                  <TableHead className="w-[180px]">Source Bank &amp; Type</TableHead>
                   <TableHead className="w-[140px]">Amount</TableHead>
                   <TableHead className="w-[130px]">Fraud Score</TableHead>
                   <TableHead className="w-[130px]">Suspected Fraud</TableHead>
@@ -262,48 +118,66 @@ export function TransactionMonitor() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockTransactions.map((transaction) => (
-                  <TableRow key={transaction.id} className="hover:bg-gray-50/50">
+                {items.length === 0 && (
+                  <>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="pl-6"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="pr-6"><Skeleton className="h-8 w-16" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
+                {items.map((item: LiveItem) => (
+                  <TableRow key={item.seq} className="hover:bg-gray-50/50">
                     <TableCell className="pl-6">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-900">{transaction.id}</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          TXN-{item.transaction_id}
+                        </span>
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1">
                           <Building className="w-3 h-3 text-gray-400" />
-                          <span className="text-sm font-medium">{transaction.bank}</span>
+                          <span className="text-sm font-medium">{item.bank || '—'}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <CreditCard className="w-3 h-3 text-gray-400" />
-                          <span className="text-xs text-gray-500">{transaction.type}</span>
+                          <span className="text-xs text-gray-500">{item.type || '—'}</span>
                         </div>
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="text-sm font-medium text-gray-900">
-                        {formatAmount(transaction.amount)}
+                        {formatAmount(item.amount)}
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex items-center gap-3 min-w-[120px]">
-                        <span className={`text-sm font-medium ${getFraudScoreTextColor(transaction.fraudScore)} min-w-[35px]`}>
-                          {Math.round(transaction.fraudScore * 100)}%
+                        <span className={`text-sm font-medium ${getFraudScoreTextColor(item.fraud_score)} min-w-[35px]`}>
+                          {Math.round(item.fraud_score * 100)}%
                         </span>
                         <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full rounded-full transition-all duration-300 ${
-                              transaction.fraudScore > 0.7 
-                                ? 'bg-red-500' 
-                                : transaction.fraudScore > 0.4 
-                                ? 'bg-amber-500' 
+                              item.fraud_score > 0.7
+                                ? 'bg-red-500'
+                                : item.fraud_score > 0.4
+                                ? 'bg-amber-500'
                                 : 'bg-green-500'
                             }`}
-                            style={{ width: `${Math.max(transaction.fraudScore * 100, 5)}%` }}
+                            style={{ width: `${Math.max(item.fraud_score * 100, 5)}%` }}
                           />
                         </div>
                       </div>
@@ -311,14 +185,14 @@ export function TransactionMonitor() {
 
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {transaction.suspectedFraudType ? (
+                        {item.typology ? (
                           <>
                             <AlertTriangle className="w-4 h-4 text-red-600" />
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className="text-xs bg-red-50 text-red-700 border-red-200"
                             >
-                              {transaction.suspectedFraudType}
+                              {item.typology}
                             </Badge>
                           </>
                         ) : (
@@ -329,27 +203,27 @@ export function TransactionMonitor() {
                         )}
                       </div>
                     </TableCell>
-                    
+
                     <TableCell>
-                      <Badge 
-                        className={`text-xs capitalize ${getStatusColor(transaction.status)}`}
+                      <Badge
+                        className={`text-xs capitalize ${getStatusColor(item.status)}`}
                       >
-                        {transaction.status}
+                        {item.status}
                       </Badge>
                     </TableCell>
-                    
+
                     <TableCell>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Clock className="w-3 h-3" />
-                        {formatTime(transaction.timestamp)}
+                        {formatTime(item.surfaced_at)}
                       </div>
                     </TableCell>
 
                     <TableCell className="pr-6">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleViewTransaction(transaction.id)}
+                        onClick={() => handleViewTransaction(item.transaction_id)}
                         className="h-8 px-3 text-xs"
                       >
                         <Eye className="w-3 h-3 mr-1" />
@@ -365,16 +239,16 @@ export function TransactionMonitor() {
       </Card>
 
       {/* Transaction Details Modal */}
-      <TransactionDetailsModal 
-        transaction={selectedTransaction}
+      <TransactionDetailsModal
+        transactionId={selectedTransactionId}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         onOpenUserProfile={handleOpenUserProfile}
       />
 
       {/* User Profile Details Modal */}
-      <UserProfileDetailsModal 
-        profile={selectedProfile}
+      <UserProfileDetailsModal
+        entityId={selectedEntityId}
         isOpen={isProfileModalOpen}
         onClose={handleCloseProfileModal}
       />
