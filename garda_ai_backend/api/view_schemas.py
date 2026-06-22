@@ -92,3 +92,31 @@ class TransactionDetail(BaseModel):
     status: str
     is_laundering: bool
     event_time: str
+
+
+class RiskProfile(BaseModel):
+    entity_id: str
+    name: str
+    province: str | None
+    risk_level: str | None
+    risk_score: float
+    total_transactions: int
+    flagged_transactions: int
+    total_amount: float
+
+
+class UserRiskResponse(BaseModel):
+    profiles: list[RiskProfile]
+
+
+class AlertItem(BaseModel):
+    id: int
+    event_seq: int
+    severity: str
+    typology: str | None
+    created_at: str
+    acknowledged: bool
+
+
+class AlertsResponse(BaseModel):
+    alerts: list[AlertItem]
