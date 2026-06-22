@@ -120,3 +120,10 @@ class AlertItem(BaseModel):
 
 class AlertsResponse(BaseModel):
     alerts: list[AlertItem]
+
+
+class SystemHealthResponse(BaseModel):
+    db_ok: bool
+    redis_ok: bool
+    events_surfaced: int
+    model_accuracy_simulated: bool
