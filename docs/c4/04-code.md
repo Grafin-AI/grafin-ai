@@ -47,6 +47,9 @@
 | `api.users_view` | `api/users_view.py` | Users router: risk list / entity profile (role-masked) |
 | `api.alerts` | `api/alerts.py` | Alerts router: list / acknowledge |
 | `api.system` | `api/system.py` | System router: health check |
+| `api.ws_auth` | `api/ws_auth.py` | `authenticate_ws_token` — validates WS query-param access token; reuses `decode_token` |
+| `api.ws` | `api/ws.py` | WebSocket router: `ws_live` handler at `WS /api/v1/ws/live` |
+| `realtime.channels` | `realtime/channels.py` | `LIVE_EVENTS_CHANNEL` constant — shared Redis pub/sub channel name (cross-repo coupling) |
 | `seed` | `seed.py` | `ensure_admin`, `ensure_sim_state` — idempotent DB seed |
 | `schema.base` | `schema/base.py` | Declarative ORM base |
 | `schema.reference` | `schema/reference.py` | Reference tables: Bank, Entity, Account |
@@ -1636,6 +1639,133 @@ async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> Sys
 
 ---
 
+## Module: `realtime.channels`
+
+- **File**: [`garda_ai_backend/realtime/channels.py`](../../garda_ai_backend/realtime/channels.py)
+- **External dependencies**: none
+- **Internal dependencies**: none
+- **Cross-repo coupling**: This constant is the shared contract between `garda-ai-backend` (subscriber) and the pipeline worker repo (publisher). Both sides must reference the same string. Any rename must be coordinated across both repositories.
+
+### Constant: `LIVE_EVENTS_CHANNEL`
+
+```python
+LIVE_EVENTS_CHANNEL: str = "garda:events:live"
+```
+
+- **Description**: The Redis pub/sub channel name on which the pipeline replay worker publishes JSON-encoded scored `TransactionEvent` payloads and on which the backend WebSocket relay (`api/ws.py`) maintains an active subscription. Defined once here and imported by both sides to prevent silent divergence.
+- **Type**: `str` (module-level constant)
+- **Value**: `"garda:events:live"`
+
+---
+
+## Module: `api.ws_auth`
+
+- **File**: [`garda_ai_backend/api/ws_auth.py`](../../garda_ai_backend/api/ws_auth.py)
+- **External dependencies**: none beyond the standard library
+- **Internal dependencies**: `api.deps.CurrentUser`, `security.tokens.{InvalidToken, decode_token}`
+
+### Function: `authenticate_ws_token`
+
+```python
+def authenticate_ws_token(token: str, secret: str) -> CurrentUser | None
+```
+
+- **Description**: Validates an access token passed as the `?token=` query parameter on a WebSocket upgrade request. This is a synchronous helper intentionally kept separate from the HTTP `get_current_user` dependency (which reads an `Authorization: Bearer` header) because WebSocket clients cannot send custom headers during the initial HTTP upgrade in browser environments.
+- **Parameters**:
+  - `token: str` — raw JWT string extracted from the query parameter; may be an empty string
+  - `secret: str` — HMAC signing secret (from `Settings.jwt_secret`)
+- **Returns**: `CurrentUser` if the token is valid; `None` in all failure cases
+- **Rejects** (returns `None`):
+  - Empty string token
+  - Token that fails `decode_token` signature / expiry validation (`InvalidToken`)
+  - Token whose `type` claim is not `"access"` (e.g. a refresh token)
+- **Returns** `CurrentUser(id=int(claims["sub"]), role=claims["role"])` on success
+- **Dependencies**: `decode_token` (from `security.tokens`), `CurrentUser` (from `api.deps`)
+- **Note**: Does not touch the database. All authority comes from the JWT claims alone, consistent with how HTTP Bearer auth is handled in `deps.get_current_user`.
+
+---
+
+## Module: `api.ws`
+
+- **File**: [`garda_ai_backend/api/ws.py`](../../garda_ai_backend/api/ws.py)
+- **External dependencies**: `fastapi` (APIRouter, WebSocket, WebSocketDisconnect), `asyncio`, `json`
+- **Internal dependencies**: `api.deps.{RedisDep, SettingsDep}`, `api.ws_auth.authenticate_ws_token`, `realtime.channels.LIVE_EVENTS_CHANNEL`
+
+### Object: `router`
+
+```python
+router = APIRouter(tags=["ws"])
+```
+
+### Module-level constants
+
+| Name | Value | Description |
+|---|---|---|
+| `_QUEUE_MAX` | `100` | Maximum messages held in the bounded asyncio queue before backpressure kicks in |
+| `_RESYNC` | `'{"type":"resync"}'` | Pre-serialised JSON sentinel sent to the client when the queue was full and messages were dropped |
+
+### Route: `WS /api/v1/ws/live`
+
+```python
+@router.websocket("/api/v1/ws/live")
+async def ws_live(websocket: WebSocket, redis: RedisDep, settings: SettingsDep) -> None
+```
+
+- **Description**: Long-lived WebSocket endpoint that streams scored transaction events from the Redis pub/sub channel to connected dashboard clients in real time.
+- **Parameters**:
+  - `websocket: WebSocket` — FastAPI WebSocket connection object
+  - `redis: RedisDep` — injected async Redis client (from `api.deps.RedisDep`)
+  - `settings: SettingsDep` — injected app settings (provides `jwt_secret`)
+- **Returns**: `None`
+
+#### Lifecycle
+
+1. **Authentication before accept**: Calls `authenticate_ws_token(websocket.query_params.get("token", ""), settings.jwt_secret)`. If it returns `None`, immediately closes the socket with WebSocket close code `1008` (Policy Violation) and returns. The connection is never accepted.
+2. **Accept and subscribe**: Calls `websocket.accept()`, creates a Redis `pubsub` handle, subscribes to `LIVE_EVENTS_CHANNEL`, and sends `{"type": "connected"}` as the first message.
+3. **Bounded queue**: Creates an `asyncio.Queue(maxsize=_QUEUE_MAX)` that decouples the Redis subscriber from the WebSocket writer, preventing a slow client from blocking the event loop.
+4. **Reader coroutine** (`reader()`): Iterates over `pubsub.listen()`. For each message of `type == "message"`, checks if the queue is full. If full, drains the entire queue and enqueues `_RESYNC` (the `{"type":"resync"}` sentinel) to tell the client it missed events and should refetch from the REST endpoint. Then enqueues the raw `message["data"]` string.
+5. **Writer coroutine** (`writer()`): Pulls items from the queue one at a time and sends each as a WebSocket text frame via `websocket.send_text()`.
+6. **Disconnect handling**: A bare `receive_text()` loop in the main coroutine absorbs inbound frames (ignored) and unblocks on `WebSocketDisconnect`. On disconnect, cancels both reader and writer tasks, gathers their results ignoring exceptions, then performs best-effort pubsub cleanup (`unsubscribe` + `aclose`) — exceptions during cleanup are suppressed because the socket may already be broken.
+
+#### Backpressure behaviour
+
+When the writer is slower than the publisher (e.g. client is on a slow connection), the queue fills to `_QUEUE_MAX = 100`. On the next incoming Redis message, the reader drains the entire queue and pushes `{"type":"resync"}` followed by the new event. The client receives the resync hint and should issue a `GET /api/v1/transactions/live` request to rebuild its local state.
+
+#### Error / edge cases
+
+- Close code `1008` is used for unauthenticated upgrades (standard WebSocket policy-violation code).
+- `WebSocketDisconnect` is caught and treated as a clean exit.
+- Pubsub cleanup is wrapped in a broad `except Exception` (annotated `# noqa: BLE001`) to ensure the finally block never raises on a half-closed socket.
+
+```mermaid
+---
+title: ws_live — concurrent task structure
+---
+flowchart LR
+    subgraph Redis
+        PS[pubsub.listen]
+    end
+    subgraph ws.py
+        R[reader task]
+        Q["asyncio.Queue\n(max 100)"]
+        W[writer task]
+        MAIN[main coroutine\nreceive_text loop]
+    end
+    subgraph Client
+        WS[WebSocket]
+    end
+
+    PS -->|message data| R
+    R -->|enqueue / resync| Q
+    Q -->|dequeue| W
+    W -->|send_text| WS
+    WS -->|disconnect| MAIN
+    MAIN -->|cancel| R
+    MAIN -->|cancel| W
+```
+
+---
+
 ## Module: `seed`
 
 - **File**: [`garda_ai_backend/seed.py`](../../garda_ai_backend/seed.py)
@@ -2007,6 +2137,12 @@ flowchart TB
         users_router["users_view.py\nrouter — risk/profile"]
         alerts_router["alerts.py\nrouter — list/ack"]
         system_router["system.py\nrouter — health"]
+        ws_auth["ws_auth.py\nauthenticate_ws_token"]
+        ws_router["ws.py\nrouter — ws_live"]
+    end
+
+    subgraph realtime["realtime/"]
+        channels["channels.py\nLIVE_EVENTS_CHANNEL"]
     end
 
     subgraph schema_pkg["schema/"]
@@ -2106,6 +2242,14 @@ flowchart TB
     system_router --> sim_repo
     system_router --> txn
 
+    %% WebSocket relay deps
+    ws_auth --> tokens
+    ws_auth --> deps
+    ws_router --> ws_auth
+    ws_router --> channels
+    ws_router --> redis
+    ws_router --> config
+
     %% Seed deps
     seed --> db
     seed --> users_repo
@@ -2142,6 +2286,8 @@ flowchart TB
 | `PyJWT` | — | JWT encode/decode; `PyJWTError` |
 | `prometheus-client` | — | `CollectorRegistry`, `Counter`, `generate_latest` |
 | `structlog` | — | Structured JSON logging processors |
+| `asyncio` | stdlib | Concurrent task management in `ws_live` (reader/writer task pair + `Queue`) |
+| `json` | stdlib | Pre-serialised `{"type":"resync"}` sentinel in `api/ws.py` |
 
 ---
 
@@ -2158,3 +2304,6 @@ flowchart TB
 - Metrics, analytics, and geo aggregates are Redis-cached (`cached_json`, `agg:` prefix) with sim-now-stamped keys so each tick of the simulation clock invalidates prior entries naturally (different key → cache miss → recompute). TTL is 5 s for metrics/analytics and 10 s for geo.
 - The live transaction feed (`GET /api/v1/transactions/live`) is deliberately NOT cached because it acts as the resync source for the dashboard's live panel. Caching would delay event delivery and break incremental polling via `after_seq`.
 - User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.
+- `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
+- WebSocket authentication (`api/ws_auth.py`) passes the JWT via the `?token=` query parameter instead of an `Authorization` header because browser WebSocket APIs (`new WebSocket(url)`) do not support custom headers on the upgrade request. The validation logic deliberately mirrors `deps.get_current_user` — it calls the same `decode_token`, checks `type == "access"`, and builds the same `CurrentUser` object — so the security posture is equivalent.
+- The bounded queue in `ws_live` (max 100 entries) applies explicit backpressure: a slow client causes the queue to fill, at which point the reader drains all pending messages and injects a `{"type":"resync"}` frame. The client must then poll `GET /api/v1/transactions/live` to rebuild its local state. This design trades guaranteed delivery for bounded memory use and event-loop liveness.

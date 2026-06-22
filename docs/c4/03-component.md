@@ -20,7 +20,7 @@ The **Backend API** container is one of two application containers in the Garda 
 - Serves REST aggregation endpoints for all dashboard views, role-gated and temporally bounded by the simulation clock
 - Masks PII (entity names, account IDs) in user-risk responses based on caller role
 - Caches aggregate query results in Redis, keyed to the current simulation timestamp
-- A WebSocket live-feed relay is planned for a future phase (not yet implemented)
+- Provides a WebSocket live-feed relay that fans out scored events from the Redis `garda:events:live` pub/sub channel to authenticated dashboard clients
 
 This document zooms into the **components within that container**. All components run in the same Python process.
 
@@ -40,6 +40,7 @@ This document zooms into the **components within that container**. All component
 | **View / Read API** | `api/sim.py`, `api/metrics.py`, `api/analytics.py`, `api/geo.py`, `api/transactions.py`, `api/users_view.py`, `api/alerts.py`, `api/system.py`, `api/view_schemas.py`, `repositories/sim.py`, `repositories/metrics.py`, `repositories/analytics.py`, `repositories/geo.py`, `repositories/transactions.py`, `repositories/users_view.py`, `repositories/alerts.py`, `api/deps.py` (`SimNowDep`) | Server-side aggregation of all dashboard data over `transaction_events` filtered by `surfaced_at <= sim_now`; role-gated; simulation clock as the temporal boundary |
 | **PII Masking** | `api/masking.py` | Masks entity names and account/payment IDs in user-risk serialization; applied in router layer, not in repositories |
 | **Aggregate Caching** | `api/cache.py` | `sim_now`-keyed cache-aside over Redis for aggregate endpoints (metrics, analytics, geo); transactions/live and user-risk are uncached |
+| **Live WebSocket Relay** | `api/ws.py`, `api/ws_auth.py`, `realtime/channels.py` | Authenticated (`?token=` access JWT) live fan-out; subscribes to `garda:events:live` Redis pub/sub channel and pushes scored events to dashboard clients with bounded-queue backpressure |
 
 ---
 
@@ -221,7 +222,7 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 ### Software Features
 
 - **Import-time initialisation**: Calls `get_settings()` and `configure_logging()` as module-level side effects, ensuring logging is active before any request arrives and before the ASGI server calls any lifecycle hook.
-- **Router mounting**: Includes all nine component routers — `auth`, `sim`, `metrics`, `analytics`, `geo`, `transactions`, `users_view`, `alerts`, `system` — so all API endpoints are served by this process.
+- **Router mounting**: Includes all component routers — `auth`, `sim`, `metrics`, `analytics`, `geo`, `transactions`, `users_view`, `alerts`, `system`, `ws` — so all API and WebSocket endpoints are served by this process.
 - **Liveness probe (`GET /healthz`)**: Returns `{"status": "ok"}` unconditionally. Does not touch the database; safe to call before PostgreSQL is available.
 - **Readiness probe (`GET /readyz`)**: Executes `SELECT 1` against PostgreSQL and `PING` against Redis. Returns HTTP 200 `{"status": "ready"}` on success, or HTTP 503 `{"status": "not-ready"}` on any exception.
 - **Metrics endpoint (`GET /metrics`)**: Serialises the Observability component's `REGISTRY` via `prometheus_client.generate_latest()` and returns the Prometheus text exposition format with the correct `Content-Type`.
@@ -248,6 +249,7 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 | — | `/api/v1/users/*` | User risk views (delegated) | See View / Read API component |
 | — | `/api/v1/alerts/*` | Alert views (delegated) | See View / Read API component |
 | — | `/api/v1/system/*` | System health (delegated) | See View / Read API component |
+| — | `/api/v1/ws/*` | WebSocket live feed (delegated) | See Live WebSocket Relay component |
 
 ### Dependencies
 
@@ -256,6 +258,7 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 - **Observability component**: `configure_logging()` called at import time; `REGISTRY` passed to `generate_latest()` in `GET /metrics`
 - **Authentication & RBAC component**: auth `router` included via `app.include_router()`
 - **View / Read API component**: all eight view routers included via `app.include_router()`
+- **Live WebSocket Relay component**: ws `router` included via `app.include_router()`
 - **Redis Integration component**: `get_redis()` called inside `GET /readyz` to ping Redis
 - **External — Prometheus**: scrapes `GET /metrics` on the configured interval
 
@@ -271,7 +274,7 @@ The ASGI entry-point for the Backend API container. Creates and owns the `FastAP
 
 ### Purpose
 
-Implements the complete authentication and authorisation lifecycle for the platform. Handles credential verification (Argon2id), JWT access/refresh token issuance, single-use refresh token rotation, token revocation on logout, identity injection into request handlers, and role-based access control gating. Login attempts are rate-limited per source IP. The `require_role` and `CurrentUserDep` factories defined here are also consumed by the View / Read API component to gate dashboard endpoints.
+Implements the complete authentication and authorisation lifecycle for the platform. Handles credential verification (Argon2id), JWT access/refresh token issuance, single-use refresh token rotation, token revocation on logout, identity injection into request handlers, and role-based access control gating. Login attempts are rate-limited per source IP. The `require_role` and `CurrentUserDep` factories defined here are also consumed by the View / Read API component to gate dashboard endpoints. The `decode_token` primitive from `security/tokens.py` is additionally consumed by the Live WebSocket Relay component for query-parameter token authentication.
 
 This component spans the HTTP router layer (`api/`), the service layer (`services/`), the security primitives (`security/`), and the data access layer (`repositories/`) — all tightly coupled around the single concern of auth.
 
@@ -335,7 +338,7 @@ This component spans the HTTP router layer (`api/`), the service layer (`service
 
 ### Purpose
 
-Provides the async Redis client singleton and the Redis-backed behaviours currently implemented: **revocable refresh-token JTI storage**, **fixed-window per-IP rate limiting**, and **aggregate response caching**. This component acts as the adapter layer between the application and the Redis container provisioned by `garda-ai-deploy`. The Aggregate Caching component (`api/cache.py`) uses the Redis client provided here.
+Provides the async Redis client singleton and the Redis-backed behaviours currently implemented: **revocable refresh-token JTI storage**, **fixed-window per-IP rate limiting**, and **aggregate response caching**. This component acts as the adapter layer between the application and the Redis container provisioned by `garda-ai-deploy`. The Aggregate Caching component (`api/cache.py`) and the Live WebSocket Relay component use the Redis client provided here.
 
 ### Software Features
 
@@ -343,6 +346,7 @@ Provides the async Redis client singleton and the Redis-backed behaviours curren
 - **Refresh JTI store** (`security/refresh_store.py`): `RefreshTokenStore` persists valid refresh-token JTIs at `refresh:{jti}` with TTL matching the JWT expiry. `consume()` uses Redis `GETDEL` for atomic single-use enforcement — two concurrent refresh requests cannot both spend the same token.
 - **Fixed-window rate limiter** (`api/ratelimit.py`): `RateLimiter` increments `ratelimit:{key}` via `INCR`, sets TTL on first increment, and raises HTTP 429 when the window limit is exceeded. Currently applied to `POST /api/v1/auth/login` at 10 requests / 60 s per IP.
 - **Aggregate cache backing store**: The `agg:{key}` key namespace is used by `api/cache.py` (`cached_json`) to store serialised JSON of aggregate query results. Redis is the storage medium; the caching logic lives in the Aggregate Caching component.
+- **Pub/sub transport for live events**: The `redis.asyncio.Redis` client returned by `get_redis()` also provides the `pubsub()` interface consumed by the Live WebSocket Relay to subscribe to `garda:events:live`.
 
 ### Code Elements
 
@@ -354,7 +358,7 @@ Provides the async Redis client singleton and the Redis-backed behaviours curren
 
 #### `get_redis() -> Redis`
 
-Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used as the source of the `RedisDep` FastAPI dependency injected into `AuthService`, `RateLimiter`, and `cached_json`.
+Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used as the source of the `RedisDep` FastAPI dependency injected into `AuthService`, `RateLimiter`, `cached_json`, and the Live WebSocket Relay.
 
 #### `RefreshTokenStore`
 
@@ -374,7 +378,7 @@ Lazy singleton accessor. Returns the shared `redis.asyncio.Redis` client. Used a
 ### Dependencies
 
 - **Configuration component**: `get_settings().redis_url` consumed on first `get_redis()` call
-- **External — Redis**: connects via `redis.asyncio.Redis`; uses `SET`, `GET`, `DEL`, `GETDEL`, `INCR`, `EXPIRE`, `PING`
+- **External — Redis**: connects via `redis.asyncio.Redis`; uses `SET`, `GET`, `DEL`, `GETDEL`, `INCR`, `EXPIRE`, `PING`, `SUBSCRIBE` (pub/sub)
 
 ---
 
@@ -453,7 +457,7 @@ The component is composed of eight FastAPI routers and seven query repositories.
 - **Metrics aggregations** (`api/metrics.py`, `repositories/metrics.py`): Overview (total count, flagged, blocked, total amount, fraud rate), volume time-series (hour / day / month granularity for 24h / weekly / monthly / yearly windows), and 7×24 activity heatmap. All backed by `MetricsRepository`.
 - **Fraud analytics** (`api/analytics.py`, `repositories/analytics.py`): Typology distribution (count + amount per typology), and confusion-matrix-derived detection metrics (precision, recall, F1) computed from `is_laundering` ground truth vs. `status` prediction. Backed by `AnalyticsRepository`.
 - **Geo distribution** (`api/geo.py`, `repositories/geo.py`): Province-level fraud counts (flagged + blocked events joined through account → entity → province). Risk level derived by count thresholds (≥100: high, ≥20: medium, else low). Backed by `GeoRepository`.
-- **Transaction live-feed** (`api/transactions.py`, `repositories/transactions.py`): Cursor-paginated live window (`after_seq` / `limit`) and single-transaction detail endpoint. `TransactionsRepository` joins `transaction_events` → `transactions` → `banks`.
+- **Transaction live-feed** (`api/transactions.py`, `repositories/transactions.py`): Cursor-paginated live window (`after_seq` / `limit`) and single-transaction detail endpoint. `TransactionsRepository` joins `transaction_events` → `transactions` → `banks`. Clients use this endpoint for backfill after receiving a `{"type": "resync"}` message from the WebSocket relay.
 - **User risk profiles** (`api/users_view.py`, `repositories/users_view.py`): Risk-list endpoint (optional `risk` category filter, `limit`) and per-entity profile. `UserRiskRepository` joins entities → accounts → transactions → events. PII (entity name) masked in the router layer via `mask_name` (see PII Masking component); admin callers with `unmasked=true` receive plaintext.
 - **Alert management** (`api/alerts.py`, `repositories/alerts.py`): Alert list (all or active-only) and acknowledgement mutation (`POST /{alert_id}/ack`). `AlertsRepository` reads and writes the `alerts` table.
 - **System health** (`api/system.py`): Authenticated health endpoint (`GET /api/v1/system/health`) checking DB connectivity, Redis connectivity, and the count of surfaced events up to `sim_now`.
@@ -497,7 +501,7 @@ The component is composed of eight FastAPI routers and seven query repositories.
 | `GET` | `/api/v1/metrics/heatmap` | Any authenticated | 7×24 activity heatmap | `200 HeatmapResponse` |
 | `GET` | `/api/v1/analytics/fraud` | Any authenticated | Typology distribution + detection metrics (precision/recall/F1) | `200 FraudAnalyticsResponse` |
 | `GET` | `/api/v1/geo/provinces` | Any authenticated | Province-level fraud counts with risk levels | `200 GeoResponse` |
-| `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) | `200 LiveResponse` |
+| `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) — also the backfill endpoint for WebSocket clients after a resync | `200 LiveResponse` |
 | `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail | `200 TransactionDetail` or `404` |
 | `GET` | `/api/v1/users/risk` | Any authenticated | Entity risk list (`risk`, `unmasked`, `limit`) | `200 UserRiskResponse` |
 | `GET` | `/api/v1/users/{entity_id}/profile` | Any authenticated | Single entity risk profile | `200 RiskProfile` or `404` |
@@ -599,31 +603,105 @@ Returns the cached or freshly computed value.
 
 ---
 
+## Component: Live WebSocket Relay
+
+### Overview
+
+- **Name**: Live WebSocket Relay
+- **Type**: Application (real-time push layer)
+- **Technology**: Python 3.12+, FastAPI WebSockets, redis[asyncio] pub/sub
+
+### Purpose
+
+Provides authenticated, real-time push of scored AML events to dashboard clients over a persistent WebSocket connection. The relay subscribes to the Redis `garda:events:live` pub/sub channel — the channel the Plan 3 pipeline worker publishes to after each scoring pass — and fans out messages to all connected clients. Backpressure is managed with a bounded in-process queue (max 100 items): when the queue fills faster than the client can drain it, all queued messages are dropped and a `{"type": "resync"}` sentinel is emitted, directing the client to backfill via `GET /transactions/live?after_seq=`.
+
+Authentication is performed before the WebSocket handshake is accepted: the standard JWT access token is passed as a `?token=` query parameter (Bearer headers are not available in the browser WebSocket API). An invalid or missing token causes an immediate close with code 1008 (Policy Violation) before `accept()` is called.
+
+This is the final backend API surface of Plan 2. The pipeline publisher (the Plan 3 worker that writes to `garda:events:live`) is **not part of this repository** and does not exist yet.
+
+### Software Features
+
+- **Auth-before-accept**: `authenticate_ws_token` validates the `?token=` query parameter using `decode_token` and checks `claims["type"] == "access"`. If validation fails, the WebSocket is closed with code 1008 without being accepted — no handshake is completed for unauthenticated callers.
+- **Redis pub/sub subscription**: On successful auth, the handler calls `redis.pubsub()` and subscribes to `LIVE_EVENTS_CHANNEL` (`"garda:events:live"`). The channel name is defined as a shared constant in `realtime/channels.py` to keep the relay and the future pipeline publisher in sync.
+- **Connected sentinel**: Immediately after `accept()`, a `{"type": "connected"}` message is sent to confirm the subscription is live before any events arrive.
+- **Bounded-queue fan-out**: An `asyncio.Queue(maxsize=100)` decouples the Redis reader coroutine from the WebSocket writer coroutine. The reader task enqueues raw message data; the writer task drains and sends. This prevents a slow client from blocking the Redis subscription loop.
+- **Drop-to-latest with resync hint**: When the queue is full, the reader drains the entire queue and enqueues the `{"type": "resync"}` sentinel instead of the incoming message. The client must call `GET /transactions/live?after_seq=<last_seq>` to recover the gap.
+- **Concurrent reader/writer tasks**: `reader()` and `writer()` run as independent `asyncio.Task` objects. The main coroutine loops on `receive_text()` (client keepalive / disconnect detection). On `WebSocketDisconnect`, both tasks are cancelled and awaited, then the pub/sub connection is cleaned up best-effort.
+- **Shared channel constant**: `LIVE_EVENTS_CHANNEL = "garda:events:live"` in `realtime/channels.py` is the single source of truth for the channel name, establishing the cross-repo contract between this relay and the Plan 3 pipeline worker.
+
+### Code Elements
+
+- [`api/ws.py`](../../garda_ai_backend/api/ws.py) — `router`; `WS /api/v1/ws/live`; `_QUEUE_MAX = 100`; `_RESYNC` sentinel; `reader()` / `writer()` coroutines
+- [`api/ws_auth.py`](../../garda_ai_backend/api/ws_auth.py) — `authenticate_ws_token(token, secret) -> CurrentUser | None`
+- [`realtime/channels.py`](../../garda_ai_backend/realtime/channels.py) — `LIVE_EVENTS_CHANNEL = "garda:events:live"`
+
+### Public Interface
+
+#### WebSocket endpoint
+
+| Protocol | Path | Auth | Description |
+|---|---|---|---|
+| `WS` | `/api/v1/ws/live` | `?token=<access_jwt>` | Subscribe to live scored-event stream |
+
+**Connection lifecycle:**
+
+1. Client connects with `?token=<access_jwt>`.
+2. Server validates the token; closes 1008 on failure (no accept).
+3. Server accepts, subscribes to Redis channel, sends `{"type": "connected"}`.
+4. Server streams JSON event payloads as text frames.
+5. If the queue fills, server sends `{"type": "resync"}` — client must backfill via `GET /transactions/live?after_seq=`.
+6. On client disconnect, server cancels tasks and unsubscribes.
+
+#### `authenticate_ws_token(token: str, secret: str) -> CurrentUser | None`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `token` | `str` | Raw JWT string from `?token=` query param |
+| `secret` | `str` | HMAC secret from `Settings.jwt_secret` |
+
+Returns a `CurrentUser(id, role)` on success, `None` on any validation failure (missing token, invalid signature, wrong type claim).
+
+#### `LIVE_EVENTS_CHANNEL: str`
+
+`"garda:events:live"` — the Redis pub/sub channel name. Cross-repo contract: the Plan 3 pipeline worker must `PUBLISH` to this channel for the relay to receive events.
+
+### Dependencies
+
+- **Authentication & RBAC component**: `decode_token`, `InvalidToken` from `security/tokens.py`; `CurrentUser`, `RedisDep`, `SettingsDep` from `api/deps.py`
+- **Redis Integration component**: `RedisDep` (the async Redis client); uses `pubsub()`, `subscribe()`, `listen()`, `unsubscribe()`, `aclose()`
+- **Configuration component**: `SettingsDep` provides `jwt_secret` for token validation
+- **External — Redis**: subscribes to `garda:events:live` channel; receives messages published by the pipeline worker
+- **External (planned) — Pipeline Worker (Plan 3)**: the external publisher that writes scored `TransactionEvent` records to the DB and publishes event JSON to `garda:events:live`; not yet implemented
+
+---
+
 ## Component Diagram
 
-The diagram below shows all ten components within the Backend API container, their internal relationships, and their connections to external systems and other containers.
+The diagram below shows all eleven components within the Backend API container, their internal relationships, and their connections to external systems and other containers.
 
 ```mermaid
 C4Component
     title Component Diagram — Backend API Container (garda-ai-backend)
 
     Container_Boundary(api, "Backend API · FastAPI / asyncpg / redis-py") {
-        Component(httpApp, "HTTP App", "FastAPI", "ASGI entry-point. Liveness (/healthz), readiness (/readyz), Prometheus scrape (/metrics). Mounts all routers.")
+        Component(httpApp, "HTTP App", "FastAPI", "ASGI entry-point. Liveness (/healthz), readiness (/readyz), Prometheus scrape (/metrics). Mounts all routers including WebSocket relay.")
         Component(config, "Configuration", "pydantic-settings", "Typed, cached settings from GARDA_* env vars. JWT secret + Redis URL. Fail-closed secret validator.")
         Component(persistence, "Persistence / Schema", "SQLAlchemy 2.0 + asyncpg", "Async engine + session factory. Canonical ORM for all 9 tables: banks, entities, accounts, transactions, transaction_events, alerts, users, sim_state.")
         Component(observability, "Observability", "prometheus-client + structlog", "Isolated Prometheus registry + garda_http_requests_total counter. Structured JSON logging.")
         Component(auth, "Authentication & RBAC", "FastAPI + PyJWT + argon2-cffi", "Login/refresh/logout/me. Argon2id password verify. JWT issuance + validation. Single-use refresh rotation. Role-gated DI (require_role / CurrentUserDep / SimNowDep). Login rate-limiting.")
-        Component(redis, "Redis Integration", "redis[asyncio]", "Async Redis singleton. Refresh-JTI store (atomic GETDEL). Fixed-window rate limiter (INCR/EXPIRE).")
+        Component(redis, "Redis Integration", "redis[asyncio]", "Async Redis singleton. Refresh-JTI store (atomic GETDEL). Fixed-window rate limiter (INCR/EXPIRE). Pub/sub client for live event channel.")
         Component(seed, "Seed / Bootstrap", "Python asyncio", "Idempotent DB seed: default admin user + SimState singleton. Run at deploy time.")
-        Component(viewApi, "View / Read API", "FastAPI + SQLAlchemy", "8 routers + 7 repositories. Aggregates transaction_events WHERE surfaced_at <= sim_now. Endpoints: sim, metrics, analytics, geo, transactions, users, alerts, system. /sim/control is admin-only.")
+        Component(viewApi, "View / Read API", "FastAPI + SQLAlchemy", "8 routers + 7 repositories. Aggregates transaction_events WHERE surfaced_at <= sim_now. Endpoints: sim, metrics, analytics, geo, transactions, users, alerts, system. /sim/control is admin-only. /transactions/live is the backfill endpoint for WS clients.")
         Component(masking, "PII Masking", "Python", "mask_name / mask_account_id. Applied in users_view router before RiskProfile serialization. Admin callers with unmasked=true bypass masking.")
         Component(cache, "Aggregate Caching", "redis[asyncio] + json", "cached_json cache-aside over Redis. sim_now-keyed. Applied to metrics, analytics, geo (TTL 5-10 s). Transactions/live and user-risk are uncached.")
+        Component(wsRelay, "Live WebSocket Relay", "FastAPI WebSockets + redis pub/sub", "WS /api/v1/ws/live. Auth-before-accept via ?token= JWT. Subscribes to garda:events:live Redis channel. Bounded-queue fan-out (max 100). Drop-to-latest + resync hint on overflow.")
     }
 
     ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth for all platform data")
-    ContainerDb(redisDb, "Redis", "Redis", "Refresh-JTI store; rate-limit counters; agg:* cache entries")
+    ContainerDb(redisDb, "Redis", "Redis", "Refresh-JTI store; rate-limit counters; agg:* cache entries; garda:events:live pub/sub channel")
     Container_Ext(prom, "Prometheus", "Prometheus", "Scrapes /metrics from Backend API")
-    Container_Ext(worker, "Pipeline Worker", "Python / asyncpg", "ETL, replay clock, scoring engine — reads/writes same DB schema")
+    Container_Ext(worker, "Pipeline Worker (Plan 3)", "Python / asyncpg", "ETL, replay clock, ML scoring engine — reads/writes same DB schema. PUBLISHES scored events to garda:events:live. Not yet implemented.")
+    Container_Ext(dashboard, "Dashboard Client", "Browser / WebSocket", "Connects to WS /api/v1/ws/live; backfills via GET /transactions/live?after_seq=")
 
     Rel(httpApp, config, "Reads settings at import time", "in-process")
     Rel(httpApp, persistence, "Opens ad-hoc session for /readyz", "in-process")
@@ -631,6 +709,7 @@ C4Component
     Rel(httpApp, auth, "Mounts auth router", "in-process")
     Rel(httpApp, viewApi, "Mounts 8 view routers", "in-process")
     Rel(httpApp, redis, "Pings Redis for /readyz", "in-process")
+    Rel(httpApp, wsRelay, "Mounts WebSocket router", "in-process")
 
     Rel(persistence, config, "Reads database_url on first engine construction", "in-process")
     Rel(redis, config, "Reads redis_url on first client construction", "in-process")
@@ -649,22 +728,20 @@ C4Component
     Rel(seed, persistence, "ensure_admin, ensure_sim_state via AsyncSession", "in-process / SQL")
     Rel(seed, auth, "Uses hash_password from security/passwords", "in-process")
 
+    Rel(wsRelay, auth, "authenticate_ws_token uses decode_token + CurrentUser from api/deps.py", "in-process")
+    Rel(wsRelay, redis, "redis.pubsub() — SUBSCRIBE garda:events:live", "in-process")
+    Rel(wsRelay, config, "Reads jwt_secret via SettingsDep for token validation", "in-process")
+
     Rel(persistence, pg, "Reads and writes", "SQL / asyncpg (pool: 10+5)")
-    Rel(redis, redisDb, "INCR, EXPIRE, SET, GET, DEL, GETDEL, PING", "redis-py async")
+    Rel(redis, redisDb, "INCR, EXPIRE, SET, GET, DEL, GETDEL, PING, SUBSCRIBE", "redis-py async")
     Rel(cache, redisDb, "GET / SET agg:* (via Redis Integration client)", "redis-py async")
+    Rel(wsRelay, redisDb, "SUBSCRIBE garda:events:live — receives published events", "redis-py async pub/sub")
     Rel(prom, httpApp, "Scrapes", "HTTP GET /metrics")
     Rel(worker, pg, "Reads and writes (sole writer of transactions/events)", "SQL / asyncpg")
+    Rel(worker, redisDb, "PUBLISH garda:events:live (planned — not yet implemented)", "redis PUBLISH")
+    Rel(dashboard, wsRelay, "Connects with ?token=<jwt>; receives live event frames", "WebSocket")
+    Rel(dashboard, viewApi, "Backfills via GET /transactions/live?after_seq= after resync", "HTTP")
 ```
-
----
-
-## Planned Components (Not Yet Implemented)
-
-The following component is planned for a future phase but has **no implementation in this codebase** as of 2026-06-22.
-
-| Planned Component | Phase | Schema Evidence | Notes |
-|---|---|---|---|
-| **WebSocket Relay** | Plan 2C | `transaction_events.seq` cursor design in container spec | No WebSocket route, Redis pub/sub subscriber, or SSE stream exists |
 
 ---
 
@@ -675,7 +752,7 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 | Container-level responsibility | Status | Implementing component |
 |---|---|---|
 | REST aggregations for every view | **Implemented** | View / Read API |
-| WebSocket live-feed relay | Not implemented | — (planned: WebSocket Relay, Plan 2C) |
+| WebSocket live-feed relay | **Implemented** | Live WebSocket Relay (`api/ws.py`, `api/ws_auth.py`, `realtime/channels.py`) |
 | Auth / RBAC | **Implemented** | Authentication & RBAC |
 | PII masking | **Implemented** | PII Masking (applied in View / Read API — users_view router) |
 | Aggregate caching | **Implemented** | Aggregate Caching (metrics, analytics, geo; transactions/live and user-risk uncached) |
@@ -683,8 +760,8 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 | Health / readiness probes | **Implemented** | HTTP App |
 | Prometheus `/metrics` endpoint | **Implemented** | HTTP App + Observability |
 | Connects to PostgreSQL | **Implemented** | Persistence / Schema |
-| Connects to Redis | **Implemented** (JTI store + rate limiting + aggregate cache) | Redis Integration + Aggregate Caching |
+| Connects to Redis | **Implemented** (JTI store + rate limiting + aggregate cache + pub/sub) | Redis Integration + Aggregate Caching + Live WebSocket Relay |
 | Login rate-limiting | **Implemented** | Redis Integration (via Authentication & RBAC) |
 | Bootstrap / seed | **Implemented** | Seed / Bootstrap |
 
-Ten components are implemented. The WebSocket Relay is the only remaining planned item.
+All eleven components are implemented. Plan 2's backend API surface is complete. The only remaining external dependency is the **Pipeline Worker (Plan 3)**, which must publish scored events to `garda:events:live` — that publisher lives in a separate repository and has not been implemented yet.
