@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     database_url: str
     env: str = "development"
     log_level: str = "INFO"
+    redis_url: str = "redis://localhost:6379/0"
+    jwt_secret: str = "change-me-in-prod"
+    jwt_algorithm: str = "HS256"
+    jwt_access_ttl_min: int = 15
+    jwt_refresh_ttl_days: int = 7
 
 
 @lru_cache(maxsize=1)
