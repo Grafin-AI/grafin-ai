@@ -27,7 +27,8 @@ etl (loads ~5M transactions, runs once) → replay (streams scored events to Red
 
 ## Simulation clock
 The replay worker walks the loaded transactions on an accelerated clock and pushes scored
-events to the dashboard. Control it from the header (admin only) or the API:
+events to the dashboard. Control it from the **Simulation page** (admin-only sidebar item) or
+the API — the dashboard itself stays a clean monitoring UI with no sim controls:
 ```bash
 # resume + set 20x for a livelier demo
 curl -s -X POST localhost:8000/api/v1/sim/control -H "Authorization: Bearer $TOKEN" \
