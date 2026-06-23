@@ -56,7 +56,11 @@ export function useLiveTransactions(max = 100) {
     }
     connect();
 
-    return () => { closed = true; ws?.close(); };
+    // Safety net: periodically pull newer events via REST even if the WS isn't
+    // delivering (proxy/upgrade issues), so the monitor never goes stale.
+    const poll = setInterval(() => { void resync(); }, 4000);
+
+    return () => { closed = true; clearInterval(poll); ws?.close(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [max]);
 

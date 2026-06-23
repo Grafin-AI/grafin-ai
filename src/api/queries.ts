@@ -9,23 +9,27 @@ import type {
 const get = async <T,>(url: string, params?: Record<string, unknown>): Promise<T> =>
   (await api.get<T>(url, params ? { params } : undefined)).data;
 
+// The simulation clock advances continuously, so the dashboard aggregates must
+// poll to stay live (the backend caches them ~5s, so this is cheap).
+const LIVE = { refetchInterval: 4000 } as const;
+
 export const useMetricsOverview = () =>
-  useQuery({ queryKey: ['metrics', 'overview'], queryFn: () => get<MetricsOverview>('/metrics/overview') });
+  useQuery({ queryKey: ['metrics', 'overview'], queryFn: () => get<MetricsOverview>('/metrics/overview'), ...LIVE });
 
 export const useVolume = (range: string) =>
-  useQuery({ queryKey: ['metrics', 'volume', range], queryFn: () => get<VolumeResponse>('/metrics/volume', { range }) });
+  useQuery({ queryKey: ['metrics', 'volume', range], queryFn: () => get<VolumeResponse>('/metrics/volume', { range }), ...LIVE });
 
 export const useHeatmap = () =>
-  useQuery({ queryKey: ['metrics', 'heatmap'], queryFn: () => get<HeatmapResponse>('/metrics/heatmap') });
+  useQuery({ queryKey: ['metrics', 'heatmap'], queryFn: () => get<HeatmapResponse>('/metrics/heatmap'), ...LIVE });
 
 export const useFraudAnalytics = () =>
-  useQuery({ queryKey: ['analytics', 'fraud'], queryFn: () => get<FraudAnalytics>('/analytics/fraud') });
+  useQuery({ queryKey: ['analytics', 'fraud'], queryFn: () => get<FraudAnalytics>('/analytics/fraud'), ...LIVE });
 
 export const useProvinces = () =>
-  useQuery({ queryKey: ['geo', 'provinces'], queryFn: () => get<GeoResponse>('/geo/provinces') });
+  useQuery({ queryKey: ['geo', 'provinces'], queryFn: () => get<GeoResponse>('/geo/provinces'), ...LIVE });
 
 export const useUserRisk = (risk?: string) =>
-  useQuery({ queryKey: ['users', 'risk', risk ?? 'all'], queryFn: () => get<UserRiskResponse>('/users/risk', risk ? { risk } : undefined) });
+  useQuery({ queryKey: ['users', 'risk', risk ?? 'all'], queryFn: () => get<UserRiskResponse>('/users/risk', risk ? { risk } : undefined), ...LIVE });
 
 export const useUserProfile = (entityId: string | null) =>
   useQuery({
@@ -35,7 +39,7 @@ export const useUserProfile = (entityId: string | null) =>
   });
 
 export const useAlerts = (status: string = 'all') =>
-  useQuery({ queryKey: ['alerts', status], queryFn: () => get<AlertsResponse>('/alerts', { status }) });
+  useQuery({ queryKey: ['alerts', status], queryFn: () => get<AlertsResponse>('/alerts', { status }), ...LIVE });
 
 export const useAckAlert = () => {
   const qc = useQueryClient();
@@ -56,7 +60,7 @@ export const useLiveRecent = (limit = 50) =>
   useQuery({ queryKey: ['transactions', 'live', limit], queryFn: () => get<LiveResponse>('/transactions/live', { limit }) });
 
 export const useSystemHealth = () =>
-  useQuery({ queryKey: ['system', 'health'], queryFn: () => get<SystemHealth>('/system/health') });
+  useQuery({ queryKey: ['system', 'health'], queryFn: () => get<SystemHealth>('/system/health'), ...LIVE });
 
 export const useSimState = () =>
   useQuery({ queryKey: ['sim', 'state'], queryFn: () => get<SimState>('/sim/state'), refetchInterval: 5000 });
