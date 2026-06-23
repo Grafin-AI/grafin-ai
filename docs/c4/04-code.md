@@ -88,25 +88,26 @@
 
 **Purpose**: All TanStack Query (v5) hooks for REST data fetching. Each hook maps to one backend endpoint. Mutations invalidate relevant query keys on success.
 
-Internal helper:
+Internal helpers:
 - `get<T>(url: string, params?: Record<string, unknown>): Promise<T>` — thin wrapper over `api.get` that unwraps `.data`.
+- `LIVE` — `const { refetchInterval: 4000 }` options object spread into every aggregate-view hook so they poll the backend every 4 s while the simulation advances. The backend caches aggregate responses ~5 s, so this is cheap. Detail/profile hooks (`useTransactionDetail`, `useUserProfile`) intentionally do **not** use `LIVE` — they are on-demand modals.
 
-| Hook | Signature | Query key | Endpoint | Notes |
-|---|---|---|---|---|
-| `useMetricsOverview` | `(): UseQueryResult<MetricsOverview>` | `['metrics', 'overview']` | GET `/metrics/overview` | — |
-| `useVolume` | `(range: string): UseQueryResult<VolumeResponse>` | `['metrics', 'volume', range]` | GET `/metrics/volume?range=` | Re-fetches when `range` changes |
-| `useHeatmap` | `(): UseQueryResult<HeatmapResponse>` | `['metrics', 'heatmap']` | GET `/metrics/heatmap` | — |
-| `useFraudAnalytics` | `(): UseQueryResult<FraudAnalytics>` | `['analytics', 'fraud']` | GET `/analytics/fraud` | — |
-| `useProvinces` | `(): UseQueryResult<GeoResponse>` | `['geo', 'provinces']` | GET `/geo/provinces` | — |
-| `useUserRisk` | `(risk?: string): UseQueryResult<UserRiskResponse>` | `['users', 'risk', risk \| 'all']` | GET `/users/risk?risk=` | Optional filter param |
-| `useUserProfile` | `(entityId: string \| null): UseQueryResult<RiskProfile>` | `['users', 'profile', entityId]` | GET `/users/:entityId/profile` | `enabled: !!entityId` |
-| `useAlerts` | `(status?: string): UseQueryResult<AlertsResponse>` | `['alerts', status]` | GET `/alerts?status=` | Defaults to `'all'` |
-| `useAckAlert` | `(): UseMutationResult` | — | POST `/alerts/:id/ack` | Invalidates `['alerts']` on success |
-| `useTransactionDetail` | `(id: number \| null): UseQueryResult<TransactionDetail>` | `['transaction', id]` | GET `/transactions/:id` | `enabled: id != null` |
-| `useLiveRecent` | `(limit?: number): UseQueryResult<LiveResponse>` | `['transactions', 'live', limit]` | GET `/transactions/live?limit=` | Default `limit=50`; used for initial seeding |
-| `useSystemHealth` | `(): UseQueryResult<SystemHealth>` | `['system', 'health']` | GET `/system/health` | — |
-| `useSimState` | `(): UseQueryResult<SimState>` | `['sim', 'state']` | GET `/sim/state` | `refetchInterval: 5000` ms |
-| `useSimControl` | `(): UseMutationResult` | — | POST `/sim/control` | Sends `Partial<SimState>`; invalidates `['sim', 'state']` |
+| Hook | Signature | Query key | Endpoint | Poll | Notes |
+|---|---|---|---|---|---|
+| `useMetricsOverview` | `(): UseQueryResult<MetricsOverview>` | `['metrics', 'overview']` | GET `/metrics/overview` | 4 s (`LIVE`) | — |
+| `useVolume` | `(range: string): UseQueryResult<VolumeResponse>` | `['metrics', 'volume', range]` | GET `/metrics/volume?range=` | 4 s (`LIVE`) | Re-fetches when `range` changes |
+| `useHeatmap` | `(): UseQueryResult<HeatmapResponse>` | `['metrics', 'heatmap']` | GET `/metrics/heatmap` | 4 s (`LIVE`) | — |
+| `useFraudAnalytics` | `(): UseQueryResult<FraudAnalytics>` | `['analytics', 'fraud']` | GET `/analytics/fraud` | 4 s (`LIVE`) | — |
+| `useProvinces` | `(): UseQueryResult<GeoResponse>` | `['geo', 'provinces']` | GET `/geo/provinces` | 4 s (`LIVE`) | — |
+| `useUserRisk` | `(risk?: string): UseQueryResult<UserRiskResponse>` | `['users', 'risk', risk \| 'all']` | GET `/users/risk?risk=` | 4 s (`LIVE`) | Optional filter param |
+| `useAlerts` | `(status?: string): UseQueryResult<AlertsResponse>` | `['alerts', status]` | GET `/alerts?status=` | 4 s (`LIVE`) | Defaults to `'all'` |
+| `useSystemHealth` | `(): UseQueryResult<SystemHealth>` | `['system', 'health']` | GET `/system/health` | 4 s (`LIVE`) | — |
+| `useUserProfile` | `(entityId: string \| null): UseQueryResult<RiskProfile>` | `['users', 'profile', entityId]` | GET `/users/:entityId/profile` | none | `enabled: !!entityId`; on-demand modal |
+| `useAckAlert` | `(): UseMutationResult` | — | POST `/alerts/:id/ack` | — | Invalidates `['alerts']` on success |
+| `useTransactionDetail` | `(id: number \| null): UseQueryResult<TransactionDetail>` | `['transaction', id]` | GET `/transactions/:id` | none | `enabled: id != null`; on-demand modal |
+| `useLiveRecent` | `(limit?: number): UseQueryResult<LiveResponse>` | `['transactions', 'live', limit]` | GET `/transactions/live?limit=` | none | Default `limit=50`; used for initial seeding |
+| `useSimState` | `(): UseQueryResult<SimState>` | `['sim', 'state']` | GET `/sim/state` | 5 s | Separate interval; sim clock only |
+| `useSimControl` | `(): UseMutationResult` | — | POST `/sim/control` | — | Sends `Partial<SimState>`; invalidates `['sim', 'state']` |
 
 **Dependencies**: `@tanstack/react-query`, `./client`, `./types`
 
@@ -123,12 +124,14 @@ Internal helper:
 | `useLiveTransactions` | `(max?: number): { items: LiveItem[] }` | Manages a `useState<LiveItem[]>` buffer (default max 100 items) and a `cursor` ref tracking the highest `seq` seen. |
 | `resync` | `async (): Promise<void>` | (inner) GETs `/transactions/live`. If `cursor > 0`, passes `after_seq=cursor` to fetch only new items; otherwise fetches up to `max` items as initial seed. Appends new items (sorted descending by `seq`) and advances cursor. |
 | `connect` | `(): void` | (inner) Opens a WebSocket to `VITE_WS_URL ?? '/api/v1/ws/live'`. Auth token is appended as `?token=<access_token>`. On open: calls `resync()`. On message: filters control frames (`type === 'connected'`, `type === 'resync'`), deduplicates by `seq <= cursor`, maps `LiveEvent` to `LiveItem`, prepends to buffer. On close: schedules reconnect after 1 s. |
+| REST safety-net poll | `setInterval(resync, 4000)` | (inner, inside `useEffect`) Periodically calls `resync()` every 4 s via REST even when the WebSocket is connected. Guards against proxy/upgrade failures that silently stall WS delivery without triggering `onclose`. Cleared on unmount via `clearInterval`. |
 
 **Consistency contract**:
 1. Initial load: REST seed establishes cursor at `max(seq)` of the first window.
 2. WebSocket append: only events with `seq > cursor` are accepted.
 3. Reconnect: `ws.onopen` triggers `resync()` to close any gap accumulated during disconnect.
 4. Server-push resync: backend can send `{ type: 'resync' }` frames to force a REST reconciliation.
+5. REST safety-net: independent 4 s `setInterval` ensures the monitor stays current even if the WS silently stalls (e.g. proxy timeout). WS push still prepends events with `seq > cursor` immediately.
 
 **WS authentication**: Token is passed via query string (`?token=`), not an `Authorization` header, because the browser WebSocket API does not support custom headers.
 
@@ -302,7 +305,7 @@ Renders a scrollable list of `AlertItem` rows. Calls `useAlerts('all')`. Each ro
 
 ### `src/components/Header.tsx`
 
-Fixed top bar. Displays sim clock (formatted `simState.sim_now`) with running/paused indicator. Admin users (`user.role === 'admin'`) see play/pause toggle and speed selector that call `useSimControl().mutate()`. Reads user identity from `useAuth()`.
+Fixed top bar. Displays sim clock (formatted `simState.sim_now`) with running/paused indicator. Admin users (`user.role === 'admin'`) see play/pause toggle and speed selector that call `useSimControl().mutate()`. Reads user identity from `useAuth()`. The user panel renders `user?.email` and `user?.role` (CSS `capitalize`) sourced directly from the `/auth/me` response — no hardcoded mock values.
 
 **Hooks**: `useSimState`, `useSimControl`, `useAuth`
 
@@ -489,6 +492,14 @@ flowchart TB
 ---
 
 ## Notes
+
+### 2026-06-23 — Live-data fixes
+
+Three changes landed to keep the dashboard tracking the advancing simulation:
+
+- **Aggregate polling** (`src/api/queries.ts`): A shared `LIVE = { refetchInterval: 4000 }` const is now spread into `useMetricsOverview`, `useVolume`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk`, `useAlerts`, and `useSystemHealth`. Previously only `useSimState` polled, so aggregate views froze at their initial (often empty) load while the sim clock advanced. The backend caches aggregate responses ~5 s, so a 4 s client interval is cheap. Detail/profile hooks (`useTransactionDetail`, `useUserProfile`) remain un-polled — they are on-demand modals.
+- **REST safety-net in useLiveTransactions** (`src/api/useLiveTransactions.ts`): A `setInterval(resync, 4000)` is started inside the `useEffect` (cleared on unmount) alongside the existing WebSocket connection. This ensures the live monitor stays current via REST even when the WS is silently stalled by a proxy or upgrade failure. WS push still prepends events with `seq > cursor` immediately; the interval is a fallback, not a replacement.
+- **Real user identity in Header** (`src/components/Header.tsx`): The user panel now renders `user?.email` and `user?.role` (CSS `capitalize`) from the `/auth/me` response. A leftover hardcoded `{role}@gardaai.com` mock line was removed.
 
 ### WS Authentication
 
