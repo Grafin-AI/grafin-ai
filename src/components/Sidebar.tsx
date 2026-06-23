@@ -142,7 +142,7 @@ export function Sidebar({ currentView = '/dashboard', onNavigate }: SidebarProps
   };
   const items: NavItem[] =
     user?.role === 'admin'
-      ? [navigationItems[0], navigationItems[1], simItem, navigationItems[2]]
+      ? [...navigationItems.slice(0, 2), simItem, ...navigationItems.slice(2)]
       : navigationItems;
 
   return (
