@@ -6,8 +6,6 @@ CSV load), replay worker, frontend (nginx), Prometheus, Grafana.
 ## Prerequisites
 - Docker + Docker Compose
 - The dataset at `../garda-ai-data/HI-Small/` (set `GARDA_DATA_HOST_DIR` otherwise)
-- A `repositories/.dockerignore` at the workspace root (the pipeline build context).
-  If missing, create it with: `.venv`, `node_modules`, `.git`, `garda-ai-data`, `build`, `dist`.
 
 ## Run
 ```bash
@@ -40,6 +38,18 @@ curl -s -X POST localhost:8000/api/v1/sim/control -H "Authorization: Bearer $TOK
   continues) rather than dying.
 - To replay the whole dataset again from `t0` on demand: **`make demo-reset`** (stops the
   worker, wipes `transaction_events`/`alerts`, rewinds the clock, restarts).
+
+## Cross-repo contracts
+The service repos are independent — none imports another; only this deploy repo wires them.
+Two values are shared **by contract** (duplicated, not imported), and must stay in sync:
+- **Redis channel** `garda:events:live` — in `garda-ai-backend/.../realtime/channels.py` and
+  `garda-ai-pipeline/.../realtime/channels.py`. A mismatch means the WebSocket relay receives nothing.
+- **DB schema** — `garda-ai-backend`'s Alembic migrations are authoritative (applied at init);
+  `garda-ai-pipeline/tests/schema.sql` is a committed copy used only for the pipeline's tests.
+  Regenerate it from the backend if the schema changes.
+
+Both are exercised by the existing end-to-end check after `make up` (the live monitor ticking
+and `transaction_events` climbing confirm the channel + schema agree).
 
 ## Notes
 - First run loads the full dataset — the `etl` service can take minutes; `replay` waits
