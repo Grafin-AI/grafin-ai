@@ -61,7 +61,7 @@ PII shown is whatever the API returns (already masked server-side); the frontend
 
 - Loading skeletons (existing `skeleton.tsx`) per card/table while queries load.
 - Error + empty states (toast via existing `sonner`).
-- Sim clock indicator (`useSimState`) so viewers know the simulation's current time; admin gets play/pause/speed.
+- Simulation clock + admin play/pause/speed (`useSimState`/`useSimControl`) live on a **dedicated admin-only Simulation page** (`SimulationControl`), reached from an admin-only Sidebar item — **not** in the dashboard Header (the dashboard stays a clean monitoring UI). See `docs/superpowers/specs/2026-06-23-simulation-page-design.md`.
 
 ## 7. Performance
 
