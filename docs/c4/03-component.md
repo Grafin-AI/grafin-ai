@@ -40,7 +40,7 @@ This document zooms into the **components within that container**. All component
 | **View / Read API** | `api/sim.py`, `api/metrics.py`, `api/analytics.py`, `api/geo.py`, `api/transactions.py`, `api/users_view.py`, `api/alerts.py`, `api/system.py`, `api/view_schemas.py`, `repositories/sim.py`, `repositories/metrics.py`, `repositories/analytics.py`, `repositories/geo.py`, `repositories/transactions.py`, `repositories/users_view.py`, `repositories/alerts.py`, `api/deps.py` (`SimNowDep`) | Server-side aggregation of all dashboard data over `transaction_events` filtered by `surfaced_at <= sim_now`; role-gated; simulation clock as the temporal boundary |
 | **PII Masking** | `api/masking.py` | Masks entity names and account/payment IDs in user-risk serialization; applied in router layer, not in repositories |
 | **Aggregate Caching** | `api/cache.py` | `sim_now`-keyed cache-aside over Redis for aggregate endpoints (metrics, analytics, geo); transactions/live and user-risk are uncached |
-| **Live WebSocket Relay** | `api/ws.py`, `api/ws_auth.py`, `realtime/channels.py` | Authenticated (`?token=` access JWT) live fan-out; subscribes to `garda:events:live` Redis pub/sub channel and pushes scored events to dashboard clients with bounded-queue backpressure |
+| **Live WebSocket Relay** | `api/ws.py`, `api/ws_auth.py`, `realtime/channels.py` | Authenticated (`?token=` access JWT) live fan-out; subscribes to `garda:events:live` Redis pub/sub channel and forwards scored events to dashboard clients via a single blocking poll loop |
 
 ---
 
@@ -457,7 +457,7 @@ The component is composed of eight FastAPI routers and seven query repositories.
 - **Metrics aggregations** (`api/metrics.py`, `repositories/metrics.py`): Overview (total count, flagged, blocked, total amount, fraud rate), volume time-series (hour / day / month granularity for 24h / weekly / monthly / yearly windows), and 7×24 activity heatmap. All backed by `MetricsRepository`.
 - **Fraud analytics** (`api/analytics.py`, `repositories/analytics.py`): Typology distribution (count + amount per typology), and confusion-matrix-derived detection metrics (precision, recall, F1) computed from `is_laundering` ground truth vs. `status` prediction. Backed by `AnalyticsRepository`.
 - **Geo distribution** (`api/geo.py`, `repositories/geo.py`): Province-level fraud counts (flagged + blocked events joined through account → entity → province). Risk level derived by count thresholds (≥100: high, ≥20: medium, else low). Backed by `GeoRepository`.
-- **Transaction live-feed** (`api/transactions.py`, `repositories/transactions.py`): Cursor-paginated live window (`after_seq` / `limit`) and single-transaction detail endpoint. `TransactionsRepository` joins `transaction_events` → `transactions` → `banks`. Clients use this endpoint for backfill after receiving a `{"type": "resync"}` message from the WebSocket relay.
+- **Transaction live-feed** (`api/transactions.py`, `repositories/transactions.py`): Cursor-paginated live window (`after_seq` / `limit`) and single-transaction detail endpoint. `TransactionsRepository` joins `transaction_events` → `transactions` → `banks`. Clients use this endpoint to backfill any missed events (e.g., after a WebSocket reconnect).
 - **User risk profiles** (`api/users_view.py`, `repositories/users_view.py`): Risk-list endpoint (optional `risk` category filter, `limit`) and per-entity profile. `UserRiskRepository` joins entities → accounts → transactions → events. PII (entity name) masked in the router layer via `mask_name` (see PII Masking component); admin callers with `unmasked=true` receive plaintext.
 - **Alert management** (`api/alerts.py`, `repositories/alerts.py`): Alert list (all or active-only) and acknowledgement mutation (`POST /{alert_id}/ack`). `AlertsRepository` reads and writes the `alerts` table.
 - **System health** (`api/system.py`): Authenticated health endpoint (`GET /api/v1/system/health`) checking DB connectivity, Redis connectivity, and the count of surfaced events up to `sim_now`.
@@ -501,7 +501,7 @@ The component is composed of eight FastAPI routers and seven query repositories.
 | `GET` | `/api/v1/metrics/heatmap` | Any authenticated | 7×24 activity heatmap | `200 HeatmapResponse` |
 | `GET` | `/api/v1/analytics/fraud` | Any authenticated | Typology distribution + detection metrics (precision/recall/F1) | `200 FraudAnalyticsResponse` |
 | `GET` | `/api/v1/geo/provinces` | Any authenticated | Province-level fraud counts with risk levels | `200 GeoResponse` |
-| `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) — also the backfill endpoint for WebSocket clients after a resync | `200 LiveResponse` |
+| `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) — also the backfill endpoint for WebSocket clients after a reconnect | `200 LiveResponse` |
 | `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail | `200 TransactionDetail` or `404` |
 | `GET` | `/api/v1/users/risk` | Any authenticated | Entity risk list (`risk`, `unmasked`, `limit`) | `200 UserRiskResponse` |
 | `GET` | `/api/v1/users/{entity_id}/profile` | Any authenticated | Single entity risk profile | `200 RiskProfile` or `404` |
@@ -613,7 +613,7 @@ Returns the cached or freshly computed value.
 
 ### Purpose
 
-Provides authenticated, real-time push of scored AML events to dashboard clients over a persistent WebSocket connection. The relay subscribes to the Redis `garda:events:live` pub/sub channel — the channel the Plan 3 pipeline worker publishes to after each scoring pass — and fans out messages to all connected clients. Backpressure is managed with a bounded in-process queue (max 100 items): when the queue fills faster than the client can drain it, all queued messages are dropped and a `{"type": "resync"}` sentinel is emitted, directing the client to backfill via `GET /transactions/live?after_seq=`.
+Provides authenticated, real-time push of scored AML events to dashboard clients over a persistent WebSocket connection. The relay subscribes to the Redis `garda:events:live` pub/sub channel — the channel the Plan 3 pipeline worker publishes to after each scoring pass — and forwards each message directly to the connected client in a single blocking poll loop. Backpressure is the natural `send_text` await; there is no in-process queue and no resync sentinel.
 
 Authentication is performed before the WebSocket handshake is accepted: the standard JWT access token is passed as a `?token=` query parameter (Bearer headers are not available in the browser WebSocket API). An invalid or missing token causes an immediate close with code 1008 (Policy Violation) before `accept()` is called.
 
@@ -624,14 +624,15 @@ This is the final backend API surface of Plan 2. The pipeline publisher (the Pla
 - **Auth-before-accept**: `authenticate_ws_token` validates the `?token=` query parameter using `decode_token` and checks `claims["type"] == "access"`. If validation fails, the WebSocket is closed with code 1008 without being accepted — no handshake is completed for unauthenticated callers.
 - **Redis pub/sub subscription**: On successful auth, the handler calls `redis.pubsub()` and subscribes to `LIVE_EVENTS_CHANNEL` (`"garda:events:live"`). The channel name is defined as a shared constant in `realtime/channels.py` to keep the relay and the future pipeline publisher in sync.
 - **Connected sentinel**: Immediately after `accept()`, a `{"type": "connected"}` message is sent to confirm the subscription is live before any events arrive.
-- **Bounded-queue fan-out**: An `asyncio.Queue(maxsize=100)` decouples the Redis reader coroutine from the WebSocket writer coroutine. The reader task enqueues raw message data; the writer task drains and sends. This prevents a slow client from blocking the Redis subscription loop.
-- **Drop-to-latest with resync hint**: When the queue is full, the reader drains the entire queue and enqueues the `{"type": "resync"}` sentinel instead of the incoming message. The client must call `GET /transactions/live?after_seq=<last_seq>` to recover the gap.
-- **Concurrent reader/writer tasks**: `reader()` and `writer()` run as independent `asyncio.Task` objects. The main coroutine loops on `receive_text()` (client keepalive / disconnect detection). On `WebSocketDisconnect`, both tasks are cancelled and awaited, then the pub/sub connection is cleaned up best-effort.
+- **Single-loop poll-and-forward**: The handler enters a `while True` loop calling `pubsub.get_message(ignore_subscribe_messages=True, timeout=15)`. When a `"message"` arrives, `send_text(message["data"])` forwards the raw event JSON to the client immediately. No concurrent reader/writer tasks and no in-process queue — the prior concurrent-task pattern delivered correctly under Starlette's in-process test transport but did not deliver messages under uvicorn's real WebSocket transport, so it was replaced by this single-coroutine design.
+- **Natural backpressure**: Because `send_text` is awaited inline, a slow client naturally throttles the poll loop. There is no bounded queue, no drop-to-latest, and no `{"type": "resync"}` sentinel. Clients still recover any gaps by calling `GET /transactions/live?after_seq=<last_seq>` (the consistency contract is unchanged).
+- **Disconnect detection**: `send_text` raises `WebSocketDisconnect` when the client goes away, ending the loop. The `finally` block unsubscribes and closes the pub/sub connection best-effort.
+- **Integration test coverage**: The relay is verified by `tests/test_ws_uvicorn.py`, which runs a real uvicorn instance in-process to confirm end-to-end delivery — the test that exposed the concurrent-task transport failure.
 - **Shared channel constant**: `LIVE_EVENTS_CHANNEL = "garda:events:live"` in `realtime/channels.py` is the single source of truth for the channel name, establishing the cross-repo contract between this relay and the Plan 3 pipeline worker.
 
 ### Code Elements
 
-- [`api/ws.py`](../../garda_ai_backend/api/ws.py) — `router`; `WS /api/v1/ws/live`; `_QUEUE_MAX = 100`; `_RESYNC` sentinel; `reader()` / `writer()` coroutines
+- [`api/ws.py`](../../garda_ai_backend/api/ws.py) — `router`; `WS /api/v1/ws/live`; `_POLL_TIMEOUT = 15.0`; single-loop poll-and-forward handler
 - [`api/ws_auth.py`](../../garda_ai_backend/api/ws_auth.py) — `authenticate_ws_token(token, secret) -> CurrentUser | None`
 - [`realtime/channels.py`](../../garda_ai_backend/realtime/channels.py) — `LIVE_EVENTS_CHANNEL = "garda:events:live"`
 
@@ -648,9 +649,9 @@ This is the final backend API surface of Plan 2. The pipeline publisher (the Pla
 1. Client connects with `?token=<access_jwt>`.
 2. Server validates the token; closes 1008 on failure (no accept).
 3. Server accepts, subscribes to Redis channel, sends `{"type": "connected"}`.
-4. Server streams JSON event payloads as text frames.
-5. If the queue fills, server sends `{"type": "resync"}` — client must backfill via `GET /transactions/live?after_seq=`.
-6. On client disconnect, server cancels tasks and unsubscribes.
+4. Server polls Redis (`get_message`, timeout 15 s) in a single loop; forwards each event payload as a `send_text` call.
+5. On client disconnect (`WebSocketDisconnect` raised by `send_text`), the loop exits and the pub/sub connection is closed best-effort.
+6. Clients may call `GET /transactions/live?after_seq=<last_seq>` at any time to backfill missed events.
 
 #### `authenticate_ws_token(token: str, secret: str) -> CurrentUser | None`
 
@@ -691,10 +692,10 @@ C4Component
         Component(auth, "Authentication & RBAC", "FastAPI + PyJWT + argon2-cffi", "Login/refresh/logout/me. Argon2id password verify. JWT issuance + validation. Single-use refresh rotation. Role-gated DI (require_role / CurrentUserDep / SimNowDep). Login rate-limiting.")
         Component(redis, "Redis Integration", "redis[asyncio]", "Async Redis singleton. Refresh-JTI store (atomic GETDEL). Fixed-window rate limiter (INCR/EXPIRE). Pub/sub client for live event channel.")
         Component(seed, "Seed / Bootstrap", "Python asyncio", "Idempotent DB seed: default admin user + SimState singleton. Run at deploy time.")
-        Component(viewApi, "View / Read API", "FastAPI + SQLAlchemy", "8 routers + 7 repositories. Aggregates transaction_events WHERE surfaced_at <= sim_now. Endpoints: sim, metrics, analytics, geo, transactions, users, alerts, system. /sim/control is admin-only. /transactions/live is the backfill endpoint for WS clients.")
+        Component(viewApi, "View / Read API", "FastAPI + SQLAlchemy", "8 routers + 7 repositories. Aggregates transaction_events WHERE surfaced_at <= sim_now. Endpoints: sim, metrics, analytics, geo, transactions, users, alerts, system. /sim/control is admin-only. /transactions/live?after_seq= is the backfill endpoint for WS clients after reconnect.")
         Component(masking, "PII Masking", "Python", "mask_name / mask_account_id. Applied in users_view router before RiskProfile serialization. Admin callers with unmasked=true bypass masking.")
         Component(cache, "Aggregate Caching", "redis[asyncio] + json", "cached_json cache-aside over Redis. sim_now-keyed. Applied to metrics, analytics, geo (TTL 5-10 s). Transactions/live and user-risk are uncached.")
-        Component(wsRelay, "Live WebSocket Relay", "FastAPI WebSockets + redis pub/sub", "WS /api/v1/ws/live. Auth-before-accept via ?token= JWT. Subscribes to garda:events:live Redis channel. Bounded-queue fan-out (max 100). Drop-to-latest + resync hint on overflow.")
+        Component(wsRelay, "Live WebSocket Relay", "FastAPI WebSockets + redis pub/sub", "WS /api/v1/ws/live. Auth-before-accept via ?token= JWT. Single-loop poll-and-forward: subscribe → send connected → get_message(timeout=15) → send_text. No queue; natural send-await backpressure. Clients backfill gaps via GET /transactions/live?after_seq=.")
     }
 
     ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth for all platform data")
@@ -740,7 +741,7 @@ C4Component
     Rel(worker, pg, "Reads and writes (sole writer of transactions/events)", "SQL / asyncpg")
     Rel(worker, redisDb, "PUBLISH garda:events:live (planned — not yet implemented)", "redis PUBLISH")
     Rel(dashboard, wsRelay, "Connects with ?token=<jwt>; receives live event frames", "WebSocket")
-    Rel(dashboard, viewApi, "Backfills via GET /transactions/live?after_seq= after resync", "HTTP")
+    Rel(dashboard, viewApi, "Backfills via GET /transactions/live?after_seq= after reconnect", "HTTP")
 ```
 
 ---
@@ -765,3 +766,11 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 | Bootstrap / seed | **Implemented** | Seed / Bootstrap |
 
 All eleven components are implemented. Plan 2's backend API surface is complete. The only remaining external dependency is the **Pipeline Worker (Plan 3)**, which must publish scored events to `garda:events:live` — that publisher lives in a separate repository and has not been implemented yet.
+
+---
+
+## Changelog
+
+| Date | Change |
+|---|---|
+| 2026-06-23 | **Live WebSocket Relay rewritten** (`api/ws.py`): removed concurrent reader/writer tasks and bounded queue (`asyncio.Queue(maxsize=100)`) with drop-to-latest / `{"type":"resync"}` backpressure. Replaced with a single poll-and-forward loop (`pubsub.get_message(timeout=15)` → `send_text`). Root cause: the concurrent-task pattern delivered correctly under Starlette's in-process test transport but failed to deliver messages under uvicorn's real WebSocket transport. Backpressure is now the natural `send_text` await; clients still backfill gaps via `GET /transactions/live?after_seq=`. Covered by new real-against-uvicorn integration test `tests/test_ws_uvicorn.py`. |

@@ -936,17 +936,17 @@ async def logout(self, refresh_token: str) -> None
 ## Module: `api.schemas`
 
 - **File**: [`garda_ai_backend/api/schemas.py`](../../garda_ai_backend/api/schemas.py)
-- **External dependencies**: `pydantic` (BaseModel, EmailStr)
+- **External dependencies**: `pydantic` (BaseModel)
 
 ### Class: `LoginRequest`
 
 ```python
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 ```
 
-- **Description**: Request body for `POST /api/v1/auth/login`. Pydantic validates email format.
+- **Description**: Request body for `POST /api/v1/auth/login`. `email` is plain `str` (not `EmailStr`) because login performs an exact database lookup; using `EmailStr` caused Pydantic to reject the seeded `admin@garda.local` address with a 422 due to the reserved `.local` TLD.
 
 ### Class: `RefreshRequest`
 
@@ -973,11 +973,11 @@ class TokenResponse(BaseModel):
 ```python
 class MeResponse(BaseModel):
     id: int
-    email: EmailStr
+    email: str
     role: str
 ```
 
-- **Description**: Response body for `GET /api/v1/auth/me`. Returns non-sensitive user identity fields.
+- **Description**: Response body for `GET /api/v1/auth/me`. Returns non-sensitive user identity fields. `email` is plain `str` for the same reason as `LoginRequest.email`.
 
 ---
 
@@ -1688,7 +1688,7 @@ def authenticate_ws_token(token: str, secret: str) -> CurrentUser | None
 ## Module: `api.ws`
 
 - **File**: [`garda_ai_backend/api/ws.py`](../../garda_ai_backend/api/ws.py)
-- **External dependencies**: `fastapi` (APIRouter, WebSocket, WebSocketDisconnect), `asyncio`, `json`
+- **External dependencies**: `fastapi` (APIRouter, WebSocket, WebSocketDisconnect)
 - **Internal dependencies**: `api.deps.{RedisDep, SettingsDep}`, `api.ws_auth.authenticate_ws_token`, `realtime.channels.LIVE_EVENTS_CHANNEL`
 
 ### Object: `router`
@@ -1701,8 +1701,7 @@ router = APIRouter(tags=["ws"])
 
 | Name | Value | Description |
 |---|---|---|
-| `_QUEUE_MAX` | `100` | Maximum messages held in the bounded asyncio queue before backpressure kicks in |
-| `_RESYNC` | `'{"type":"resync"}'` | Pre-serialised JSON sentinel sent to the client when the queue was full and messages were dropped |
+| `_POLL_TIMEOUT` | `15.0` | Seconds passed to `pubsub.get_message(timeout=...)` before the loop re-polls. Keeps the loop alive on quiet channels while still detecting client disconnects promptly on the next send. |
 
 ### Route: `WS /api/v1/ws/live`
 
@@ -1722,46 +1721,39 @@ async def ws_live(websocket: WebSocket, redis: RedisDep, settings: SettingsDep) 
 
 1. **Authentication before accept**: Calls `authenticate_ws_token(websocket.query_params.get("token", ""), settings.jwt_secret)`. If it returns `None`, immediately closes the socket with WebSocket close code `1008` (Policy Violation) and returns. The connection is never accepted.
 2. **Accept and subscribe**: Calls `websocket.accept()`, creates a Redis `pubsub` handle, subscribes to `LIVE_EVENTS_CHANNEL`, and sends `{"type": "connected"}` as the first message.
-3. **Bounded queue**: Creates an `asyncio.Queue(maxsize=_QUEUE_MAX)` that decouples the Redis subscriber from the WebSocket writer, preventing a slow client from blocking the event loop.
-4. **Reader coroutine** (`reader()`): Iterates over `pubsub.listen()`. For each message of `type == "message"`, checks if the queue is full. If full, drains the entire queue and enqueues `_RESYNC` (the `{"type":"resync"}` sentinel) to tell the client it missed events and should refetch from the REST endpoint. Then enqueues the raw `message["data"]` string.
-5. **Writer coroutine** (`writer()`): Pulls items from the queue one at a time and sends each as a WebSocket text frame via `websocket.send_text()`.
-6. **Disconnect handling**: A bare `receive_text()` loop in the main coroutine absorbs inbound frames (ignored) and unblocks on `WebSocketDisconnect`. On disconnect, cancels both reader and writer tasks, gathers their results ignoring exceptions, then performs best-effort pubsub cleanup (`unsubscribe` + `aclose`) — exceptions during cleanup are suppressed because the socket may already be broken.
+3. **Single relay loop**: Enters `while True`. On each iteration calls `await pubsub.get_message(ignore_subscribe_messages=True, timeout=_POLL_TIMEOUT)`. If the result is non-`None` and `msg["type"] == "message"`, forwards `msg["data"]` directly via `websocket.send_text()`. The `timeout` keeps the coroutine from blocking indefinitely on a quiet channel.
+4. **Disconnect handling**: `send_text()` raises `WebSocketDisconnect` when the client goes away; the `except WebSocketDisconnect: pass` block exits the loop cleanly.
+5. **Cleanup**: The `finally` block performs best-effort `pubsub.unsubscribe` + `pubsub.aclose`; any exception during cleanup is suppressed because the socket may already be broken.
 
-#### Backpressure behaviour
+#### Design rationale — why a single loop instead of reader + writer tasks
 
-When the writer is slower than the publisher (e.g. client is on a slow connection), the queue fills to `_QUEUE_MAX = 100`. On the next incoming Redis message, the reader drains the entire queue and pushes `{"type":"resync"}` followed by the new event. The client receives the resync hint and should issue a `GET /api/v1/transactions/live` request to rebuild its local state.
+The prior implementation ran a concurrent reader task (iterating `pubsub.listen()`), a writer task (draining an `asyncio.Queue`), and a `receive_text()` disconnect detector in the main coroutine. This pattern delivered messages correctly under Starlette's in-process `TestClient` transport but did NOT deliver messages under uvicorn's real WebSocket transport: the concurrent `send_text` call from the writer task while the main coroutine awaited `receive_text` caused frames to be silently dropped. The single-loop `get_message` pattern avoids concurrent send/receive entirely and works correctly under both transports.
 
 #### Error / edge cases
 
 - Close code `1008` is used for unauthenticated upgrades (standard WebSocket policy-violation code).
 - `WebSocketDisconnect` is caught and treated as a clean exit.
 - Pubsub cleanup is wrapped in a broad `except Exception` (annotated `# noqa: BLE001`) to ensure the finally block never raises on a half-closed socket.
+- The published string is already the full event JSON the dashboard expects. Clients backfill gaps via `GET /api/v1/transactions/live?after_seq=` (the consistency contract remains unchanged).
 
 ```mermaid
 ---
-title: ws_live — concurrent task structure
+title: ws_live — single-loop relay structure
 ---
 flowchart LR
     subgraph Redis
-        PS[pubsub.listen]
+        PS["pubsub.get_message\n(timeout=15 s)"]
     end
     subgraph ws.py
-        R[reader task]
-        Q["asyncio.Queue\n(max 100)"]
-        W[writer task]
-        MAIN[main coroutine\nreceive_text loop]
+        LOOP["while True loop\n(single coroutine)"]
     end
     subgraph Client
         WS[WebSocket]
     end
 
-    PS -->|message data| R
-    R -->|enqueue / resync| Q
-    Q -->|dequeue| W
-    W -->|send_text| WS
-    WS -->|disconnect| MAIN
-    MAIN -->|cancel| R
-    MAIN -->|cancel| W
+    PS -->|"msg['data']"| LOOP
+    LOOP -->|send_text| WS
+    WS -->|WebSocketDisconnect| LOOP
 ```
 
 ---
@@ -2278,7 +2270,7 @@ flowchart TB
 |---|---|---|
 | `fastapi` | — | ASGI web framework, route decorators, `Depends`, `HTTPBearer` |
 | `pydantic-settings` | — | `BaseSettings` for environment-driven configuration |
-| `pydantic` | v2 | `BaseModel`, `EmailStr`, `model_validator` |
+| `pydantic` | v2 | `BaseModel`, `model_validator` |
 | `sqlalchemy` | 2.0+ | Async ORM (mapped-column API), engine, session, `case`, `func`, `cast` |
 | `asyncpg` | — | Async PostgreSQL driver (via `postgresql+asyncpg://` URL) |
 | `redis[asyncio]` | — | `redis.asyncio.Redis`; INCR, EXPIRE, GETDEL, SET, GET, DEL, PING |
@@ -2286,12 +2278,20 @@ flowchart TB
 | `PyJWT` | — | JWT encode/decode; `PyJWTError` |
 | `prometheus-client` | — | `CollectorRegistry`, `Counter`, `generate_latest` |
 | `structlog` | — | Structured JSON logging processors |
-| `asyncio` | stdlib | Concurrent task management in `ws_live` (reader/writer task pair + `Queue`) |
-| `json` | stdlib | Pre-serialised `{"type":"resync"}` sentinel in `api/ws.py` |
 
 ---
 
 ## Notes
+
+### Changelog
+
+**Updated 2026-06-23**
+
+- **`api/ws.py` rewritten**: Replaced the concurrent reader-task / writer-task / `asyncio.Queue` / `receive_text` disconnect-detector pattern with a single `while True: pubsub.get_message(timeout=15)` relay loop. The prior pattern worked under Starlette's in-process `TestClient` transport but silently dropped frames under uvicorn's real WebSocket transport; the single-loop approach works correctly under both. `_QUEUE_MAX` and the `{"type":"resync"}` sentinel are removed.
+- **`api/schemas.py`**: `LoginRequest.email` and `MeResponse.email` changed from `EmailStr` to plain `str`. `EmailStr` rejected the seeded `admin@garda.local` address (reserved `.local` TLD) with a 422 during login. Since login is an exact lookup, format validation adds no security benefit.
+- **`tests/test_ws_uvicorn.py` added**: New real-transport integration test suite. Starts the app under a subprocess uvicorn, connects a real `websockets` client, publishes to Redis, and asserts event delivery. This covers the transport bug that Starlette's in-process `TestClient` masked.
+
+---
 
 - `dummy_verify()` in `security/passwords.py` is a deliberate timing-equalization technique. It ensures `authenticate()` takes the same wall-clock time regardless of whether the email was found, eliminating user enumeration via response latency.
 - `RefreshTokenStore.consume()` uses Redis `GETDEL` (atomic fetch-and-delete) to prevent refresh token replay: two concurrent refresh requests cannot both consume the same JTI.
@@ -2306,4 +2306,4 @@ flowchart TB
 - User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.
 - `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
 - WebSocket authentication (`api/ws_auth.py`) passes the JWT via the `?token=` query parameter instead of an `Authorization` header because browser WebSocket APIs (`new WebSocket(url)`) do not support custom headers on the upgrade request. The validation logic deliberately mirrors `deps.get_current_user` — it calls the same `decode_token`, checks `type == "access"`, and builds the same `CurrentUser` object — so the security posture is equivalent.
-- The bounded queue in `ws_live` (max 100 entries) applies explicit backpressure: a slow client causes the queue to fill, at which point the reader drains all pending messages and injects a `{"type":"resync"}` frame. The client must then poll `GET /api/v1/transactions/live` to rebuild its local state. This design trades guaranteed delivery for bounded memory use and event-loop liveness.
+- The WebSocket relay (`api/ws.py`) is covered by a real-transport integration test in `tests/test_ws_uvicorn.py` (subprocess uvicorn + real `websockets` client + Redis publish); Starlette's in-process `TestClient` could not exercise the transport bug that this test was written to catch.
