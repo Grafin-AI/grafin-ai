@@ -38,7 +38,7 @@ services:
     ports: ["8000:8000"]
 
   etl:
-    build: { context: .., dockerfile: garda-ai-pipeline/Dockerfile }
+    build: { context: ../garda-ai-pipeline }
     command: ["uv", "run", "garda-etl"]
     environment:
       GARDA_DATABASE_URL: *db_url
@@ -51,7 +51,7 @@ services:
     restart: "no"
 
   replay:
-    build: { context: .., dockerfile: garda-ai-pipeline/Dockerfile }
+    build: { context: ../garda-ai-pipeline }
     command: ["uv", "run", "garda-replay"]
     environment:
       GARDA_DATABASE_URL: *db_url

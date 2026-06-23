@@ -9,7 +9,7 @@
 |---|---|---|---|
 | **Dashboard Web** | `garda-ai-dashboard-web` | React 18, Vite, TanStack Query, nginx | All views; REST reads + WS live feed; auth UI; resync-on-reconnect. nginx also terminates TLS and proxies `/api` + `/ws`. |
 | **Backend API** | `garda-ai-backend` | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations for every view, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** |
-| **Pipeline Worker** | `garda-ai-pipeline` | Python, pandas/polars, asyncpg | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine (`ScoringProvider`). Only writer of `transactions` / `transaction_events`. |
+| **Pipeline Worker** | `garda-ai-pipeline` | Python, pandas/polars, asyncpg | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine (`ScoringProvider`). Only writer of `transactions` / `transaction_events`. Builds from its **own** context; imports nothing from the backend — shares the DB schema and the `garda:events:live` Redis channel **by contract**, not by code. |
 | **PostgreSQL** | — | PostgreSQL | Single source of truth: accounts, transactions, scored events, alerts, users, sim_state. |
 | **Redis** | — | Redis | Pub/sub (live events), aggregate cache, rate-limit, refresh-token store, sim_state cache. |
 | **Prometheus** | `garda-ai-deploy` | Prometheus | Scrapes `/metrics` from backend + pipeline. |
@@ -66,6 +66,9 @@ C4Container
 
 - Containers map 1:1 to repos (polyrepo); Postgres/Redis/Prometheus/Grafana are infra provisioned via `garda-ai-deploy` docker-compose.
 - The scoring engine is a **module inside Pipeline Worker** now; the dashed Phase-2 path promotes it to a standalone Model Service container behind the same `ScoringProvider` interface.
+- **No service repo depends on another in code.** The backend is the schema **source of truth** via Alembic migrations applied at deploy init; the pipeline keeps its own local channel constant + a committed DDL snapshot for tests and writes via raw SQL. The only pipeline↔backend couplings are runtime/data: both connect to Postgres, and the pipeline publishes to the `garda:events:live` Redis channel that the backend's WS relay consumes. These are data couplings shared **by contract** (duplicated, not imported), not build/code dependencies.
+
+> **Updated 2026-06-23:** pipeline decoupled from backend — own build context; channel + schema shared by contract.
 
 ## Implementation status (reconciled 2026-06-22 — all containers built)
 

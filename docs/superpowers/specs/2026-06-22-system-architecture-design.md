@@ -28,7 +28,7 @@ Built for the OJK Hackathon 2025. Data source is the IBM AML **HI-Small** datase
 | `garda-ai-data` *(exists)* | Dataset CSVs (kept out of code repos) |
 
 **Boundary decisions:**
-- **Backend owns the DB schema + migrations.** Pipeline consumes the same table definitions (a lightweight shared schema package published from backend, or a generated SQL DDL file pipeline reads). One source of truth for the data model.
+- **Backend is the schema source of truth via Alembic migrations**, applied at deploy init. The pipeline imports nothing from the backend: it keeps a committed DDL snapshot (`tests/schema.sql`) for its tests and writes to the same tables via raw SQL. One source of truth for the data model, shared **by contract** (duplicated, not imported). **No service repo depends on another — only `garda-ai-deploy` integrates them.**
 - **API/WS contract is OpenAPI.** Backend publishes OpenAPI; frontend generates its TypeScript types from it. No shared package across the language boundary.
 - **Scoring stays a module inside pipeline**, hidden behind the transport-agnostic `ScoringProvider` interface, so it can be extracted into a standalone model-serving API later with no change to the worker, DB, or dashboard.
 
