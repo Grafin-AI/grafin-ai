@@ -56,7 +56,9 @@ services:
     environment:
       GARDA_DATABASE_URL: *db_url
       GARDA_REDIS_URL: redis://redis:6379/0
-      GARDA_RESET_CLOCK: "true"
+      # false: the worker bootstraps the clock only on a fresh run and RESUMES from
+      # sim_now on restart. Set to "true" ONLY for a deliberate wipe-and-restart-over.
+      GARDA_RESET_CLOCK: "false"
     depends_on:
       etl: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
