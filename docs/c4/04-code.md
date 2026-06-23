@@ -1644,7 +1644,7 @@ async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> Sys
 - **File**: [`garda_ai_backend/realtime/channels.py`](../../garda_ai_backend/realtime/channels.py)
 - **External dependencies**: none
 - **Internal dependencies**: none
-- **Cross-repo coupling**: This constant is the shared contract between `garda-ai-backend` (subscriber) and the pipeline worker repo (publisher). Both sides must reference the same string. Any rename must be coordinated across both repositories.
+- **Cross-repo coupling**: This constant's value (`garda:events:live`) is a wire contract shared between `garda-ai-backend` (subscriber) and the pipeline worker repo (publisher). The pipeline now keeps its own local copy of this constant and duplicates the value *by contract* — it does NOT import it from this package. Both sides must keep the string identical; any rename must be coordinated across both repositories.
 
 ### Constant: `LIVE_EVENTS_CHANNEL`
 
@@ -1652,7 +1652,7 @@ async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> Sys
 LIVE_EVENTS_CHANNEL: str = "garda:events:live"
 ```
 
-- **Description**: The Redis pub/sub channel name on which the pipeline replay worker publishes JSON-encoded scored `TransactionEvent` payloads and on which the backend WebSocket relay (`api/ws.py`) maintains an active subscription. Defined once here and imported by both sides to prevent silent divergence.
+- **Description**: The Redis pub/sub channel name on which the pipeline replay worker publishes JSON-encoded scored `TransactionEvent` payloads and on which the backend WebSocket relay (`api/ws.py`) maintains an active subscription. Defined here for the backend; the pipeline holds a duplicate local copy of this value (kept identical by contract, not imported) to prevent silent divergence.
 - **Type**: `str` (module-level constant)
 - **Value**: `"garda:events:live"`
 
@@ -2304,6 +2304,6 @@ flowchart TB
 - Metrics, analytics, and geo aggregates are Redis-cached (`cached_json`, `agg:` prefix) with sim-now-stamped keys so each tick of the simulation clock invalidates prior entries naturally (different key → cache miss → recompute). TTL is 5 s for metrics/analytics and 10 s for geo.
 - The live transaction feed (`GET /api/v1/transactions/live`) is deliberately NOT cached because it acts as the resync source for the dashboard's live panel. Caching would delay event delivery and break incremental polling via `after_seq`.
 - User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.
-- `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
+- `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. The pipeline keeps its own local copy of this value (duplicated by contract, not imported from this package). Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
 - WebSocket authentication (`api/ws_auth.py`) passes the JWT via the `?token=` query parameter instead of an `Authorization` header because browser WebSocket APIs (`new WebSocket(url)`) do not support custom headers on the upgrade request. The validation logic deliberately mirrors `deps.get_current_user` — it calls the same `decode_token`, checks `type == "access"`, and builds the same `CurrentUser` object — so the security posture is equivalent.
 - The WebSocket relay (`api/ws.py`) is covered by a real-transport integration test in `tests/test_ws_uvicorn.py` (subprocess uvicorn + real `websockets` client + Redis publish); Starlette's in-process `TestClient` could not exercise the transport bug that this test was written to catch.

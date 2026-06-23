@@ -20,7 +20,7 @@ The backend is the API gateway. It owns the canonical database schema + migratio
 
 ## 2. Canonical database schema (owned here)
 
-Migrations live in `garda-ai-backend/migrations` (Alembic) and **create the schema at init time** (an Alembic upgrade step run before ETL). Pipeline ETL assumes the tables exist and only loads data into them. Pipeline imports the model package `garda_ai_backend.schema` (or a generated DDL) so there is exactly one source of truth.
+Migrations live in `garda-ai-backend/migrations` (Alembic) and **create the schema at init time** (an Alembic upgrade step run before ETL). Pipeline ETL assumes the tables exist and only loads data into them. The pipeline keeps its own committed DDL snapshot (`tests/schema.sql`) for its tests and no longer imports the backend's `garda_ai_backend.schema` package; the backend remains the single schema source of truth via its Alembic migrations (the pipeline's snapshot must be regenerated from those migrations when the schema changes).
 
 ```
 banks(
