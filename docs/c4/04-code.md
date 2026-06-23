@@ -222,11 +222,11 @@ QueryClientProvider (queryClient)
 
 ### `src/App.tsx`
 
-**Purpose**: Shell component. Renders fixed `Sidebar` + `Header`, then switches between dashboard view and `/user-risk-profiling` view via `currentView` state. Also defines the `SystemHealthCards` inline component.
+**Purpose**: Shell component. Renders fixed `Sidebar` + `Header`, then switches between views via `currentView` state. Handles `/dashboard`, `/user-risk-profiling`, and `/simulation` routes. Also defines the `SystemHealthCards` inline component.
 
 | Symbol | Description |
 |---|---|
-| `App` | Main shell; state `currentView: string`. |
+| `App` | Main shell; state `currentView: string`. Renders `<SimulationControl />` when `currentView === '/simulation'`. |
 | `SystemHealthCards` | Inline component; calls `useSystemHealth()` and renders four status cards (Database, Model Accuracy, Redis, Events Surfaced). |
 
 **Location**: [`src/App.tsx`](../../src/App.tsx)
@@ -295,6 +295,24 @@ Full-page view for the `/user-risk-profiling` route. Renders a risk-distribution
 
 ---
 
+### `src/components/SimulationControl.tsx`
+
+Dedicated full-page view rendered when `currentView === '/simulation'`. Displays the simulation clock and read-only status for all authenticated users; exposes admin-only play/pause and speed controls.
+
+| Symbol | Signature | Description |
+|---|---|---|
+| `SPEED_OPTIONS` | `readonly [1, 2, 5, 10, 20]` | Allowed multiplier values for the speed selector. Module-level constant (moved here from `Header`). |
+| `formatSimNow` | `(simNow: string): string` | Formats an ISO datetime string using `id-ID` locale (`dd MMM yyyy, HH:mm`). Falls back to the raw string on parse error. Module-level helper (moved here from `Header`). |
+| `SimulationControl` | `(): JSX.Element` | Reads `useAuth().user?.role`; derives `isAdmin`. Calls `useSimState()` for the clock, `useSimControl()` for mutations, and `useSystemHealth()` for `events_surfaced`. Shows a `<Skeleton>` while loading and a "Simulation unavailable" fallback when `simState` is absent. Admin section (play/pause button + speed `<select>`) is conditionally rendered only when `isAdmin === true`. |
+| `toggleRunning` | `(): void` | (inner) Calls `simControl.mutate({ running: !simState.running })`. |
+| `changeSpeed` | `(speed: number): void` | (inner) Calls `simControl.mutate({ speed })`. |
+
+**Hooks**: `useAuth`, `useSimState`, `useSimControl`, `useSystemHealth`
+
+**Location**: [`src/components/SimulationControl.tsx`](../../src/components/SimulationControl.tsx)
+
+---
+
 ### `src/components/AlertsPanel.tsx`
 
 Renders a scrollable list of `AlertItem` rows. Calls `useAlerts('all')`. Each row has an Acknowledge button that fires `useAckAlert().mutate(id)`, which POSTs `/alerts/:id/ack` and invalidates the alerts query.
@@ -305,9 +323,11 @@ Renders a scrollable list of `AlertItem` rows. Calls `useAlerts('all')`. Each ro
 
 ### `src/components/Header.tsx`
 
-Fixed top bar. Displays sim clock (formatted `simState.sim_now`) with running/paused indicator. Admin users (`user.role === 'admin'`) see play/pause toggle and speed selector that call `useSimControl().mutate()`. Reads user identity from `useAuth()`. The user panel renders `user?.email` and `user?.role` (CSS `capitalize`) sourced directly from the `/auth/me` response — no hardcoded mock values.
+Fixed top bar. Renders the dashboard title, a search input, an alerts badge button, a settings button, and the user identity panel (`user?.email` / `user?.role` from `useAuth()`). The simulation clock and controls that previously lived here have been removed — they now live in `SimulationControl`.
 
-**Hooks**: `useSimState`, `useSimControl`, `useAuth`
+**Hooks**: `useAuth`
+
+**Removed since prior revision**: `useSimState`, `useSimControl`, `Skeleton`, `SPEED_OPTIONS`, `Clock`, `Play`, `Pause` imports are all gone.
 
 ---
 
@@ -329,7 +349,9 @@ Dialog modal opened from `TransactionMonitor` or `UserRiskProfiling`. Calls `use
 
 ### `src/components/Sidebar.tsx`
 
-Static navigation sidebar. Accepts `currentView` and `onNavigate` props from `App`. No API hooks.
+Navigation sidebar. Accepts `currentView` and `onNavigate` props from `App`. Reads `useAuth().user?.role` and conditionally inserts a "Simulation" nav item (href `/simulation`, icon `Activity`) between "User Risk Profiling" and "Settings" when `role === 'admin'`. Non-admin users see only Dashboard, User Risk Profiling, and Settings.
+
+**Hooks**: `useAuth`
 
 ---
 
@@ -353,16 +375,18 @@ main.tsx
   → App.tsx
 
 App.tsx
-  → components/Header.tsx           → api/queries (useSimState, useSimControl)
-                                       auth/AuthContext (useAuth)
-  → components/MetricsOverview.tsx  → api/queries (useMetricsOverview)
+  → components/Header.tsx            → auth/AuthContext (useAuth)
+  → components/Sidebar.tsx           → auth/AuthContext (useAuth)
+  → components/SimulationControl.tsx → api/queries (useSimState, useSimControl, useSystemHealth)
+                                        auth/AuthContext (useAuth)
+  → components/MetricsOverview.tsx   → api/queries (useMetricsOverview)
   → components/TransactionVolume.tsx → api/queries (useVolume)
   → components/TransactionHeatmap.tsx → api/queries (useHeatmap)
   → components/TransactionMonitor.tsx → api/useLiveTransactions
-                                         → components/TransactionDetailsModal.tsx
-                                               → api/queries (useTransactionDetail)
-                                         → components/UserProfileDetailsModal.tsx
-                                               → api/queries (useUserProfile)
+                                          → components/TransactionDetailsModal.tsx
+                                                → api/queries (useTransactionDetail)
+                                          → components/UserProfileDetailsModal.tsx
+                                                → api/queries (useUserProfile)
   → components/FraudAnalytics.tsx    → api/queries (useFraudAnalytics)
   → components/GeographicMap.tsx     → api/queries (useProvinces)
   → components/AlertsPanel.tsx       → api/queries (useAlerts, useAckAlert)
@@ -420,7 +444,9 @@ flowchart TB
     end
 
     subgraph Views["src/components/ (wired views)"]
-        HDR["Header\n(useSimState useSimControl useAuth)"]
+        HDR["Header\n(useAuth only)"]
+        SB["Sidebar\n(useAuth — admin nav item)"]
+        SC["SimulationControl\n(useSimState useSimControl\nuseSystemHealth useAuth)"]
         MO["MetricsOverview\n(useMetricsOverview)"]
         TV["TransactionVolume\n(useVolume)"]
         TH["TransactionHeatmap\n(useHeatmap)"]
@@ -464,8 +490,10 @@ flowchart TB
     WS --> TY
 
     %% Views → queries
-    HDR --> QS
     HDR --> AC
+    SB --> AC
+    SC --> QS
+    SC --> AC
     MO --> QS
     TV --> QS
     TH --> QS
@@ -517,3 +545,7 @@ The browser `WebSocket` constructor does not accept custom headers, so the acces
 ### Type Regeneration
 
 `src/api/types.ts` is maintained by hand. The comment at the top of the file documents the intended workflow: run `npm run gen:api` to regenerate from the live backend OpenAPI schema once convenient.
+
+### 2026-06-23 — Simulation controls moved to dedicated admin page
+
+The simulation clock and controls were extracted out of `Header` into a new dedicated component `SimulationControl` (`src/components/SimulationControl.tsx`), rendered at the `/simulation` route. `SPEED_OPTIONS` and `formatSimNow` moved with it. `Header` is now clean — it only handles the title, search, alerts, settings, and user identity panel. `Sidebar` gained a `useAuth` dependency so it can conditionally insert the "Simulation" nav item for admin users only. `App.tsx` was updated to route `currentView === '/simulation'` to `<SimulationControl />`.
