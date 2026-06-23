@@ -21,6 +21,7 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { useAuth } from '../auth/AuthContext';
 
 interface NavItem {
   title: string;
@@ -133,6 +134,17 @@ function NavItemComponent({ item, isActive = false, level = 0, onNavigate, curre
 }
 
 export function Sidebar({ currentView = '/dashboard', onNavigate }: SidebarProps) {
+  const { user } = useAuth();
+  const simItem: NavItem = {
+    title: 'Simulation',
+    icon: <Activity className="w-4 h-4" />,
+    href: '/simulation',
+  };
+  const items: NavItem[] =
+    user?.role === 'admin'
+      ? [navigationItems[0], navigationItems[1], simItem, navigationItems[2]]
+      : navigationItems;
+
   return (
     <div className="fixed left-0 top-0 w-64 bg-white border-r border-gray-200 h-screen flex flex-col z-50">
       {/* Logo Header */}
@@ -150,10 +162,10 @@ export function Sidebar({ currentView = '/dashboard', onNavigate }: SidebarProps
       {/* Navigation */}
       <ScrollArea className="flex-1 p-4">
         <nav className="space-y-1">
-          {navigationItems.map((item, index) => (
-            <NavItemComponent 
-              key={index} 
-              item={item} 
+          {items.map((item, index) => (
+            <NavItemComponent
+              key={index}
+              item={item}
               isActive={currentView === item.href}
               onNavigate={onNavigate}
               currentView={currentView}
