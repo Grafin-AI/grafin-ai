@@ -143,8 +143,8 @@ export function Header({ onMenuClick }: HeaderProps) {
 
             <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user?.email ?? 'Admin User'}</p>
-                <p className="text-xs text-gray-500">{user?.role ?? 'admin'}@gardaai.com</p>
+                <p className="text-sm font-medium text-gray-900">{user?.email ?? '—'}</p>
+                <p className="text-xs text-gray-500 capitalize">{user?.role ?? ''}</p>
               </div>
               <Button variant="ghost" size="icon" className="rounded-full">
                 <User className="w-5 h-5" />
