@@ -1,8 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 RiskCategory = Literal["Low", "Medium", "High"]
 Status = Literal["approved", "flagged", "blocked"]
@@ -20,7 +20,7 @@ class ScoreRequestItem(BaseModel):
 
 
 class ScoreRequest(BaseModel):
-    transactions: list[ScoreRequestItem]
+    transactions: Annotated[list[ScoreRequestItem], Field(max_length=1000)]
 
 
 class ScoreResultItem(BaseModel):

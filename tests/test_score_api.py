@@ -17,6 +17,14 @@ def test_score_requires_token(client):
     assert r.status_code == 401
 
 
+def test_expected_query_param_cannot_bypass_auth(client, auth):
+    # The old `expected` query-param bypass must stay closed.
+    r = client.post("/v1/score?expected=attacker",
+                    json={"transactions": [_TXN]},
+                    headers={"Authorization": "Bearer attacker"})
+    assert r.status_code == 401
+
+
 def test_score_batch_happy_path(client, auth):
     body = {"transactions": [_TXN, {**_TXN, "transaction_id": 124, "is_laundering": False}]}
     r = client.post("/v1/score", json=body, headers=auth)

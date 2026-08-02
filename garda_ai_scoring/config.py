@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
 
     # Required — the app must never expose /v1/score without a token (fail fast at startup).
-    scoring_token: str
+    scoring_token: str = Field(min_length=1)
 
     scorer: str = "label_replay"
     seed: str = "garda"

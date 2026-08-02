@@ -18,6 +18,7 @@ from garda_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnI
 router = APIRouter(prefix="/v1", tags=["scoring"])
 
 
+# Intentional process-global singleton: the scorer is stateless, so one instance is shared.
 @lru_cache(maxsize=1)
 def _provider() -> ScoringProvider:
     s = get_settings()
@@ -46,6 +47,8 @@ async def score(body: ScoreRequest) -> ScoreResponse:
                 transaction_id=item.transaction_id,
                 fraud_score=r.fraud_score,
                 typology=r.typology,
+                # Domain keeps `status` as `str` (not narrowed, to preserve domain purity);
+                # response_model=ScoreResponse validates the value at construction.
                 status=cast(Status, r.status),
             )
         )

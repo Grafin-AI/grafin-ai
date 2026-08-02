@@ -336,17 +336,17 @@ git commit -m "feat: observability — RED metrics registry + structlog config"
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_scoring.api.auth import require_token
+from garda_ai_scoring.api.auth import _verify
 
 
-def test_require_token_accepts_matching():
-    require_token(authorization="Bearer s3cret", expected="s3cret")  # no raise
+def test_verify_accepts_matching():
+    _verify("Bearer s3cret", "s3cret")  # no raise
 
 
 @pytest.mark.parametrize("header", [None, "s3cret", "Bearer wrong", "Basic s3cret"])
-def test_require_token_rejects(header):
+def test_verify_rejects(header):
     with pytest.raises(HTTPException) as exc:
-        require_token(authorization=header, expected="s3cret")
+        _verify(header, "s3cret")
     assert exc.value.status_code == 401
 ```
 
@@ -357,6 +357,8 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement `garda_ai_scoring/api/auth.py`**
 
+Auth reads the token only from settings; never expose a request-controllable override (avoids a query-param auth bypass).
+
 ```python
 import hmac
 
@@ -365,22 +367,23 @@ from fastapi import Header, HTTPException, status
 from garda_ai_scoring.config import get_settings
 
 
-def require_token(
-    authorization: str | None = Header(default=None),
-    expected: str | None = None,
-) -> None:
-    """Validate the `Authorization: Bearer <token>` header against the configured token.
-
-    `expected` is injectable for tests; in the app it defaults to the configured token.
-    """
-    token = get_settings().scoring_token if expected is None else expected
+def _verify(authorization: str | None, token: str) -> None:
+    """Pure bearer-token check (unit-testable without the HTTP/env layer)."""
     scheme, _, value = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not hmac.compare_digest(value, token):
+    if scheme.lower() != "bearer" or not hmac.compare_digest(value.encode(), token.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    """FastAPI dependency: validate the bearer token against the configured secret.
+
+    Reads the token ONLY from settings — nothing request-controllable can override it.
+    """
+    _verify(authorization, get_settings().scoring_token)
 ```
 
 - [ ] **Step 4: Run to verify it passes + type-check**

@@ -27,22 +27,25 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         )
         structlog.contextvars.bind_contextvars(correlation_id=cid)
         start = time.perf_counter()
+        status_code = 500  # default if call_next raises (unhandled 500)
+        response: Response | None = None
         try:
             response = await call_next(request)
+            status_code = response.status_code
+            return response
         finally:
             elapsed = time.perf_counter() - start
-            structlog.contextvars.clear_contextvars()
-
-        route = request.scope.get("route")
-        endpoint = getattr(route, "path", None) or "unmatched"
-        REQUEST_COUNT.labels(endpoint, request.method, str(response.status_code)).inc()
-        REQUEST_DURATION.labels(endpoint, request.method).observe(elapsed)
-        response.headers["X-Correlation-ID"] = cid
-        _logger.info(
-            "request",
-            method=request.method,
-            endpoint=endpoint,
-            status_code=response.status_code,
-            duration_ms=round(elapsed * 1000, 2),
-        )
-        return response
+            route = request.scope.get("route")
+            endpoint = getattr(route, "path", None) or "unmatched"
+            REQUEST_COUNT.labels(endpoint, request.method, str(status_code)).inc()
+            REQUEST_DURATION.labels(endpoint, request.method).observe(elapsed)
+            if response is not None:
+                response.headers["X-Correlation-ID"] = cid
+            _logger.info(
+                "request",
+                method=request.method,
+                endpoint=endpoint,
+                status_code=status_code,
+                duration_ms=round(elapsed * 1000, 2),
+            )
+            structlog.contextvars.unbind_contextvars("correlation_id")
