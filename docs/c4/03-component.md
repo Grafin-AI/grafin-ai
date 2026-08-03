@@ -21,8 +21,9 @@ The **Backend API** container is one of two application containers in the Garda 
 - Masks PII (entity names, account IDs) in user-risk responses based on caller role
 - Caches aggregate query results in Redis, keyed to the current simulation timestamp
 - Provides a WebSocket live-feed relay that fans out scored events from the Redis `garda:events:live` pub/sub channel to authenticated dashboard clients
+- Exposes a token-gated ingest write-path (`POST /api/v1/ingest`, Phase 2) that scores a producer's transaction batch via the outbound garda-ai-scoring service, persists it idempotently, and publishes new events to `garda:events:live`
 
-This document zooms into the **components within that container**. All components run in the same Python process.
+This document zooms into the **components within that container**. All components run in the same Python process — except the outbound call to the separate **garda-ai-scoring** service, which is the container's one synchronous external HTTP dependency (Phase 2).
 
 ---
 
@@ -41,6 +42,10 @@ This document zooms into the **components within that container**. All component
 | **PII Masking** | `api/masking.py` | Masks entity names and account/payment IDs in user-risk serialization; applied in router layer, not in repositories |
 | **Aggregate Caching** | `api/cache.py` | `sim_now`-keyed cache-aside over Redis for aggregate endpoints (metrics, analytics, geo); transactions/live and user-risk are uncached |
 | **Live WebSocket Relay** | `api/ws.py`, `api/ws_auth.py`, `realtime/channels.py` | Authenticated (`?token=` access JWT) live fan-out; subscribes to `garda:events:live` Redis pub/sub channel and forwards scored events to dashboard clients via a single blocking poll loop |
+| **Ingest Route** *(Phase 2)* | `api/ingest.py`, `api/ingest_schemas.py` | Token-gated `POST /api/v1/ingest` write-path: enrich → score → atomic persist → publish new events to `garda:events:live` (commit-then-notify). Idempotent on producer-provided `transaction_id` |
+| **Ingest Auth** *(Phase 2)* | `api/ingest_auth.py` | Bearer `GARDA_INGEST_TOKEN` dependency (settings-only, constant-time); separate from the user JWT auth stack |
+| **ScoringClient** *(Phase 2)* | `services/scoring_client.py` | Resilient httpx client (pooled `AsyncClient` on `app.state`) calling the separate garda-ai-scoring service's `POST /v1/score`; bounded retries → `ScoringUnavailable`. The backend's one **outbound** HTTP dependency |
+| **IngestRepository** *(Phase 2)* | `repositories/ingest.py` | Enrich lookups (`risk_categories`, `bank_names`) + idempotent batch persist (`ON CONFLICT (id) DO NOTHING ... RETURNING`); events for new ids only, alerts for blocked; one transaction |
 
 ---
 
@@ -676,9 +681,177 @@ Returns a `CurrentUser(id, role)` on success, `None` on any validation failure (
 
 ---
 
+## Component: Ingest Auth *(Phase 2 — added 2026-06-25)*
+
+### Overview
+
+- **Name**: Ingest Auth
+- **Type**: Library (auth dependency)
+- **Technology**: Python 3.12+, FastAPI, `hmac`
+
+### Purpose
+
+Gates the ingest write-path with a shared bearer token that is completely separate from the user JWT auth stack. The producer (the pipeline / scoring feeder that calls `POST /api/v1/ingest`) is a machine, not a dashboard user, so it authenticates with a single long-lived secret (`GARDA_INGEST_TOKEN`) rather than a login-issued access token. This keeps the two trust domains — human dashboard users and the trusted event producer — cleanly isolated.
+
+### Software Features
+
+- **Settings-only token**: `require_ingest_token` reads the expected token exclusively from `get_settings().ingest_token`. There is no per-request override path, so a caller cannot influence which token is checked against.
+- **Constant-time comparison**: `_verify_ingest` compares the presented value against the configured token with `hmac.compare_digest`, avoiding a timing side-channel on the secret.
+- **Bearer scheme enforcement**: The `Authorization` header must be `Bearer <token>`; a missing header, wrong scheme, or mismatched value raises HTTP 401 with a `WWW-Authenticate: Bearer` challenge.
+- **Router-level application**: Applied once as a router dependency (`APIRouter(..., dependencies=[Depends(require_ingest_token)])`), so every route mounted under the ingest router is gated uniformly.
+
+### Code Elements
+
+- [`api/ingest_auth.py`](../../garda_ai_backend/api/ingest_auth.py) — `require_ingest_token` (FastAPI dependency), `_verify_ingest` (pure, unit-testable check)
+
+### Public Interface
+
+#### `require_ingest_token(authorization: str | None = Header(default=None)) -> None`
+
+FastAPI dependency. Passes silently on a valid token; raises HTTP 401 otherwise. Mounted on the ingest router so it guards `POST /api/v1/ingest`.
+
+### Dependencies
+
+- **Configuration component**: `get_settings().ingest_token` (required, min length 16)
+- **External**: `hmac` (constant-time compare), FastAPI (`Header`, `HTTPException`)
+
+---
+
+## Component: ScoringClient *(Phase 2 — added 2026-06-25)*
+
+### Overview
+
+- **Name**: ScoringClient
+- **Type**: Library (external-service adapter)
+- **Technology**: Python 3.12+, httpx (async)
+
+### Purpose
+
+Adapter for the backend's single **outbound** HTTP dependency: the separate **garda-ai-scoring** service's `POST /v1/score`. The ingest route delegates all batch scoring to this client. Scoring is now an outbound synchronous dependency of the request path — a failed or unreachable scoring service is a first-class error condition that the ingest route surfaces as HTTP 503 (nothing is persisted).
+
+### Software Features
+
+- **Pooled shared client**: Wraps a single `httpx.AsyncClient` created once at startup and stored on `app.state.http_client` (via the `main.py` lifespan). Connection pooling is reused across requests rather than opening a client per call.
+- **Bearer auth**: Sends `Authorization: Bearer <scoring_token>` on every call.
+- **Correlation propagation**: Forwards the request's `X-Correlation-ID` to the scoring service so a single ingest can be traced end-to-end across the two services.
+- **Bounded retries with backoff**: Retries transient transport errors and 5xx responses up to `retries` times with exponential backoff (0.1s, 0.2s, …); exhausting retries raises `ScoringUnavailable`.
+- **4xx is terminal**: A 4xx from scoring is treated as a contract/auth problem and is **not** retried — it raises `ScoringUnavailable` immediately.
+- **Response validation**: A malformed success body (missing/!`results`) raises `ScoringUnavailable` rather than returning garbage downstream.
+
+### Code Elements
+
+- [`services/scoring_client.py`](../../garda_ai_backend/services/scoring_client.py) — `ScoringClient` (`score()`), `ScoringUnavailable`
+
+### Public Interface
+
+#### `ScoringClient(client, base_url, token, *, retries=2, timeout_s=5.0)`
+
+#### `async score(transactions: list[dict], correlation_id: str | None = None) -> list[dict]`
+
+POSTs `{"transactions": [...]}` to `<base_url>/v1/score`; returns the `results` list. Raises `ScoringUnavailable` on unreachable service, exhausted retries, any 4xx, or a malformed response.
+
+### Dependencies
+
+- **Configuration component**: `scoring_url`, `scoring_token`, `scoring_timeout_s`, `scoring_retries`
+- **HTTP App component**: the pooled `httpx.AsyncClient` on `app.state` (created/closed by the `main.py` lifespan)
+- **External — garda-ai-scoring**: `POST /v1/score` (bearer `scoring_token`, `X-Correlation-ID` propagated) — a separate service/container
+- **External**: `httpx`, `asyncio`
+
+---
+
+## Component: IngestRepository *(Phase 2 — added 2026-06-25)*
+
+### Overview
+
+- **Name**: IngestRepository
+- **Type**: Library (data access layer)
+- **Technology**: Python 3.12+, SQLAlchemy 2.0 (async), asyncpg (PostgreSQL dialect `pg_insert`)
+
+### Purpose
+
+Owns all database access for the ingest write-path: reference-data enrichment lookups and the idempotent batch persist. Producer-provided `transaction_id`s are the transaction primary key, so re-ingesting the same batch is a no-op — the repository never double-inserts events or alerts for an already-seen id.
+
+### Software Features
+
+- **Enrichment lookups**: `risk_categories(account_ids)` maps `from_account → risk_category` (fed into the scoring payload); `bank_names(bank_ids)` maps `from_bank_id → name` (fed into the published live-feed message). Missing ids are simply omitted.
+- **Idempotent insert**: `persist()` uses `pg_insert(Transaction) ... .on_conflict_do_nothing(index_elements=[Transaction.id]).returning(Transaction.id)`; only the genuinely-new ids are returned, and events are created **only** for those.
+- **Events for new ids, alerts for blocked**: Inserts one `TransactionEvent` per newly-inserted transaction (returning `seq`), then one `Alert` per event whose status is `blocked`.
+- **Single transaction**: The whole insert sequence runs inside one `async with session.begin()` block, so the batch commits atomically or not at all.
+- **Early exit**: If no ids are new (full duplicate batch), returns `[]` without touching the events/alerts tables.
+
+### Code Elements
+
+- [`repositories/ingest.py`](../../garda_ai_backend/repositories/ingest.py) — `IngestRepository` (`risk_categories`, `bank_names`, `persist`), `InsertedEvent` (frozen dataclass: `seq`, `transaction_id`, `fraud_score`, `typology`, `status`)
+
+### Public Interface
+
+| Method | Signature | Description |
+|---|---|---|
+| `risk_categories` | `(account_ids: list[str]) -> dict[str, str \| None]` | Enrich: account id → risk_category |
+| `bank_names` | `(bank_ids: list[str]) -> dict[str, str]` | Enrich: bank id → name |
+| `persist` | `(transactions: list[dict], scores_by_id: dict[int, dict], now: datetime) -> list[InsertedEvent]` | Idempotent atomic insert of transactions + events (+ alerts for blocked); returns the newly-inserted events with their `seq` |
+
+### Dependencies
+
+- **Persistence / Schema component**: `AsyncSession`; ORM models `Account`, `Bank`, `Transaction`, `TransactionEvent`, `Alert`
+- **External**: SQLAlchemy `select` + PostgreSQL `insert` (`on_conflict_do_nothing`, `returning`)
+
+---
+
+## Component: Ingest Route *(Phase 2 — added 2026-06-25)*
+
+### Overview
+
+- **Name**: Ingest Route
+- **Type**: Application (write-path router)
+- **Technology**: Python 3.12+, FastAPI, pydantic, structlog
+
+### Purpose
+
+The token-gated write-path that lets a trusted producer push a batch of transactions into the platform. It orchestrates the four Phase 2 components: enrich the batch, score it via the outbound `ScoringClient`, persist it idempotently via `IngestRepository`, and publish each newly-created event to the same Redis `garda:events:live` channel the WebSocket relay and frontend already consume. The published message uses the **same shape** the read/live path emits, so no consumer change is required.
+
+This is an **additive** surface. The Phase 1 label-replay and dashboard read paths are unchanged by this work; re-anchoring the read/aggregate layer onto ingest-produced events is deferred to **Phase 5**.
+
+### Software Features
+
+- **Orchestrated flow**: `enrich (from_risk_category)` → `score batch` → `atomic persist` → `publish each new event`.
+- **Fail-fast on scoring**: If `ScoringClient` raises `ScoringUnavailable`, the route returns **503** and nothing is persisted. If scoring returns incomplete/invalid results (missing id, bad status, non-numeric `fraud_score`), it returns **502**.
+- **Idempotent**: Idempotent on the producer-provided `transaction_id` (via `IngestRepository.persist`'s `ON CONFLICT DO NOTHING`); duplicates are reported with `ingested=false` and no `seq`.
+- **Commit-then-notify**: Redis publishes happen **after** the DB commit. A publish failure leaves events persisted-but-not-published (accepted for Phase 2; a transactional outbox is out of scope).
+- **DB-before-scoring connection hygiene**: The enrichment SELECT's autobegun read-only transaction is rolled back before the scoring network round-trip, so a DB connection is not pinned across the outbound HTTP call.
+- **Correlation ID**: Honors an inbound `X-Correlation-ID` (or generates one), binds it to the structlog context, and propagates it to the scoring call.
+- **Metrics**: Records `garda_ingest_transactions_total{result}` (`inserted` / `duplicate`) and `garda_ingest_scoring_latency_seconds` (observed in a `finally`, so slow/failed scoring calls are captured too).
+- **Input caps**: Batch capped at 1000 transactions; per-field length/precision caps via `ingest_schemas`.
+- **Error surface**: `200` (success, per-item results) / `400` (FK violation — unknown bank/account, SQLSTATE 23503) / `401` (bad/missing ingest token) / `422` (schema validation) / `502` (invalid scoring results) / `503` (scoring unavailable).
+
+### Code Elements
+
+- [`api/ingest.py`](../../garda_ai_backend/api/ingest.py) — `router` (prefix `/api/v1`, gated by `require_ingest_token`); `ingest()` handler; `get_scoring_client()` (builds a `ScoringClient` around the pooled `app.state.http_client`)
+- [`api/ingest_schemas.py`](../../garda_ai_backend/api/ingest_schemas.py) — `IngestTxn`, `IngestRequest`, `IngestResultItem`, `IngestResponse`
+
+### Public Interface
+
+#### HTTP endpoint
+
+| Method | Path | Auth | Description | Response |
+|---|---|---|---|---|
+| `POST` | `/api/v1/ingest` | Bearer `GARDA_INGEST_TOKEN` | Enrich → score → atomic persist → publish scored batch | `200 IngestResponse` / `400` / `401` / `422` / `502` / `503` |
+
+### Dependencies
+
+- **Ingest Auth component**: `require_ingest_token` gates the router
+- **ScoringClient component**: outbound `POST /v1/score` (via the pooled `app.state.http_client`)
+- **IngestRepository component**: enrichment + idempotent atomic persist
+- **Persistence / Schema component**: `SessionDep`
+- **Redis Integration component**: `RedisDep` — `PUBLISH garda:events:live` (commit-then-notify)
+- **Observability component**: `INGEST_TRANSACTIONS`, `INGEST_SCORING_LATENCY`
+- **Live WebSocket Relay component** *(indirect)*: consumes the published `garda:events:live` messages this route emits (same message shape)
+
+---
+
 ## Component Diagram
 
-The diagram below shows all eleven components within the Backend API container, their internal relationships, and their connections to external systems and other containers.
+The diagram below shows all fifteen components within the Backend API container (eleven Phase 1 components plus the four Phase 2 ingest-write-path components), their internal relationships, and their connections to external systems and other containers.
 
 ```mermaid
 C4Component
@@ -696,6 +869,10 @@ C4Component
         Component(masking, "PII Masking", "Python", "mask_name / mask_account_id. Applied in users_view router before RiskProfile serialization. Admin callers with unmasked=true bypass masking.")
         Component(cache, "Aggregate Caching", "redis[asyncio] + json", "cached_json cache-aside over Redis. sim_now-keyed. Applied to metrics, analytics, geo (TTL 5-10 s). Transactions/live and user-risk are uncached.")
         Component(wsRelay, "Live WebSocket Relay", "FastAPI WebSockets + redis pub/sub", "WS /api/v1/ws/live. Auth-before-accept via ?token= JWT. Single-loop poll-and-forward: subscribe → send connected → get_message(timeout=15) → send_text. No queue; natural send-await backpressure. Clients backfill gaps via GET /transactions/live?after_seq=.")
+        Component(ingestRoute, "Ingest Route (Phase 2)", "FastAPI + pydantic", "POST /api/v1/ingest. Token-gated write-path. enrich → score → atomic persist → publish new events to garda:events:live (commit-then-notify). Idempotent on producer transaction_id. 200/400/401/422/502/503.")
+        Component(ingestAuth, "Ingest Auth (Phase 2)", "FastAPI + hmac", "require_ingest_token — bearer GARDA_INGEST_TOKEN, settings-only, constant-time. Separate from user JWT auth.")
+        Component(scoringClient, "ScoringClient (Phase 2)", "httpx async", "Resilient client for garda-ai-scoring POST /v1/score. Pooled AsyncClient on app.state. Bearer scoring_token, X-Correlation-ID propagated, bounded retries, 4xx-no-retry → ScoringUnavailable.")
+        Component(ingestRepo, "IngestRepository (Phase 2)", "SQLAlchemy 2.0 + pg_insert", "Enrich (risk_categories, bank_names) + idempotent batch persist: ON CONFLICT (id) DO NOTHING RETURNING. Events for new ids only, alerts for blocked. One transaction.")
     }
 
     ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth for all platform data")
@@ -703,6 +880,8 @@ C4Component
     Container_Ext(prom, "Prometheus", "Prometheus", "Scrapes /metrics from Backend API")
     Container_Ext(worker, "Pipeline Worker (Plan 3)", "Python / asyncpg", "ETL, replay clock, ML scoring engine — reads/writes same DB schema. PUBLISHES scored events to garda:events:live. Not yet implemented.")
     Container_Ext(dashboard, "Dashboard Client", "Browser / WebSocket", "Connects to WS /api/v1/ws/live; backfills via GET /transactions/live?after_seq=")
+    Container_Ext(scoringSvc, "garda-ai-scoring (Phase 2)", "Separate service", "Scoring service. Exposes POST /v1/score (bearer). Outbound HTTP dependency of the Ingest Route.")
+    Container_Ext(producer, "Ingest Producer (Phase 2)", "Trusted machine client", "Pushes transaction batches to POST /api/v1/ingest with the shared GARDA_INGEST_TOKEN bearer.")
 
     Rel(httpApp, config, "Reads settings at import time", "in-process")
     Rel(httpApp, persistence, "Opens ad-hoc session for /readyz", "in-process")
@@ -742,6 +921,20 @@ C4Component
     Rel(worker, redisDb, "PUBLISH garda:events:live (planned — not yet implemented)", "redis PUBLISH")
     Rel(dashboard, wsRelay, "Connects with ?token=<jwt>; receives live event frames", "WebSocket")
     Rel(dashboard, viewApi, "Backfills via GET /transactions/live?after_seq= after reconnect", "HTTP")
+
+    %% Phase 2 — ingest write-path
+    Rel(httpApp, ingestRoute, "Mounts ingest router; owns pooled httpx.AsyncClient via lifespan", "in-process")
+    Rel(ingestRoute, ingestAuth, "Router gated by require_ingest_token", "in-process")
+    Rel(ingestRoute, scoringClient, "Scores batch (built around app.state.http_client)", "in-process")
+    Rel(ingestRoute, ingestRepo, "Enrich + idempotent atomic persist", "in-process / SQL")
+    Rel(ingestRoute, redis, "PUBLISH garda:events:live (commit-then-notify)", "in-process")
+    Rel(ingestRoute, observability, "garda_ingest_transactions_total / garda_ingest_scoring_latency_seconds", "in-process")
+    Rel(ingestAuth, config, "Reads ingest_token", "in-process")
+    Rel(scoringClient, config, "Reads scoring_url / scoring_token / timeout / retries", "in-process")
+    Rel(ingestRepo, persistence, "accounts, banks, transactions, transaction_events, alerts", "in-process / SQL")
+    Rel(producer, ingestRoute, "POST /api/v1/ingest with bearer GARDA_INGEST_TOKEN", "HTTP")
+    Rel(scoringClient, scoringSvc, "POST /v1/score (bearer, X-Correlation-ID)", "HTTP outbound")
+    Rel(ingestRoute, redisDb, "PUBLISH garda:events:live — fans out to WS relay + dashboard", "redis PUBLISH")
 ```
 
 ---
@@ -764,8 +957,10 @@ The Container diagram in `garda-ai-deploy/docs/c4/02-container.md` assigns the f
 | Connects to Redis | **Implemented** (JTI store + rate limiting + aggregate cache + pub/sub) | Redis Integration + Aggregate Caching + Live WebSocket Relay |
 | Login rate-limiting | **Implemented** | Redis Integration (via Authentication & RBAC) |
 | Bootstrap / seed | **Implemented** | Seed / Bootstrap |
+| Ingest write-path (`POST /api/v1/ingest`) *(Phase 2)* | **Implemented** | Ingest Route + Ingest Auth + ScoringClient + IngestRepository |
+| Outbound scoring call *(Phase 2)* | **Implemented** | ScoringClient → garda-ai-scoring `POST /v1/score` |
 
-All eleven components are implemented. Plan 2's backend API surface is complete. The only remaining external dependency is the **Pipeline Worker (Plan 3)**, which must publish scored events to `garda:events:live` — that publisher lives in a separate repository and has not been implemented yet.
+All eleven Phase 1 components plus the four Phase 2 ingest-write-path components are implemented. The Phase 2 ingest work is **additive**: the label-replay and dashboard read/aggregate paths are unchanged, and re-anchoring the read layer onto ingest-produced events is deferred to **Phase 5**. The **Pipeline Worker (Plan 3)** is no longer the only way events reach `garda:events:live` — the Ingest Route now publishes there too — but it remains a separate repository and is out of scope here.
 
 ---
 
@@ -773,4 +968,5 @@ All eleven components are implemented. Plan 2's backend API surface is complete.
 
 | Date | Change |
 |---|---|
+| 2026-06-25 | **Ingest write-path added (Phase 2)** — additive. Four new components: **Ingest Route** (`api/ingest.py`, `api/ingest_schemas.py`) — token-gated `POST /api/v1/ingest`, flow enrich → score → atomic persist → publish new events to `garda:events:live` (commit-then-notify, same message shape the WS relay/frontend consume), idempotent on producer `transaction_id`, errors 200/400(FK)/401/422/502/503; **Ingest Auth** (`api/ingest_auth.py`) — bearer `GARDA_INGEST_TOKEN`, settings-only, constant-time; **ScoringClient** (`services/scoring_client.py`) — resilient httpx client (pooled `AsyncClient` on `app.state` via lifespan) for garda-ai-scoring `POST /v1/score`, bounded retries → `ScoringUnavailable`, 4xx-no-retry, X-Correlation-ID propagated — the backend's first **outbound** HTTP dependency; **IngestRepository** (`repositories/ingest.py`) — enrich lookups + idempotent batch persist (`ON CONFLICT (id) DO NOTHING ... RETURNING`, events for new ids, alerts for blocked, one transaction). New metrics `garda_ingest_transactions_total{result}` + `garda_ingest_scoring_latency_seconds`; config `scoring_url`/`scoring_token`/`ingest_token`/`scoring_timeout_s`/`scoring_retries`; `main.py` lifespan opens the pooled httpx client. The replay/read paths are unchanged; read re-anchoring onto ingest events is Phase 5. |
 | 2026-06-23 | **Live WebSocket Relay rewritten** (`api/ws.py`): removed concurrent reader/writer tasks and bounded queue (`asyncio.Queue(maxsize=100)`) with drop-to-latest / `{"type":"resync"}` backpressure. Replaced with a single poll-and-forward loop (`pubsub.get_message(timeout=15)` → `send_text`). Root cause: the concurrent-task pattern delivered correctly under Starlette's in-process test transport but failed to deliver messages under uvicorn's real WebSocket transport. Backpressure is now the natural `send_text` await; clients still backfill gaps via `GET /transactions/live?after_seq=`. Covered by new real-against-uvicorn integration test `tests/test_ws_uvicorn.py`. |

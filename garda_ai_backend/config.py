@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_JWT_SECRET = "change-me-in-prod"
@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 7
+
+    # --- Ingest write-path (Phase 2) ---
+    scoring_url: str
+    scoring_token: str = Field(min_length=1)
+    ingest_token: str = Field(min_length=16)
+    scoring_timeout_s: float = 5.0
+    scoring_retries: int = 2
 
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_dev(self) -> "Settings":
