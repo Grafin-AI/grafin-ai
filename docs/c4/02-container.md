@@ -8,8 +8,9 @@
 | Container | Repo | Tech | Responsibility |
 |---|---|---|---|
 | **Dashboard Web** | `garda-ai-dashboard-web` | React 18, Vite, TanStack Query, nginx | All views; REST reads + WS live feed; auth UI; resync-on-reconnect. nginx also terminates TLS and proxies `/api` + `/ws`. |
-| **Backend API** | `garda-ai-backend` | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations for every view, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** |
+| **Backend API** | `garda-ai-backend` | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations for every view, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** Token-gated `POST /api/v1/ingest` write-path: scores each batch via the scoring service, persists transactions/events/alerts, publishes to Redis for the WS relay. |
 | **Pipeline Worker** | `garda-ai-pipeline` | Python, pandas/polars, asyncpg | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine (`ScoringProvider`). Only writer of `transactions` / `transaction_events`. Builds from its **own** context; imports nothing from the backend — shares the DB schema and the `garda:events:live` Redis channel **by contract**, not by code. |
+| **Scoring Service** | `garda-ai-scoring` | FastAPI (stateless) | Stateless scorer exposing `POST /v1/score`; returns scores/labels for a batch of transactions. Shares **no code** with the backend — the scoring API is a contract only. Called by the backend ingest write-path (Phase 2); the replay scoring engine still runs in-process in Pipeline Worker until Phase 5. |
 | **PostgreSQL** | — | PostgreSQL | Single source of truth: accounts, transactions, scored events, alerts, users, sim_state. |
 | **Redis** | — | Redis | Pub/sub (live events), aggregate cache, rate-limit, refresh-token store, sim_state cache. |
 | **Prometheus** | `garda-ai-deploy` | Prometheus | Scrapes `/metrics` from backend + pipeline. |
@@ -24,11 +25,13 @@ C4Container
     Person(analyst, "AML Analyst", "Masked PII")
     Person(admin, "Platform Admin", "Replay control + unmask")
     System_Ext(dataset, "IBM AML HI-Small CSV", "One-time ETL")
+    System_Ext(producer, "Producer", "Local sim (garda-ai-sim, Phase 4) or real feed; bearer ingest token")
 
     System_Boundary(garda, "Garda AI Platform") {
         Container(web, "Dashboard Web", "React 18 / Vite / nginx", "All views, live monitor, auth UI, resync-on-reconnect")
         Container(api, "Backend API", "FastAPI / SQLAlchemy 2.0", "REST aggregations, WS relay, auth/RBAC, PII masking. Owns schema.")
         Container(worker, "Pipeline Worker", "Python / asyncpg", "ETL + replay (accel. clock) + scoring engine")
+        Container(scoring, "Scoring Service", "FastAPI (stateless)", "POST /v1/score — scores a batch; contract-only, shares no code")
         ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth: accounts, transactions, events, alerts, users, sim_state")
         ContainerDb(redis, "Redis", "Redis", "Pub/sub, cache, rate-limit, refresh tokens")
         Container(prom, "Prometheus", "Prometheus", "Scrapes metrics")
@@ -41,6 +44,8 @@ C4Container
     Rel(web, api, "Live feed", "WSS /ws/live")
 
     Rel(dataset, worker, "Bulk loaded by", "COPY")
+    Rel(producer, api, "Ingest batches (write entrypoint)", "HTTPS POST /api/v1/ingest, bearer ingest token")
+    Rel(api, scoring, "Scores each ingested batch", "HTTP POST /v1/score, bearer scoring token")
     Rel(worker, pg, "1) writes scored event + COMMIT", "SQL")
     Rel(worker, redis, "2) publishes after commit", "pub/sub")
     Rel(api, pg, "Reads aggregates / writes auth", "SQL")
@@ -69,6 +74,8 @@ C4Container
 - **No service repo depends on another in code.** The backend is the schema **source of truth** via Alembic migrations applied at deploy init; the pipeline keeps its own local channel constant + a committed DDL snapshot for tests and writes via raw SQL. The only pipeline↔backend couplings are runtime/data: both connect to Postgres, and the pipeline publishes to the `garda:events:live` Redis channel that the backend's WS relay consumes. These are data couplings shared **by contract** (duplicated, not imported), not build/code dependencies.
 
 > **Updated 2026-06-23:** pipeline decoupled from backend — own build context; channel + schema shared by contract.
+
+> **Updated 2026-06-25 (Phase 2):** the `garda-ai-scoring` service (Phase 1, stateless `POST /v1/score`) plus the backend `POST /api/v1/ingest` write-path are **additive**. The ingest path scores each batch via the scoring service (bearer scoring token), persists transactions/events/alerts, and publishes to Redis for the WS relay. The scoring API, the `garda:events:live` channel, and the DB schema are **contracts** — scoring and backend share no code. The existing replay path and all read endpoints are **unchanged** until Phase 5 (read re-anchoring).
 
 ## Implementation status (reconciled 2026-06-22 — all containers built)
 
