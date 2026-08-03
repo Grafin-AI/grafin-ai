@@ -5,7 +5,7 @@ import pytest_asyncio
 from sqlalchemy import func, select
 
 from garda_ai_backend.repositories.ingest import IngestRepository
-from garda_ai_backend.schema import Account, Alert, Bank, Entity
+from garda_ai_backend.schema import Account, Alert, Bank, Entity, TransactionEvent
 
 NOW = datetime(2026, 6, 25, 9, 30, tzinfo=UTC)
 
@@ -122,10 +122,16 @@ async def test_persist_is_idempotent(seeded_reference):
     # Exactly one event and one alert exist despite the re-ingest.
     event_count = (
         await session.execute(
-            select(func.count()).select_from(Alert)
+            select(func.count()).select_from(TransactionEvent)
         )
     ).scalar_one()
     assert event_count == 1
+    alert_count = (
+        await session.execute(
+            select(func.count()).select_from(Alert)
+        )
+    ).scalar_one()
+    assert alert_count == 1
 
 
 async def test_persist_batch_mixed_statuses(seeded_reference):

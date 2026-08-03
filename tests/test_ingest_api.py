@@ -42,6 +42,7 @@ _TXN = {
     "payment_currency": "IDR", "amount_received": "15000.00", "receiving_currency": "IDR",
     "payment_format": "ACH", "is_laundering": True, "event_time": "2026-06-25T09:00:00Z",
 }
+_TXN_B = {**_TXN, "transaction_id": 40218}
 
 
 class _FakeScoring:
@@ -53,6 +54,31 @@ class _FakeScoring:
             {
                 "transaction_id": t["transaction_id"], "fraud_score": 0.9,
                 "typology": "Smurfing", "status": self._status,
+            }
+            for t in transactions
+        ]
+
+
+class _CapturingScoring(_FakeScoring):
+    """Records the exact ``transactions`` payload the route sent to scoring."""
+
+    def __init__(self, status="blocked"):
+        super().__init__(status)
+        self.captured = None
+
+    async def score(self, transactions, correlation_id=None):
+        self.captured = transactions
+        return await super().score(transactions, correlation_id)
+
+
+class _BogusScoring:
+    """Returns an off-vocabulary status so the route must reject it with 502."""
+
+    async def score(self, transactions, correlation_id=None):
+        return [
+            {
+                "transaction_id": t["transaction_id"], "fraud_score": 0.9,
+                "typology": "Smurfing", "status": "bogus",
             }
             for t in transactions
         ]
@@ -264,3 +290,87 @@ async def test_ingest_publish_matches_persisted_event_time(client, session, seed
         await session.execute(select(Transaction).where(Transaction.id == 40217))
     ).scalar_one()
     assert txn.event_time == datetime(2026, 6, 25, 9, 0, tzinfo=UTC)
+
+
+async def test_ingest_enrichment_reaches_scoring(client, session, seeded_reference):
+    # from_account 1000000001 is seeded risk_category="High"; the route must enrich
+    # the scoring payload with it. Removing the enrichment line fails this test.
+    app = client._app
+    fake = _CapturingScoring()
+    app.dependency_overrides[get_scoring_client] = lambda: fake
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+
+    assert r.status_code == 200
+    assert fake.captured is not None
+    assert fake.captured[0]["from_risk_category"] == "High"
+
+
+async def test_ingest_oversize_batch_returns_422(client):
+    # 1001 items exceeds the per-request cap; validation rejects before scoring/DB.
+    # The scoring override only keeps dependency-solving off app.state; it is never
+    # called because body validation fails first.
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        txns = [{**_TXN, "transaction_id": i} for i in range(1001)]
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": txns}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+    assert r.status_code == 422
+
+
+async def test_ingest_mixed_new_and_duplicate(client, session, seeded_reference):
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        first = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+        assert first.status_code == 200
+        second = await client.post(
+            "/api/v1/ingest",
+            json={"transactions": [_TXN, _TXN_B]},
+            headers=_ingest_headers(),
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+
+    assert second.status_code == 200
+    results = {r["transaction_id"]: r for r in second.json()["results"]}
+    assert results[40217]["ingested"] is False
+    assert results[40218]["ingested"] is True
+
+    # Exactly one NEW event (for B) was created by the second call: two events total.
+    event_ids = (
+        await session.execute(select(TransactionEvent.transaction_id))
+    ).scalars().all()
+    assert sorted(event_ids) == [40217, 40218]
+
+
+async def test_ingest_invalid_scoring_response_returns_502(client, session, seeded_reference):
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _BogusScoring()
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+
+    assert r.status_code == 502
+    # Nothing persisted: the route rejects the bad batch before repo.persist().
+    txn_count = (
+        await session.execute(select(func.count()).select_from(Transaction))
+    ).scalar_one()
+    assert txn_count == 0
+    event_count = (
+        await session.execute(select(func.count()).select_from(TransactionEvent))
+    ).scalar_one()
+    assert event_count == 0

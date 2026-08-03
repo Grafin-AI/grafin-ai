@@ -7,7 +7,7 @@ _BASE = {
     "database_url": "postgresql+asyncpg://u:p@localhost/db",
     "scoring_url": "http://scoring:8000",
     "scoring_token": "s",
-    "ingest_token": "i",
+    "ingest_token": "ingest-token-0123456789",
 }
 
 
@@ -25,7 +25,7 @@ def test_ingest_settings_defaults():
     s = Settings(**_BASE)
     assert s.scoring_url == "http://scoring:8000"
     assert s.scoring_token == "s"
-    assert s.ingest_token == "i"
+    assert s.ingest_token == "ingest-token-0123456789"
     assert s.scoring_timeout_s == 5.0
     assert s.scoring_retries == 2
 
@@ -35,3 +35,9 @@ def test_ingest_settings_required(missing):
     data = {k: v for k, v in _BASE.items() if k != missing}
     with pytest.raises(ValidationError):
         Settings(**data)
+
+
+def test_ingest_token_rejects_empty():
+    # An empty token must fail validation so `Authorization: Bearer ` can't auth.
+    with pytest.raises(ValidationError):
+        Settings(**{**_BASE, "ingest_token": ""})

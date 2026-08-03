@@ -1,9 +1,6 @@
 import asyncio
 
 import httpx
-import structlog
-
-log = structlog.get_logger()
 
 
 class ScoringUnavailable(Exception):
@@ -47,7 +44,10 @@ class ScoringClient:
                 last_exc = exc
             else:
                 if resp.status_code < 400:
-                    return list(resp.json()["results"])
+                    try:
+                        return list(resp.json()["results"])
+                    except (ValueError, KeyError, TypeError) as exc:
+                        raise ScoringUnavailable("scoring returned a malformed response") from exc
                 if resp.status_code < 500:
                     # A 4xx is a contract/auth problem — not transient; do not retry.
                     raise ScoringUnavailable(

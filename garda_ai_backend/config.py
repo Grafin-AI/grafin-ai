@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_JWT_SECRET = "change-me-in-prod"
@@ -20,8 +20,8 @@ class Settings(BaseSettings):
 
     # --- Ingest write-path (Phase 2) ---
     scoring_url: str
-    scoring_token: str
-    ingest_token: str
+    scoring_token: str = Field(min_length=1)
+    ingest_token: str = Field(min_length=16)
     scoring_timeout_s: float = 5.0
     scoring_retries: int = 2
 
