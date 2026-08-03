@@ -1,3 +1,6 @@
+from contextlib import asynccontextmanager
+
+import httpx
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
@@ -6,6 +9,7 @@ from garda_ai_backend.api.alerts import router as alerts_view_router
 from garda_ai_backend.api.analytics import router as analytics_router
 from garda_ai_backend.api.auth import router as auth_router
 from garda_ai_backend.api.geo import router as geo_router
+from garda_ai_backend.api.ingest import router as ingest_router
 from garda_ai_backend.api.metrics import router as metrics_router
 from garda_ai_backend.api.sim import router as sim_router
 from garda_ai_backend.api.system import router as system_router
@@ -20,7 +24,18 @@ from garda_ai_backend.redis_client import get_redis
 settings = get_settings()
 configure_logging(settings.log_level)
 
-app = FastAPI(title="Garda AI Backend", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # One pooled HTTP client shared across the app (e.g. the scoring client).
+    app.state.http_client = httpx.AsyncClient()
+    try:
+        yield
+    finally:
+        await app.state.http_client.aclose()
+
+
+app = FastAPI(title="Garda AI Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(sim_router)
 app.include_router(metrics_router)
@@ -31,6 +46,7 @@ app.include_router(users_view_router)
 app.include_router(alerts_view_router)
 app.include_router(system_router)
 app.include_router(ws_router)
+app.include_router(ingest_router)
 
 
 @app.get("/healthz")
