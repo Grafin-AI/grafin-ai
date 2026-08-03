@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 7
 
+    # --- Ingest write-path (Phase 2) ---
+    scoring_url: str
+    scoring_token: str
+    ingest_token: str
+    scoring_timeout_s: float = 5.0
+    scoring_retries: int = 2
+
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_dev(self) -> "Settings":
         # Fail closed: never run a non-development env with the default or a

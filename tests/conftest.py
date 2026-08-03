@@ -17,6 +17,12 @@ os.environ.setdefault(
 )
 os.environ.setdefault("GARDA_REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("GARDA_JWT_SECRET", "test-secret")
+# Ingest write-path (Phase 2) — required at startup, mirrors the fail-closed
+# posture of GARDA_JWT_SECRET. Provided here so the app/get_settings() can boot
+# across the suite. test_config_ingest.py clears these to assert they're required.
+os.environ.setdefault("GARDA_SCORING_URL", "http://scoring:8000")
+os.environ.setdefault("GARDA_SCORING_TOKEN", "test-scoring-token")
+os.environ.setdefault("GARDA_INGEST_TOKEN", "test-ingest-token")
 
 
 @pytest.fixture(scope="session")
