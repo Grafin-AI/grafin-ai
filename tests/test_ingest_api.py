@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 
 from garda_ai_backend.api import deps
 from garda_ai_backend.api.ingest import get_scoring_client
+from garda_ai_backend.observability import REGISTRY
 from garda_ai_backend.redis_client import build_redis
 from garda_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
 from garda_ai_backend.services.scoring_client import ScoringUnavailable
@@ -352,6 +353,32 @@ async def test_ingest_mixed_new_and_duplicate(client, session, seeded_reference)
         await session.execute(select(TransactionEvent.transaction_id))
     ).scalars().all()
     assert sorted(event_ids) == [40217, 40218]
+
+
+async def test_ingest_records_transaction_metrics(client, session, seeded_reference):
+    # RED-style ingest metrics: a successful ingest bumps the bounded `inserted`
+    # counter and the metric is scrapeable from the app's Prometheus endpoint.
+    def _inserted() -> float:
+        return REGISTRY.get_sample_value(
+            "garda_ingest_transactions_total", {"result": "inserted"}
+        ) or 0.0
+
+    before = _inserted()
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+    assert r.status_code == 200
+    assert _inserted() - before == 1.0
+
+    # The counter is exposed on the /metrics scrape endpoint the app already serves.
+    scrape = await client.get("/metrics")
+    assert scrape.status_code == 200
+    assert "garda_ingest_transactions_total" in scrape.text
 
 
 async def test_ingest_invalid_scoring_response_returns_502(client, session, seeded_reference):

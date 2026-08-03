@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -10,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from garda_ai_backend.api.deps import RedisDep, SessionDep, SettingsDep
 from garda_ai_backend.api.ingest_auth import require_ingest_token
 from garda_ai_backend.api.ingest_schemas import IngestRequest, IngestResponse, IngestResultItem
+from garda_ai_backend.observability import INGEST_SCORING_LATENCY, INGEST_TRANSACTIONS
 from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
 from garda_ai_backend.repositories.ingest import IngestRepository
 from garda_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
@@ -59,6 +61,10 @@ async def ingest(
             }
             for t in txns
         ]
+        # Measure the outbound scoring round-trip. perf_counter + finally records the
+        # latency even on the ScoringUnavailable (503) path, so the histogram captures
+        # slow/failing calls too, not just successes.
+        _scoring_started = time.perf_counter()
         try:
             results = await scoring.score(score_items, correlation_id=cid)
         except ScoringUnavailable as exc:
@@ -66,6 +72,8 @@ async def ingest(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="scoring unavailable"
             ) from exc
+        finally:
+            INGEST_SCORING_LATENCY.observe(time.perf_counter() - _scoring_started)
 
         scores_by_id = {r["transaction_id"]: r for r in results}
         _VALID_STATUS = {"approved", "flagged", "blocked"}
@@ -105,6 +113,10 @@ async def ingest(
                            "(seed reference data first)",
                 ) from exc
             raise
+
+        # Bounded-cardinality throughput counters (never per-transaction labels).
+        INGEST_TRANSACTIONS.labels("inserted").inc(len(events))
+        INGEST_TRANSACTIONS.labels("duplicate").inc(len(txns) - len(events))
 
         bank_names = await repo.bank_names([t.from_bank_id for t in txns])
         by_id = {t.transaction_id: t for t in txns}
