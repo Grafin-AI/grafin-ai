@@ -89,8 +89,6 @@ export interface SystemHealth {
   model_accuracy_simulated: boolean;
 }
 
-export interface SimState { sim_now: string; speed: number; running: boolean; }
-
 // WebSocket live event (worker → backend relay → client)
 export interface LiveEvent {
   seq: number;
@@ -102,5 +100,4 @@ export interface LiveEvent {
   typology: string | null;
   status: Status;
   surfaced_at: string;
-  sim_now: string;
 }
