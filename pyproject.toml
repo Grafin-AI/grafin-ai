@@ -27,10 +27,20 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+# One-shot batch job: the reference loader reads a local CSV once at startup, so the
+# blocking `open()` in an async fn is intentional. ruff>=0.16 enabled ASYNC230 by default.
+ignore = ["ASYNC230"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+# asyncpg ships no py.typed marker, so mypy --strict reports import-untyped for it.
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true
 
 [build-system]
 requires = ["hatchling"]
