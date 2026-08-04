@@ -1,18 +1,4 @@
-from datetime import datetime
-
 from pydantic import BaseModel
-
-
-class SimStateResponse(BaseModel):
-    sim_now: datetime
-    speed: float
-    running: bool
-
-
-class SimControlRequest(BaseModel):
-    running: bool | None = None
-    speed: float | None = None
-    sim_now: datetime | None = None
 
 
 class MetricsOverviewResponse(BaseModel):

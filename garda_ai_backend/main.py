@@ -11,7 +11,6 @@ from garda_ai_backend.api.auth import router as auth_router
 from garda_ai_backend.api.geo import router as geo_router
 from garda_ai_backend.api.ingest import router as ingest_router
 from garda_ai_backend.api.metrics import router as metrics_router
-from garda_ai_backend.api.sim import router as sim_router
 from garda_ai_backend.api.system import router as system_router
 from garda_ai_backend.api.transactions import router as transactions_router
 from garda_ai_backend.api.users_view import router as users_view_router
@@ -37,7 +36,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Garda AI Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
-app.include_router(sim_router)
 app.include_router(metrics_router)
 app.include_router(analytics_router)
 app.include_router(geo_router)
