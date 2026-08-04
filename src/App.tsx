@@ -9,7 +9,6 @@ import { FraudAnalytics } from './components/FraudAnalytics';
 import { GeographicMap } from './components/GeographicMap';
 import { AlertsPanel } from './components/AlertsPanel';
 import { UserRiskProfiling } from './components/UserRiskProfiling';
-import { SimulationControl } from './components/SimulationControl';
 import { useSystemHealth } from './api/queries';
 import { Skeleton } from './components/ui/skeleton';
 
@@ -185,8 +184,6 @@ export default function App() {
         ) : currentView === '/user-risk-profiling' ? (
           /* User Risk Profiling View */
           <UserRiskProfiling />
-        ) : currentView === '/simulation' ? (
-          <SimulationControl />
         ) : (
           /* Placeholder for other views */
           <div className="flex items-center justify-center h-96">
