@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   AlertsResponse, FraudAnalytics, GeoResponse, HeatmapResponse, LiveResponse,
-  MetricsOverview, RiskProfile, SimState, SystemHealth, TransactionDetail,
+  MetricsOverview, RiskProfile, SystemHealth, TransactionDetail,
   UserRiskResponse, VolumeResponse,
 } from './types';
 
@@ -61,14 +61,3 @@ export const useLiveRecent = (limit = 50) =>
 
 export const useSystemHealth = () =>
   useQuery({ queryKey: ['system', 'health'], queryFn: () => get<SystemHealth>('/system/health'), ...LIVE });
-
-export const useSimState = () =>
-  useQuery({ queryKey: ['sim', 'state'], queryFn: () => get<SimState>('/sim/state'), refetchInterval: 5000 });
-
-export const useSimControl = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<SimState>) => api.post('/sim/control', body).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sim', 'state'] }),
-  });
-};
