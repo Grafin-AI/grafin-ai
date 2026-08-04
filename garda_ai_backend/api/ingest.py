@@ -132,7 +132,7 @@ async def ingest(
                 "bank": bank_names.get(t.from_bank_id), "type": t.payment_format,
                 "amount": float(t.amount_paid), "fraud_score": e.fraud_score,
                 "typology": e.typology, "status": e.status,
-                "surfaced_at": now_iso, "sim_now": now_iso,
+                "surfaced_at": now_iso,
             }
             await redis.publish(LIVE_EVENTS_CHANNEL, json.dumps(message, default=str))
 

@@ -272,7 +272,7 @@ async def test_ingest_publishes_live_event(client, session, seeded_reference, re
     assert message["status"] == "blocked"
     assert message["seq"] is not None
     assert "surfaced_at" in message
-    assert "sim_now" in message
+    assert "sim_now" not in message
 
 
 async def test_ingest_publish_matches_persisted_event_time(client, session, seeded_reference):
