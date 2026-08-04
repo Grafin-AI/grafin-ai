@@ -3,7 +3,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Query
 
 from garda_ai_backend.api.cache import cached_json
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep, SimNowDep
+from garda_ai_backend.api.deps import CurrentUserDep, NowDep, RedisDep, SessionDep
 from garda_ai_backend.api.view_schemas import (
     HeatmapResponse,
     MetricsOverviewResponse,
@@ -13,7 +13,7 @@ from garda_ai_backend.repositories.metrics import MetricsRepository
 
 router = APIRouter(prefix="/api/v1/metrics", tags=["metrics"])
 
-# range -> (window back from sim_now, date_trunc bucket granularity)
+# range -> (window back from now, date_trunc bucket granularity)
 _RANGE_WINDOWS: dict[str, tuple[timedelta, str]] = {
     "24h": (timedelta(days=1), "hour"),
     "weekly": (timedelta(days=7), "day"),
@@ -24,11 +24,11 @@ _RANGE_WINDOWS: dict[str, tuple[timedelta, str]] = {
 
 @router.get("/overview", response_model=MetricsOverviewResponse)
 async def overview(
-    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep
+    session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep
 ) -> MetricsOverviewResponse:
     repo = MetricsRepository(session)
     data = await cached_json(
-        redis, f"overview:{sim_now.isoformat()}", ttl=5, compute=lambda: repo.overview(sim_now)
+        redis, f"overview:{now.isoformat()}", ttl=5, compute=lambda: repo.overview(now)
     )
     return MetricsOverviewResponse(**data)
 
@@ -37,28 +37,28 @@ async def overview(
 async def volume(
     session: SessionDep,
     redis: RedisDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     _: CurrentUserDep,
     time_range: str = Query("24h", alias="range"),
 ) -> VolumeResponse:
     window, trunc = _RANGE_WINDOWS.get(time_range, _RANGE_WINDOWS["24h"])
-    lower = sim_now - window
+    lower = now - window
     repo = MetricsRepository(session)
     series = await cached_json(
         redis,
-        f"volume:{time_range}:{sim_now.isoformat()}",
+        f"volume:{time_range}:{now.isoformat()}",
         ttl=5,
-        compute=lambda: repo.volume(lower, sim_now, trunc),
+        compute=lambda: repo.volume(lower, now, trunc),
     )
     return VolumeResponse(series=series)
 
 
 @router.get("/heatmap", response_model=HeatmapResponse)
 async def heatmap(
-    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep
+    session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep
 ) -> HeatmapResponse:
     repo = MetricsRepository(session)
     cells = await cached_json(
-        redis, f"heatmap:{sim_now.isoformat()}", ttl=5, compute=lambda: repo.heatmap(sim_now)
+        redis, f"heatmap:{now.isoformat()}", ttl=5, compute=lambda: repo.heatmap(now)
     )
     return HeatmapResponse(cells=cells)

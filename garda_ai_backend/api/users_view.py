@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep, SimNowDep
+from garda_ai_backend.api.deps import CurrentUserDep, NowDep, SessionDep
 from garda_ai_backend.api.masking import mask_name
 from garda_ai_backend.api.view_schemas import RiskProfile, UserRiskResponse
 from garda_ai_backend.repositories.users_view import UserRiskRepository
@@ -18,12 +18,12 @@ def _shape(row: dict, user, unmasked: bool) -> RiskProfile:
 async def risk(
     session: SessionDep,
     user: CurrentUserDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     risk: str | None = None,
     unmasked: bool = False,
     limit: int = 100,
 ) -> UserRiskResponse:
-    rows = await UserRiskRepository(session).risk_list(sim_now, risk, limit)
+    rows = await UserRiskRepository(session).risk_list(now, risk, limit)
     return UserRiskResponse(profiles=[_shape(r, user, unmasked) for r in rows])
 
 
@@ -32,10 +32,10 @@ async def profile(
     entity_id: str,
     session: SessionDep,
     user: CurrentUserDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     unmasked: bool = False,
 ) -> RiskProfile:
-    row = await UserRiskRepository(session).profile(sim_now, entity_id)
+    row = await UserRiskRepository(session).profile(now, entity_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="entity not found")
     return _shape(row, user, unmasked)

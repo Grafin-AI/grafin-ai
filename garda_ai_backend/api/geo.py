@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from garda_ai_backend.api.cache import cached_json
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep, SimNowDep
+from garda_ai_backend.api.deps import CurrentUserDep, NowDep, RedisDep, SessionDep
 from garda_ai_backend.api.view_schemas import GeoResponse, ProvinceFraud
 from garda_ai_backend.repositories.geo import GeoRepository
 
@@ -19,12 +19,12 @@ router = APIRouter(prefix="/api/v1/geo", tags=["geo"])
 
 @router.get("/provinces", response_model=GeoResponse)
 async def provinces(
-    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep
+    session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep
 ) -> GeoResponse:
     repo = GeoRepository(session)
     data = await cached_json(
-        redis, f"geo:{sim_now.isoformat()}", ttl=10,
-        compute=lambda: repo.province_fraud_counts(sim_now),
+        redis, f"geo:{now.isoformat()}", ttl=10,
+        compute=lambda: repo.province_fraud_counts(now),
     )
     return GeoResponse(
         provinces=[
