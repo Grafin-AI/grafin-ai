@@ -26,6 +26,12 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+# Pin to ruff's classic default ruleset. Newer ruff (0.16.x) expanded its implicit
+# default to include flake8-comprehensions (e.g. C408); pinning keeps lint behaviour
+# stable and matches the plan's intent.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
