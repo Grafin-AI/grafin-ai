@@ -17,15 +17,20 @@ class ValidationReport(NamedTuple):
 
 async def validate(conn: asyncpg.Connection) -> ValidationReport:
     """Reference-only post-load checks: row counts + referential-integrity spot checks."""
-    banks = await conn.fetchval("SELECT count(*) FROM banks")
-    entities = await conn.fetchval("SELECT count(*) FROM entities")
-    accounts = await conn.fetchval("SELECT count(*) FROM accounts")
-    null_provinces = await conn.fetchval("SELECT count(*) FROM entities WHERE province IS NULL")
-    orphan_accounts = await conn.fetchval(
-        "SELECT count(*) FROM accounts a "
-        "LEFT JOIN banks b ON b.id = a.bank_id "
-        "LEFT JOIN entities e ON e.id = a.entity_id "
-        "WHERE b.id IS NULL OR e.id IS NULL"
+    banks = int(await conn.fetchval("SELECT count(*) FROM banks") or 0)
+    entities = int(await conn.fetchval("SELECT count(*) FROM entities") or 0)
+    accounts = int(await conn.fetchval("SELECT count(*) FROM accounts") or 0)
+    null_provinces = int(
+        await conn.fetchval("SELECT count(*) FROM entities WHERE province IS NULL") or 0
+    )
+    orphan_accounts = int(
+        await conn.fetchval(
+            "SELECT count(*) FROM accounts a "
+            "LEFT JOIN banks b ON b.id = a.bank_id "
+            "LEFT JOIN entities e ON e.id = a.entity_id "
+            "WHERE b.id IS NULL OR e.id IS NULL"
+        )
+        or 0
     )
     return ValidationReport(
         banks=banks,

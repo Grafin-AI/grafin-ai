@@ -16,3 +16,11 @@ def test_defaults(monkeypatch):
     assert s.database_url == "postgresql://u:p@h:5432/db"
     assert s.data_dir == "../garda-ai-data/HI-Small"
     assert s.batch_size == 5000
+    assert s.log_level == "INFO"
+
+
+def test_log_level_from_env(monkeypatch):
+    monkeypatch.setenv("GARDA_DATABASE_URL", "postgresql://u:p@h:5432/db")
+    monkeypatch.setenv("GARDA_LOG_LEVEL", "DEBUG")
+    s = Settings(_env_file=None)
+    assert s.log_level == "DEBUG"

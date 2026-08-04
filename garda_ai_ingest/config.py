@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str
     data_dir: str = "../garda-ai-data/HI-Small"
     batch_size: int = 5000
+    log_level: str = "INFO"
 
 
 @lru_cache(maxsize=1)

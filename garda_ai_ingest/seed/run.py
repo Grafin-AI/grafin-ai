@@ -51,8 +51,8 @@ async def run_seed(data_dir: str, database_url: str, *, batch_size: int) -> Vali
 
 
 def main() -> None:
-    configure_logging()
     settings = get_settings()
+    configure_logging(settings.log_level)
     report = asyncio.run(
         run_seed(settings.data_dir, settings.database_url, batch_size=settings.batch_size)
     )
