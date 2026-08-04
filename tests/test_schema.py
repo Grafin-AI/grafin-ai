@@ -23,8 +23,7 @@ def test_transaction_tables_registered():
 
 
 def test_ops_tables_registered():
-    from garda_ai_backend.schema import Alert, User, SimState
+    from garda_ai_backend.schema import Alert, User
     tables = Base.metadata.tables
     assert {"id", "event_seq", "severity", "typology"} <= {c.name for c in tables["alerts"].columns}
     assert {"id", "email", "password_hash", "role"} <= {c.name for c in tables["users"].columns}
-    assert {"id", "sim_now", "speed", "running"} <= {c.name for c in tables["sim_state"].columns}

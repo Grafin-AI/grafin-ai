@@ -69,7 +69,6 @@ from garda_ai_backend.schema import (
     Alert,
     Bank,
     Entity,
-    SimState,
     Transaction,
     TransactionEvent,
 )
@@ -125,6 +124,5 @@ async def seeded_dataset(session):
         id=1, event_seq=1, severity="high", typology="Fan-Out",
         created_at=datetime(2025, 9, 1, 9, tzinfo=UTC),
     ))
-    session.add(SimState(id=1, sim_now=SIM_NOW, speed=Decimal("60"), running=True))
     await session.commit()
     return SIM_NOW
