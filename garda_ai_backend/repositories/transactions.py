@@ -11,7 +11,7 @@ class TransactionsRepository:
         self._session = session
 
     async def live_window(
-        self, sim_now: datetime, after_seq: int | None, limit: int
+        self, now: datetime, after_seq: int | None, limit: int
     ) -> list[dict]:
         stmt = (
             select(
@@ -28,7 +28,7 @@ class TransactionsRepository:
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
             .join(Bank, Bank.id == Transaction.from_bank_id)
-            .where(TransactionEvent.surfaced_at <= sim_now)
+            .where(TransactionEvent.surfaced_at <= now)
         )
         if after_seq is not None:
             stmt = stmt.where(TransactionEvent.seq > after_seq).order_by(TransactionEvent.seq.asc())

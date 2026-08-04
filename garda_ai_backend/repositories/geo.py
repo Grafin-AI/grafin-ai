@@ -10,14 +10,14 @@ class GeoRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def province_fraud_counts(self, sim_now: datetime) -> list[dict]:
+    async def province_fraud_counts(self, now: datetime) -> list[dict]:
         stmt = (
             select(Entity.province.label("province"), func.count().label("fraud_count"))
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
             .join(Account, Account.id == Transaction.from_account)
             .join(Entity, Entity.id == Account.entity_id)
-            .where(TransactionEvent.surfaced_at <= sim_now)
+            .where(TransactionEvent.surfaced_at <= now)
             .where(TransactionEvent.status.in_(("flagged", "blocked")))
             .where(Entity.province.is_not(None))
             .group_by(Entity.province)

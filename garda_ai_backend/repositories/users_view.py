@@ -10,7 +10,7 @@ class UserRiskRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def risk_list(self, sim_now: datetime, risk: str | None, limit: int) -> list[dict]:
+    async def risk_list(self, now: datetime, risk: str | None, limit: int) -> list[dict]:
         flagged = func.count().filter(TransactionEvent.status.in_(("flagged", "blocked")))
         stmt = (
             select(
@@ -29,7 +29,7 @@ class UserRiskRepository:
             .join(
                 TransactionEvent,
                 (TransactionEvent.transaction_id == Transaction.id)
-                & (TransactionEvent.surfaced_at <= sim_now),
+                & (TransactionEvent.surfaced_at <= now),
                 isouter=True,
             )
             .group_by(Entity.id, Entity.name, Entity.province, Account.risk_score, Account.risk_category)
@@ -48,8 +48,8 @@ class UserRiskRepository:
             for r in rows
         ]
 
-    async def profile(self, sim_now: datetime, entity_id: str) -> dict | None:
-        rows = await self.risk_list(sim_now, risk=None, limit=1000)
+    async def profile(self, now: datetime, entity_id: str) -> dict | None:
+        rows = await self.risk_list(now, risk=None, limit=1000)
         for r in rows:
             if r["entity_id"] == entity_id:
                 return r
