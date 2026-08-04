@@ -9,7 +9,10 @@ def test_migration_covers_all_tables():
     script = ScriptDirectory.from_config(cfg)
     head = script.get_current_head()
     assert head is not None, "no migration generated"
-    head_src = script.get_revision(head).module.__file__
-    text = open(head_src).read()
+    # Aggregate across the whole revision chain: tables may be created in an
+    # earlier migration and later ones only alter/drop (e.g. dropping sim_state).
+    text = "".join(
+        open(rev.module.__file__).read() for rev in script.walk_revisions()
+    )
     for table in Base.metadata.tables:
         assert table in text, f"{table} missing from migration"
