@@ -26,11 +26,14 @@ log = structlog.get_logger()
 
 
 def _resolve_paths(data_dir: str, trans_files: list[str]) -> list[str]:
-    return [
-        os.path.join(data_dir, f)
-        for f in trans_files
-        if os.path.exists(os.path.join(data_dir, f))
-    ]
+    paths: list[str] = []
+    for f in trans_files:
+        p = os.path.join(data_dir, f)
+        if os.path.exists(p):
+            paths.append(p)
+        else:
+            log.warning("sim.csv_missing", file=p)
+    return paths
 
 
 async def run_sim(settings: Settings) -> None:
@@ -38,6 +41,11 @@ async def run_sim(settings: Settings) -> None:
     if not paths:
         log.error("sim.error", reason="no Trans CSV found", data_dir=settings.data_dir)
         raise SystemExit(2)
+
+    if settings.ingest_url.startswith("http://") and not any(
+        h in settings.ingest_url for h in ("localhost", "127.0.0.1")
+    ):
+        log.warning("sim.insecure_url", ingest_url=settings.ingest_url)
 
     started = time.perf_counter()
     async with httpx.AsyncClient() as http:

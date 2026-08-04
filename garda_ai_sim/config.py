@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     dry_run: bool = False
     request_timeout_s: float = 30.0
     retries: int = 3
-    log_level: str = "INFO"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
 @lru_cache(maxsize=1)

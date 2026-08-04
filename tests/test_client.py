@@ -21,6 +21,15 @@ async def test_maps_response_and_sends_headers():
     assert seen["cid"] == "cid-1"
 
 
+async def test_malformed_2xx_raises_ingest_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": "not-a-list"})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+        client = IngestClient(c, "http://x", "tok")
+        with pytest.raises(IngestError):
+            await client.send([], correlation_id="cid")
+
+
 async def test_4xx_raises_without_retry():
     calls = 0
 

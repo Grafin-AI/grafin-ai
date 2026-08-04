@@ -10,7 +10,7 @@ class IngestSummary(NamedTuple):
 
 
 class IngestError(Exception):
-    """The backend rejected the batch (4xx: bad token / contract). Not retryable."""
+    """The backend rejected the batch (4xx) or returned a malformed 2xx body. Not retryable."""
 
 
 class IngestUnavailable(Exception):
@@ -56,10 +56,14 @@ class IngestClient:
             else:
                 if resp.status_code < 400:
                     try:
-                        results = list(resp.json()["results"])
+                        results = resp.json()["results"]
+                        if not isinstance(results, list):
+                            raise TypeError("results is not a list")
+                        ingested = sum(
+                            1 for r in results if isinstance(r, dict) and r.get("ingested")
+                        )
                     except (ValueError, KeyError, TypeError) as exc:
-                        raise IngestUnavailable("ingest returned a malformed response") from exc
-                    ingested = sum(1 for r in results if r.get("ingested"))
+                        raise IngestError("ingest returned a malformed response") from exc
                     return IngestSummary(ingested=ingested, duplicate=len(results) - ingested)
                 if resp.status_code < 500:
                     # A 4xx is a contract/auth problem — not transient; do not retry.

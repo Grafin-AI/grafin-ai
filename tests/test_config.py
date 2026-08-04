@@ -33,3 +33,10 @@ def test_rejects_nonpositive_speed(monkeypatch):
     monkeypatch.setenv("GARDA_SPEED", "0")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_rejects_invalid_log_level(monkeypatch):
+    monkeypatch.setenv("GARDA_INGEST_TOKEN", "tok")
+    monkeypatch.setenv("GARDA_LOG_LEVEL", "verbose")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

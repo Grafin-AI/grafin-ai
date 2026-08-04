@@ -9,4 +9,5 @@ RUN uv sync --frozen --no-dev
 # Trans CSVs mounted (set GARDA_DATA_DIR). NEVER deployed to production.
 RUN useradd --system --uid 1001 garda
 USER garda
+ENV UV_CACHE_DIR=/tmp/uv-cache
 CMD ["uv", "run", "--no-sync", "garda-sim"]
