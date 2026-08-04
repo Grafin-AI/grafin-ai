@@ -3,7 +3,6 @@ from sqlalchemy import func, select, text
 
 from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
 from garda_ai_backend.api.view_schemas import SystemHealthResponse
-from garda_ai_backend.repositories.sim import SimRepository
 from garda_ai_backend.schema import TransactionEvent
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
@@ -22,16 +21,9 @@ async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> Sys
     except Exception:
         redis_ok = False
 
-    sim_now = await SimRepository(session).get_sim_now()
-    surfaced = 0
-    if sim_now is not None:
-        surfaced = (
-            await session.execute(
-                select(func.count())
-                .select_from(TransactionEvent)
-                .where(TransactionEvent.surfaced_at <= sim_now)
-            )
-        ).scalar_one()
+    surfaced = (
+        await session.execute(select(func.count()).select_from(TransactionEvent))
+    ).scalar_one()
 
     return SystemHealthResponse(
         db_ok=db_ok,
