@@ -17,4 +17,6 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 8080
 
+ENV NGINX_ENVSUBST_FILTER=^BACKEND_URL$
+
 CMD ["nginx", "-g", "daemon off;"]
