@@ -25,6 +25,17 @@ services:
       timeout: 3s
       retries: 10
 
+  scoring:
+    build: { context: ../garda-ai-scoring }
+    environment:
+      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # internal only — not published to the host
+
   backend:
     build: { context: ../garda-ai-backend }
     environment:
@@ -32,51 +43,60 @@ services:
       GARDA_REDIS_URL: redis://redis:6379/0
       GARDA_JWT_SECRET: ${GARDA_JWT_SECRET:?set a >=32 char secret}
       GARDA_ENV: ${GARDA_ENV:-production}
+      GARDA_SCORING_URL: http://scoring:8000
+      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      scoring: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports: ["8000:8000"]
 
-  etl:
-    build: { context: ../garda-ai-pipeline }
-    command: ["uv", "run", "garda-etl"]
+  ingest:
+    build: { context: ../garda-ai-ingest }
     environment:
       GARDA_DATABASE_URL: *db_url
       GARDA_DATA_DIR: /data
     volumes:
       - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
     depends_on:
-      backend: { condition: service_started }
-      postgres: { condition: service_healthy }
+      backend: { condition: service_healthy }   # backend entrypoint ran alembic upgrade -> schema exists
     restart: "no"
-
-  replay:
-    build: { context: ../garda-ai-pipeline }
-    command: ["uv", "run", "garda-replay"]
-    environment:
-      GARDA_DATABASE_URL: *db_url
-      GARDA_REDIS_URL: redis://redis:6379/0
-      # false: the worker bootstraps the clock only on a fresh run and RESUMES from
-      # sim_now on restart. Set to "true" ONLY for a deliberate wipe-and-restart-over.
-      GARDA_RESET_CLOCK: "false"
-    depends_on:
-      etl: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-    restart: unless-stopped
 
   frontend:
     build: { context: ../garda-ai-dashboard-web }
     depends_on: [backend]
     ports: ["8080:8080"]
 
+  sim:
+    build: { context: ../garda-ai-sim }
+    profiles: ["sim"]
+    environment:
+      GARDA_INGEST_URL: http://backend:8000/api/v1/ingest
+      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      GARDA_DATA_DIR: /data
+    volumes:
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+    depends_on:
+      backend: { condition: service_healthy }
+      scoring: { condition: service_started }
+      ingest: { condition: service_completed_successfully }
+
   prometheus:
     image: prom/prometheus:latest
+    profiles: ["observability"]
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports: ["9090:9090"]
 
   grafana:
     image: grafana/grafana:latest
+    profiles: ["observability"]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
