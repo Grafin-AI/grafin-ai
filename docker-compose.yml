@@ -55,6 +55,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 30s
     ports: ["8000:8000"]
 
   ingest:
@@ -70,7 +71,8 @@ services:
 
   frontend:
     build: { context: ../garda-ai-dashboard-web }
-    depends_on: [backend]
+    depends_on:
+      backend: { condition: service_healthy }
     ports: ["8080:8080"]
 
   sim:
