@@ -29,7 +29,7 @@ make seed-secret
 make up
 
 # (Optional) Add simulation producer
-make up-sim
+make sim
 
 # (Optional) Add Prometheus + Grafana observability
 make obs
