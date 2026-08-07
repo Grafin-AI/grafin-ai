@@ -59,7 +59,24 @@ project, billing, and credentials.
    - `TF_VAR_jwt_secret`, `TF_VAR_ingest_token`, `TF_VAR_scoring_token`,
      `TF_VAR_db_password` environment variables, or
    - a `secrets.auto.tfvars` file (gitignored by `*.auto.tfvars`).
-4. **Apply:** `terraform apply`.
+4. **Apply in two phases** (Cloud Run validates that each image exists at create
+   time, but a clean project's Artifact Registry is empty on the first run):
+   1. **Phase 1 — infra + registry first:** create the Artifact Registry repo (and
+      the network/DB if you want them warming up):
+      ```bash
+      terraform apply \
+        -target=google_artifact_registry_repository.docker \
+        -target=google_service_networking_connection.psa \
+        -target=google_sql_database_instance.pg
+      ```
+   2. **Push all four images** (`backend`, `scoring`, `frontend`, `ingest`) to the
+      repo — via the per-repo CI or manually with `docker push` / `gcloud`. The
+      `artifact_repo` output gives the base path.
+   3. **Phase 2 — full apply:** now that every image exists, apply everything
+      (services + jobs included):
+      ```bash
+      terraform apply
+      ```
 5. **Run deploy-init jobs before first traffic:**
    ```bash
    gcloud run jobs execute garda-migrate --region <region> --wait
@@ -73,12 +90,23 @@ project, billing, and credentials.
 
 ## Security posture
 
-- **scoring** is `INGRESS_TRAFFIC_INTERNAL_ONLY` — never publicly reachable; the
-  backend invokes it in-network with `roles/run.invoker` + a scoring token.
+- **scoring** is `INGRESS_TRAFFIC_INTERNAL_ONLY` — the network gate keeps it off
+  the public internet. The backend reaches it over the VPC connector (backend
+  `egress = ALL_TRAFFIC` so the call to scoring's `*.run.app` URL is routed
+  through the connector and seen as internal). The `run.invoker` binding is
+  `allUsers`, which does **not** expose scoring publicly (ingress still blocks
+  that); it only drops the Google OIDC ID-token requirement so the app's
+  `GARDA_SCORING_TOKEN` header is the real service-to-service auth.
 - **Cloud SQL + Memorystore are private** (`ipv4_enabled=false`, PSA + VPC
-  connector, `egress = PRIVATE_RANGES_ONLY`). No public database endpoint.
-- **Secrets** live in Secret Manager and are injected into the backend/scoring
-  containers via `value_source.secret_key_ref` — never as plaintext env values.
+  connector). No public database endpoint.
+- **Secrets** live in Secret Manager and are injected via
+  `value_source.secret_key_ref` — never as plaintext env values. This includes
+  the assembled DB DSN (`garda-database-url`), so the password never rides in a
+  plaintext `GARDA_DATABASE_URL` env var readable by anyone with `run.viewer`.
+- **Least-privilege secret access:** each secret is readable only by the
+  workloads that need it — `garda-jwt-secret`/`garda-ingest-token` → backend;
+  `garda-scoring-token` → backend + scoring; `garda-database-url` → backend +
+  jobs. The internal scoring SA can therefore neither forge JWTs nor read the DB.
 - **Per-workload service accounts** (`garda-backend`, `garda-scoring`,
   `garda-frontend`, `garda-jobs`) receive only the roles they need
   (`cloudsql.client`, `secretmanager.secretAccessor`, `run.invoker`).

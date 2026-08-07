@@ -69,3 +69,11 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+# Only consumed when deploy_observability = true. Sets the Grafana admin password
+# instead of the default admin/admin. Leave "" when observability is disabled.
+variable "grafana_admin_password" {
+  type      = string
+  sensitive = true
+  default   = ""
+}

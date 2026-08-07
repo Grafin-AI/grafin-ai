@@ -31,28 +31,36 @@ resource "google_compute_instance" "observability" {
     }
   }
 
-  # Private-only network interface: reachable inside the VPC to scrape the
-  # backend/scoring /metrics endpoints. No external IP.
+  # Reachable inside the VPC to scrape the backend/scoring /metrics endpoints.
+  # The ephemeral external IP (access_config) lets the startup script pull the
+  # Docker/apt packages it needs to bootstrap Prometheus + Grafana.
   network_interface {
     network    = google_compute_network.vpc.id
     subnetwork = google_compute_subnetwork.subnet.id
+    access_config {}
   }
 
   service_account {
-    email  = google_service_account.observability[0].email
-    scopes = ["cloud-platform"]
+    email = google_service_account.observability[0].email
+    # Narrow scopes: just enough to write logs/metrics, not full cloud-platform.
+    scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write",
+    ]
   }
 
   # Minimal bootstrap: install Prometheus + Grafana via Docker. Real scrape
-  # configs are managed out-of-band; this keeps the resource self-contained and
-  # valid without hard-coding demo credentials.
+  # configs are managed out-of-band. The Grafana admin password is injected from
+  # var.grafana_admin_password rather than defaulting to admin/admin.
   metadata_startup_script = <<-EOT
     #!/bin/bash
     set -euo pipefail
     apt-get update && apt-get install -y docker.io
     systemctl enable --now docker
     docker run -d --name prometheus -p 9090:9090 prom/prometheus
-    docker run -d --name grafana -p 3000:3000 grafana/grafana
+    docker run -d --name grafana -p 3000:3000 \
+      -e GF_SECURITY_ADMIN_PASSWORD='${var.grafana_admin_password}' \
+      grafana/grafana
   EOT
 
   depends_on = [google_project_service.enabled]

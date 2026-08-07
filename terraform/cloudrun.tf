@@ -30,6 +30,9 @@ resource "google_cloud_run_v2_service" "scoring" {
       }
     }
   }
+
+  # Ensure the scoring SA can read its secret before the service mounts it.
+  depends_on = [google_secret_manager_secret_iam_member.access]
 }
 
 resource "google_cloud_run_v2_service" "backend" {
@@ -44,7 +47,10 @@ resource "google_cloud_run_v2_service" "backend" {
     }
     vpc_access {
       connector = google_vpc_access_connector.connector.id
-      egress    = "PRIVATE_RANGES_ONLY"
+      # ALL_TRAFFIC so the call to scoring's *.run.app URL is routed through the
+      # connector and seen as internal (matching scoring's INTERNAL_ONLY ingress).
+      # Backend has no other outbound needs, so no Cloud NAT is required.
+      egress = "ALL_TRAFFIC"
     }
     containers {
       image = var.backend_image
@@ -52,8 +58,13 @@ resource "google_cloud_run_v2_service" "backend" {
         container_port = 8000
       }
       env {
-        name  = "GARDA_DATABASE_URL"
-        value = local.db_url
+        name = "GARDA_DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.s["garda-database-url"].secret_id
+            version = "latest"
+          }
+        }
       }
       env {
         name  = "GARDA_REDIS_URL"
@@ -94,6 +105,9 @@ resource "google_cloud_run_v2_service" "backend" {
     # WebSocket relay: allow long-lived requests
     timeout = "3600s"
   }
+
+  # Ensure the backend SA can read its secrets before the service mounts them.
+  depends_on = [google_secret_manager_secret_iam_member.access]
 }
 
 # Backend is public: allow unauthenticated (app enforces JWT/ingest-token itself)
