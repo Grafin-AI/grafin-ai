@@ -62,35 +62,44 @@ gcloud projects add-iam-policy-binding garda-ai-platform \
 
 ## Phase 2: Terraform Infrastructure
 
-### Step 2.1: Prepare Terraform Variables
+### Step 2.1: Prepare Terraform Variables and Environment
 
 Navigate to `garda-ai-deploy/terraform/`:
 
 ```bash
 cd garda-ai-deploy/terraform
 
+# Set region and project (MUST match across all commands below)
+export REGION="asia-southeast1"
+export PROJECT="your-gcp-project"
+export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/garda"
+
 # Copy the example tfvars
 cp terraform.tfvars.example terraform.tfvars
 
-# Edit terraform.tfvars with your values:
-#   - project_id: your GCP project ID
-#   - region: desired region (e.g., us-central1)
-#   - domain: your custom domain (e.g., garda.example.com)
-#   - deploy_observability: true/false (self-hosted Prometheus/Grafana)
-#   - image_tags: backend, frontend, scoring, ingest image tags (e.g., latest)
-
-# Example:
+# Edit terraform.tfvars with your values (these are the FULL image references):
 cat > terraform.tfvars << 'EOF'
-project_id            = "garda-ai-platform"
-region                = "us-central1"
-domain                = "garda.example.com"
-deploy_observability  = false
-backend_image_tag     = "latest"
-frontend_image_tag    = "latest"
-scoring_image_tag     = "latest"
-ingest_image_tag      = "latest"
+project_id = "your-gcp-project"
+region     = "asia-southeast1"
+domain     = ""
+backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/backend:latest"
+frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/frontend:latest"
+scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/scoring:latest"
+ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/ingest:latest"
 EOF
+
+# Secret values are supplied via environment variables (NOT committed to tfvars):
+export TF_VAR_jwt_secret="<your-jwt-secret-32-chars-minimum>"
+export TF_VAR_ingest_token="<your-ingest-token>"
+export TF_VAR_scoring_token="<your-scoring-token>"
+export TF_VAR_db_password="<postgres-password>"
 ```
+
+**Important:** The four secrets are created by Terraform (not out-of-band). They are:
+- `garda-jwt-secret` (JWT signing key)
+- `garda-ingest-token` (bearer token for `/api/v1/ingest`)
+- `garda-scoring-token` (bearer token for backend → scoring auth)
+- Database password is used to create the Cloud SQL user; the actual DSN is stored as `garda-database-url` secret
 
 ### Step 2.2: Set Up Remote State Backend (Critical!)
 
@@ -98,7 +107,7 @@ Terraform state contains secrets and must be stored securely:
 
 ```bash
 # Create a GCS bucket for remote state
-gsutil mb -p garda-ai-platform -l us-central1 gs://garda-ai-tf-state
+gsutil mb -p ${PROJECT} -l ${REGION} gs://garda-ai-tf-state
 
 # Enable versioning for disaster recovery
 gsutil versioning set on gs://garda-ai-tf-state
@@ -117,102 +126,106 @@ EOF
 terraform init
 ```
 
-### Step 2.3: Validate and Plan
+### Step 2.3: Validate
 
 ```bash
 # Validate syntax
 terraform validate
-
-# Generate plan
-terraform plan -out=tfplan
-
-# Review the plan carefully before proceeding
 ```
 
 ### Step 2.4: Two-Phase Apply (Critical for Cloud Run Image Validation)
 
-**Why two phases?** Cloud Run services validate that images exist at deployment time. We must push images before creating the services.
+**Why two phases?** Cloud Run services validate that images exist at deployment time. We must push images BEFORE creating the services.
 
-#### Phase 2.4a: Provision Infrastructure (Network, DB, Registry, Secrets)
+**Phase 1 → Phase 2 → Phase 3:**
+1. **Phase 1:** Provision infrastructure (VPC, Cloud SQL, Memorystore, Artifact Registry, secrets)
+2. **Phase 2:** Build and push all 4 images to Artifact Registry
+3. **Phase 3:** Deploy services and jobs (now that images exist)
+
+#### Phase 2.4.1: Provision Infrastructure
 
 ```bash
-# Apply only the prerequisites: VPC, Cloud SQL, Memorystore, Artifact Registry, Secret Manager
-terraform apply -target=google_artifact_registry_repository.garda \
+# Apply infrastructure targets ONLY (no Cloud Run services/jobs yet).
+# Do NOT use a saved plan file with -target (Terraform rejects this).
+terraform apply \
+  -target=google_project_service.enabled \
+  -target=google_artifact_registry_repository.docker \
   -target=google_compute_network.vpc \
+  -target=google_compute_subnetwork.subnet \
   -target=google_vpc_access_connector.connector \
-  -target=google_sql_database_instance.postgres \
-  -target=google_sql_database.garda \
-  -target=google_sql_user.garda \
+  -target=google_service_networking_connection.psa \
+  -target=google_sql_database_instance.pg \
+  -target=google_sql_database.db \
+  -target=google_sql_user.user \
   -target=google_redis_instance.redis \
-  -target=google_secret_manager_secret.jwt_secret \
-  -target=google_secret_manager_secret.ingest_token \
-  -target=google_secret_manager_secret.scoring_token \
-  -target=google_secret_manager_secret.db_password \
-  tfplan
+  -target=google_secret_manager_secret.s \
+  -target=google_secret_manager_secret_version.v
 ```
 
-#### Phase 2.4b: Set Secret Values (Out-of-Band)
+**Note:** Secrets are created by Terraform from the `TF_VAR_*` environment variables. Do NOT use `gcloud secrets versions add` out-of-band (the Terraform-managed versions will take precedence).
 
-```bash
-# Create secret versions (replace <VALUE> with actual secrets)
-echo -n "<your-jwt-secret-32-chars-minimum>" | \
-  gcloud secrets versions add garda-jwt-secret --data-file=-
-
-echo -n "<your-ingest-token>" | \
-  gcloud secrets versions add garda-ingest-token --data-file=-
-
-echo -n "<your-scoring-token>" | \
-  gcloud secrets versions add garda-scoring-token --data-file=-
-
-echo -n "<postgres-password>" | \
-  gcloud secrets versions add garda-db-password --data-file=-
-```
-
-#### Phase 2.4c: Build and Push Images to Artifact Registry
+#### Phase 2.4.2: Build and Push Images
 
 Configure Docker for Artifact Registry and build images in each service repo:
 
 ```bash
-# Configure Docker auth
-gcloud auth configure-docker us-central1-docker.pkg.dev
+# Authenticate Docker to Artifact Registry
+gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
 # For each service repo (backend, frontend, scoring, ingest):
 cd ../garda-ai-backend
 
 # Build and tag image
-docker build -t us-central1-docker.pkg.dev/garda-ai-platform/garda/backend:latest .
+docker build -t ${REGISTRY}/backend:latest .
 
 # Push image
-docker push us-central1-docker.pkg.dev/garda-ai-platform/garda/backend:latest
+docker push ${REGISTRY}/backend:latest
 
-# Repeat for frontend, scoring, ingest
-# (Or trigger CI workflows to auto-push on push to main)
+# Repeat for frontend, scoring, ingest (or trigger CI deploy.yml on push to main)
+cd ../garda-ai-dashboard-web
+docker build -t ${REGISTRY}/frontend:latest .
+docker push ${REGISTRY}/frontend:latest
+
+cd ../garda-ai-scoring
+docker build -t ${REGISTRY}/scoring:latest .
+docker push ${REGISTRY}/scoring:latest
+
+cd ../garda-ai-ingest
+docker build -t ${REGISTRY}/ingest:latest .
+docker push ${REGISTRY}/ingest:latest
 ```
 
-#### Phase 2.4d: Apply Full Infrastructure (Services + Jobs)
+**Alternative:** Let CI/CD do the build and push:
+- Push each service repo to `main` → deploy.yml triggers → images are built and pushed automatically to Artifact Registry
+
+#### Phase 2.4.3: Deploy Services and Jobs
 
 ```bash
 cd garda-ai-deploy/terraform
 
-# Now apply the full Terraform plan (services, jobs, domain mappings)
-terraform apply tfplan
+# Now apply the FULL Terraform (services, jobs, domain mappings, etc.)
+# All images exist, so Cloud Run validation will pass.
+terraform apply
 ```
 
 ---
 
 ## Phase 3: Deploy-Init Jobs
 
-Before services take traffic, run the initialization jobs:
+Before services take traffic, run the initialization jobs in order:
 
 ```bash
+# Set region for all gcloud commands
+export REGION="asia-southeast1"
+
 # 1. Run database migrations
 gcloud run jobs execute garda-migrate \
-  --region=us-central1 \
+  --region=${REGION} \
   --wait
 
 # 2. Load reference dataset (ingest seed)
 gcloud run jobs execute garda-ingest \
-  --region=us-central1 \
+  --region=${REGION} \
   --wait
 ```
 
@@ -225,15 +238,17 @@ Each service repo needs GitHub Actions to authenticate to GCP with short-lived c
 ### Step 4.1: Create Workload Identity Provider
 
 ```bash
+export PROJECT="your-gcp-project"
+
 # Create the provider
 gcloud iam workload-identity-pools create "github-pool" \
-  --project=garda-ai-platform \
+  --project=${PROJECT} \
   --location=global \
   --display-name="GitHub Actions"
 
 # Create OIDC provider configuration
 gcloud iam workload-identity-providers create-oidc "github-provider" \
-  --project=garda-ai-platform \
+  --project=${PROJECT} \
   --location=global \
   --display-name="GitHub" \
   --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
@@ -246,25 +261,25 @@ gcloud iam workload-identity-providers create-oidc "github-provider" \
 ```bash
 # Create service account
 gcloud iam service-accounts create github-deployer \
-  --project=garda-ai-platform \
+  --project=${PROJECT} \
   --display-name="GitHub Actions Deployer"
 
 # Grant Cloud Run deployment permissions
-gcloud projects add-iam-policy-binding garda-ai-platform \
-  --member=serviceAccount:github-deployer@garda-ai-platform.iam.gserviceaccount.com \
+gcloud projects add-iam-policy-binding ${PROJECT} \
+  --member=serviceAccount:github-deployer@${PROJECT}.iam.gserviceaccount.com \
   --role=roles/run.admin
 
 # Grant Artifact Registry push permissions
-gcloud projects add-iam-policy-binding garda-ai-platform \
-  --member=serviceAccount:github-deployer@garda-ai-platform.iam.gserviceaccount.com \
+gcloud projects add-iam-policy-binding ${PROJECT} \
+  --member=serviceAccount:github-deployer@${PROJECT}.iam.gserviceaccount.com \
   --role=roles/artifactregistry.writer
 
 # Allow GitHub to impersonate the service account
 gcloud iam service-accounts add-iam-policy-binding \
-  github-deployer@garda-ai-platform.iam.gserviceaccount.com \
-  --project=garda-ai-platform \
+  github-deployer@${PROJECT}.iam.gserviceaccount.com \
+  --project=${PROJECT} \
   --role=roles/iam.workloadIdentityUser \
-  --member="principalSet://iam.googleapis.com/projects/garda-ai-platform/locations/global/workloadIdentityPools/github-pool/attribute.repository/your-org/repo-name"
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT}/locations/global/workloadIdentityPools/github-pool/attribute.repository/your-org/repo-name"
 ```
 
 ### Step 4.3: Set Repository Secrets and Variables
@@ -272,12 +287,12 @@ gcloud iam service-accounts add-iam-policy-binding \
 For each service repo (`garda-ai-backend`, `garda-ai-dashboard-web`, `garda-ai-scoring`, `garda-ai-ingest`):
 
 **Repository Variables** (Settings → Secrets and variables → Variables):
-- `GCP_PROJECT`: `garda-ai-platform`
-- `GCP_REGION`: `us-central1`
+- `GCP_PROJECT`: `your-gcp-project`
+- `GCP_REGION`: `asia-southeast1`
 
 **Repository Secrets** (Settings → Secrets and variables → Secrets):
 - `GCP_WIF_PROVIDER`: The Workload Identity Provider resource name (from step 4.1 output)
-- `GCP_DEPLOYER_SA`: `github-deployer@garda-ai-platform.iam.gserviceaccount.com`
+- `GCP_DEPLOYER_SA`: `github-deployer@your-gcp-project.iam.gserviceaccount.com`
 
 Example WIF Provider name: `projects/123456/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
 
@@ -288,17 +303,19 @@ Example WIF Provider name: `projects/123456/locations/global/workloadIdentityPoo
 ### Step 5.1: Create Cloud Run Domain Mappings
 
 ```bash
+export REGION="asia-southeast1"
+
 # Map frontend
 gcloud run domain-mappings create \
   --service=garda-frontend \
   --domain=app.garda.example.com \
-  --region=us-central1
+  --region=${REGION}
 
 # Map backend
 gcloud run domain-mappings create \
   --service=garda-backend \
   --domain=api.garda.example.com \
-  --region=us-central1
+  --region=${REGION}
 ```
 
 ### Step 5.2: Create DNS Records
@@ -333,11 +350,13 @@ curl -I https://api.garda.example.com/healthz
 ### Step 6.1: Check Service Status
 
 ```bash
-gcloud run services list --region=us-central1
+export REGION="asia-southeast1"
 
-gcloud run services describe garda-backend --region=us-central1
-gcloud run services describe garda-frontend --region=us-central1
-gcloud run services describe garda-scoring --region=us-central1
+gcloud run services list --region=${REGION}
+
+gcloud run services describe garda-backend --region=${REGION}
+gcloud run services describe garda-frontend --region=${REGION}
+gcloud run services describe garda-scoring --region=${REGION}
 ```
 
 ### Step 6.2: Test Live Endpoints
@@ -359,14 +378,16 @@ curl -X POST https://api.garda.example.com/api/v1/ingest \
 ### Step 6.3: Monitor Logs
 
 ```bash
+export REGION="asia-southeast1"
+
 # Backend logs
-gcloud run services logs read garda-backend --region=us-central1 --limit=50
+gcloud run services logs read garda-backend --region=${REGION} --limit=50
 
 # Scoring service logs
-gcloud run services logs read garda-scoring --region=us-central1 --limit=50
+gcloud run services logs read garda-scoring --region=${REGION} --limit=50
 
 # Ingest job execution logs
-gcloud run jobs describe garda-ingest --region=us-central1
+gcloud run jobs describe garda-ingest --region=${REGION}
 ```
 
 ---
@@ -417,9 +438,9 @@ terraform output grafana_url
 
 ### Images Not Found at Deploy Time
 
-**Problem:** `gcloud run deploy` fails with "image not found in Artifact Registry"
+**Problem:** `terraform apply` fails with "image not found in Artifact Registry"
 
-**Solution:** Ensure images are pushed before running `terraform apply` (Phase 2.4c).
+**Solution:** Ensure images are pushed (Phase 2.4.2) before running the full `terraform apply` (Phase 2.4.3).
 
 ### Database Connection Timeouts
 
@@ -429,6 +450,7 @@ terraform output grafana_url
 1. Verify VPC connector is attached to Cloud Run services
 2. Check Cloud SQL private IP is in the same VPC
 3. Verify Cloud SQL has the correct database and user
+4. Check `TF_VAR_db_password` was set correctly during `terraform apply`
 
 ### Secret Access Denied
 
@@ -436,7 +458,7 @@ terraform output grafana_url
 
 **Solution:**
 1. Verify service account has `roles/secretmanager.secretAccessor`
-2. Check secret version exists (Step 4.2)
+2. Check Terraform created the secrets (Phase 2.4.1 created the secret resources and versions from `TF_VAR_*`)
 3. Review IAM policy for the service account
 
 ### Scoring Service Connection Refused
@@ -455,13 +477,15 @@ terraform output grafana_url
 To rollback a deployment:
 
 ```bash
+export REGION="asia-southeast1"
+
 # List Cloud Run service revisions
-gcloud run revisions list --service=garda-backend --region=us-central1
+gcloud run revisions list --service=garda-backend --region=${REGION}
 
 # Direct traffic to a previous revision
 gcloud run services update-traffic garda-backend \
   --to-revisions=<PREVIOUS_REVISION_ID>=100 \
-  --region=us-central1
+  --region=${REGION}
 ```
 
 ---

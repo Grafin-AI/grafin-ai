@@ -67,7 +67,7 @@ Default login: `admin@garda.local` / `admin`
 make up
 
 # Start with simulator
-make up-sim
+make sim
 
 # Start with observability stack
 docker compose --profile observability up
@@ -81,9 +81,6 @@ make down
 # View logs
 docker compose logs -f backend
 docker compose logs -f frontend
-
-# Reset simulation data
-make demo-reset
 ```
 
 ### Environment Variables

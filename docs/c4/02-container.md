@@ -87,7 +87,7 @@ For local development, a mirror stack runs via `docker-compose`:
 ```bash
 cp .env.example .env                          # set secrets/tokens
 make up                                       # default stack (no sim, no observability)
-make up-sim                                   # add sim producer
+make sim                                      # add sim producer
 make obs                                      # add Prometheus/Grafana
 ```
 
