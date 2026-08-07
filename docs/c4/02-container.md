@@ -1,90 +1,136 @@
 # Garda AI — C4 Level 2: Container
 
-**Date:** 2026-06-22
-**Source:** Authored from the approved design (`docs/superpowers/specs/2026-06-22-system-architecture-design.md`). Component + Code levels are generated per repo (bottom-up) after implementation.
+**Date:** 2026-08-08 (GCP Cloud Run deployment topology)
+**Source:** Authored from the approved design (`docs/superpowers/specs/2026-06-25-deploy-split-design.md`). Component + Code levels are generated per repo (bottom-up) after implementation.
 
-## Containers
+## Containers (GCP Cloud Run)
 
-| Container | Repo | Tech | Responsibility |
-|---|---|---|---|
-| **Dashboard Web** | `garda-ai-dashboard-web` | React 18, Vite, TanStack Query, nginx | All views; REST reads + WS live feed; auth UI; resync-on-reconnect. nginx also terminates TLS and proxies `/api` + `/ws`. |
-| **Backend API** | `garda-ai-backend` | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations for every view, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** Token-gated `POST /api/v1/ingest` write-path: scores each batch via the scoring service, persists transactions/events/alerts, publishes to Redis for the WS relay. |
-| **Pipeline Worker** | `garda-ai-pipeline` | Python, pandas/polars, asyncpg | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine (`ScoringProvider`). Only writer of `transactions` / `transaction_events`. Builds from its **own** context; imports nothing from the backend — shares the DB schema and the `garda:events:live` Redis channel **by contract**, not by code. |
-| **Scoring Service** | `garda-ai-scoring` | FastAPI (stateless) | Stateless scorer exposing `POST /v1/score`; returns scores/labels for a batch of transactions. Shares **no code** with the backend — the scoring API is a contract only. Called by the backend ingest write-path (Phase 2); the replay scoring engine still runs in-process in Pipeline Worker until Phase 5. |
-| **PostgreSQL** | — | PostgreSQL | Single source of truth: accounts, transactions, scored events, alerts, users, sim_state. |
-| **Redis** | — | Redis | Pub/sub (live events), aggregate cache, rate-limit, refresh-token store, sim_state cache. |
-| **Prometheus** | `garda-ai-deploy` | Prometheus | Scrapes `/metrics` from backend + pipeline. |
-| **Grafana** | `garda-ai-deploy` | Grafana | Provisioned dashboards (API health, replay progress, fraud-rate over sim time). |
+| Container | Repo / Service | Tech | Responsibility | Ingress |
+|---|---|---|---|---|
+| **Dashboard Web** | `garda-ai-dashboard-web` / Cloud Run Service | React 18, Vite, TanStack Query, nginx | SPA frontend + reverse proxy; terminates TLS; proxies `/api` + `/ws` to backend. | Public (`https://app.<domain>`) |
+| **Backend API** | `garda-ai-backend` / Cloud Run Service | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** Token-gated `POST /api/v1/ingest` write-path: scores each batch via scoring service, persists transactions/events/alerts, publishes to Redis for WS relay. | Public (`https://api.<domain>`) |
+| **Scoring Service** | `garda-ai-scoring` / Cloud Run Service | FastAPI (stateless) | Stateless scorer exposing `POST /v1/score`; returns scores/labels for a batch. Called by backend ingest path via internal URL. | Internal (VPC only) |
+| **Migrate Job** | `garda-ai-backend` / Cloud Run Job | FastAPI + Alembic | One-shot schema migration: `alembic upgrade head`. Runs before ingest + services take traffic. | None (one-shot) |
+| **Ingest Job** | `garda-ai-ingest` / Cloud Run Job | Python | Reference dataset seed: loads HI-Small transactions into Postgres. Runs after migrate. | None (one-shot) |
+| **Cloud SQL** | GCP Managed Service | PostgreSQL 16 | Source of truth: accounts, transactions, events, alerts, users. Private IP via VPC connector. | VPC Private |
+| **Memorystore** | GCP Managed Service | Redis 7 | Pub/sub (live events), cache, rate-limit, refresh-token store. Private IP. | VPC Private |
+| **Secret Manager** | GCP Managed Service | — | Centralized secrets: JWT secret, ingest token, scoring token, DB password. | Service-account scoped |
+| **Artifact Registry** | GCP Managed Service | Docker repos | Stores built images for backend, frontend, scoring, ingest services + jobs. | Service-account scoped |
+| **VPC Connector** | GCP Managed Service | Serverless VPC Access | Bridges Cloud Run to private Cloud SQL + Memorystore. | VPC only |
 
 ## Diagram
 
 ```mermaid
 C4Container
-    title Container — Garda AI AML Platform
+    title Container — Garda AI AML Platform (GCP Cloud Run)
 
     Person(analyst, "AML Analyst", "Masked PII")
-    Person(admin, "Platform Admin", "Replay control + unmask")
-    System_Ext(dataset, "IBM AML HI-Small CSV", "One-time ETL")
-    System_Ext(producer, "Producer", "Local sim (garda-ai-sim, Phase 4) or real feed; bearer ingest token")
+    Person(admin, "Platform Admin", "Unmasked PII (audited)")
+    System_Ext(sim, "garda-ai-sim", "Local producer — streams via /api/v1/ingest")
 
-    System_Boundary(garda, "Garda AI Platform") {
-        Container(web, "Dashboard Web", "React 18 / Vite / nginx", "All views, live monitor, auth UI, resync-on-reconnect")
-        Container(api, "Backend API", "FastAPI / SQLAlchemy 2.0", "REST aggregations, WS relay, auth/RBAC, PII masking. Owns schema.")
-        Container(worker, "Pipeline Worker", "Python / asyncpg", "ETL + replay (accel. clock) + scoring engine")
-        Container(scoring, "Scoring Service", "FastAPI (stateless)", "POST /v1/score — scores a batch; contract-only, shares no code")
-        ContainerDb(pg, "PostgreSQL", "PostgreSQL", "Source of truth: accounts, transactions, events, alerts, users, sim_state")
-        ContainerDb(redis, "Redis", "Redis", "Pub/sub, cache, rate-limit, refresh tokens")
-        Container(prom, "Prometheus", "Prometheus", "Scrapes metrics")
-        Container(graf, "Grafana", "Grafana", "Operational dashboards")
+    System_Boundary(gcp, "GCP Project") {
+        System_Boundary(pubsub, "Public (TLS)") {
+            Container(web, "Dashboard Web", "nginx + React 18", "SPA frontend, reverse proxy to backend")
+            Container(api_pub, "Backend API (public)", "Cloud Run Service", "REST reads, ingest writes, WS relay")
+        }
+
+        System_Boundary(vpcnet, "VPC Network") {
+            Container(scoring, "Scoring Service", "Cloud Run Service", "POST /v1/score (internal ingress only)")
+            ContainerDb(sql, "Cloud SQL", "PostgreSQL 16", "Schema, accounts, transactions, events, alerts")
+            ContainerDb(redis, "Memorystore", "Redis 7", "Pub/sub (live), cache, tokens")
+            Container(vpc_conn, "VPC Connector", "Serverless Access", "Bridges Cloud Run to private SQL/Redis")
+        }
+
+        Container(migrate_job, "Migrate Job", "Cloud Run Job", "alembic upgrade head (pre-deploy init)")
+        Container(ingest_job, "Ingest Job", "Cloud Run Job", "Reference seed: loads HI-Small")
+        Container(secrets, "Secret Manager", "Secrets", "JWT secret, ingest token, scoring token, DB password")
+        Container(registry, "Artifact Registry", "Docker repos", "backend, frontend, scoring, ingest images")
     }
 
-    Rel(analyst, web, "Uses", "HTTPS/WSS")
-    Rel(admin, web, "Operates", "HTTPS/WSS")
-    Rel(web, api, "REST reads + auth", "HTTPS /api")
-    Rel(web, api, "Live feed", "WSS /ws/live")
+    Rel(analyst, web, "Uses", "HTTPS/WSS (TLS)")
+    Rel(admin, web, "Operates", "HTTPS/WSS (TLS)")
+    Rel(web, api_pub, "Proxied by nginx", "HTTP (same-origin)")
 
-    Rel(dataset, worker, "Bulk loaded by", "COPY")
-    Rel(producer, api, "Ingest batches (write entrypoint)", "HTTPS POST /api/v1/ingest, bearer ingest token")
-    Rel(api, scoring, "Scores each ingested batch", "HTTP POST /v1/score, bearer scoring token")
-    Rel(worker, pg, "1) writes scored event + COMMIT", "SQL")
-    Rel(worker, redis, "2) publishes after commit", "pub/sub")
-    Rel(api, pg, "Reads aggregates / writes auth", "SQL")
-    Rel(api, redis, "Cache, tokens, subscribes to live channel", "RESP")
+    Rel(sim, api_pub, "Ingest batches", "HTTPS /api/v1/ingest, bearer token")
+    Rel(api_pub, scoring, "Scores batches", "HTTP /v1/score, bearer token, via VPC")
+    Rel(api_pub, sql, "Reads/writes", "SQL via VPC connector")
+    Rel(api_pub, redis, "Cache, tokens, sub/pub", "RESP via VPC connector")
 
-    Rel(prom, api, "Scrapes", "/metrics")
-    Rel(prom, worker, "Scrapes", "/metrics")
-    Rel(graf, prom, "Queries", "PromQL")
+    Rel(migrate_job, sql, "Runs migrations", "SQL")
+    Rel(ingest_job, sql, "Loads reference data", "SQL")
+
+    Rel(secrets, api_pub, "Token/secret refs", "IAM service account")
+    Rel(secrets, scoring, "Scoring token", "IAM service account")
+    Rel(secrets, ingest_job, "DB password", "IAM service account")
+
+    Rel(registry, web, "Deployed from", "Cloud Run pull")
+    Rel(registry, api_pub, "Deployed from", "Cloud Run pull")
+    Rel(registry, scoring, "Deployed from", "Cloud Run pull")
+    Rel(registry, ingest_job, "Deployed from", "Cloud Run pull")
 
     UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
 ```
 
+## Local Development (docker-compose)
+
+For local development, a mirror stack runs via `docker-compose`:
+- `postgres:16-alpine` (same schema as Cloud SQL)
+- `redis:7-alpine` (same channel/cache as Memorystore)
+- `backend` service (migrates, seeds, serves)
+- `scoring` service (internal to compose network)
+- `frontend` service (nginx with `${BACKEND_URL}=http://backend:8000`)
+- Optional `ingest` one-shot (loads reference seed)
+- Optional `sim` profile (streams via `/api/v1/ingest`)
+- Optional `observability` profile (Prometheus + Grafana)
+
+**Run locally:**
+```bash
+cp .env.example .env                          # set secrets/tokens
+make up                                       # default stack (no sim, no observability)
+make up-sim                                   # add sim producer
+make obs                                      # add Prometheus/Grafana
+```
+
+See `README.md` for full quickstart.
+
 ## Critical flows
 
 **Live transaction (commit-then-notify):**
-`Worker.score()` → INSERT `transaction_events` → **COMMIT** (Postgres durable) → publish to Redis → `Backend` WS relay → `Dashboard` appends events with `seq >` cursor. On reconnect the dashboard backfills via `GET /transactions/live?after_seq=` from Postgres. Postgres is authoritative; WS is notification only → eventually consistent, never divergent.
+Backend ingest → score via scoring service → INSERT `transaction_events` + alerts → **COMMIT** (Postgres durable) → publish to Redis `garda:events:live` → WS relay → Dashboard. On reconnect, dashboard backfills via `GET /transactions/live?after_seq=` from Postgres. Postgres is authoritative; WS is notification only.
 
-**Dashboard read:** `Dashboard` → `Backend` REST → SQL aggregation over events surfaced so far (`surfaced_at ≤ sim_now`), Redis-cached by sim-clock bucket.
+**Dashboard read:** Dashboard → Backend REST → SQL aggregation over persisted events. Redis-cached per time bucket.
 
-**Simulation control (admin):** `Dashboard` → `Backend POST /sim/control` → writes `sim_state` → `Worker` reads and adjusts replay speed / play / pause / seek.
+## Deployment flow
+
+1. **Build phase (per repo CI):** Each service repo runs `.github/workflows/ci.yml` (test/lint) and `.github/workflows/deploy.yml` on push to `main`.
+   - Deploy workflow: authenticate via Workload Identity Federation, build image, push to Artifact Registry.
+2. **Terraform provisioning:** `garda-ai-deploy/terraform/` provisions GCP infrastructure: networking, Cloud SQL, Memorystore, Secret Manager, services, jobs.
+3. **Deploy-init jobs:** Operator runs `gcloud run jobs execute garda-migrate` then `gcloud run jobs execute garda-ingest` to prepare data.
+4. **Service deployment:** Backend, frontend, and scoring services auto-deploy from Artifact Registry on push (or manual trigger).
 
 ## Notes
 
-- Containers map 1:1 to repos (polyrepo); Postgres/Redis/Prometheus/Grafana are infra provisioned via `garda-ai-deploy` docker-compose.
-- The scoring engine is a **module inside Pipeline Worker** now; the dashed Phase-2 path promotes it to a standalone Model Service container behind the same `ScoringProvider` interface.
-- **No service repo depends on another in code.** The backend is the schema **source of truth** via Alembic migrations applied at deploy init; the pipeline keeps its own local channel constant + a committed DDL snapshot for tests and writes via raw SQL. The only pipeline↔backend couplings are runtime/data: both connect to Postgres, and the pipeline publishes to the `garda:events:live` Redis channel that the backend's WS relay consumes. These are data couplings shared **by contract** (duplicated, not imported), not build/code dependencies.
+- **Service-to-service auth:** Backend → scoring uses HTTP with bearer token (scoring token from Secret Manager). Backend and scoring are in the same VPC via VPC connector.
+- **No long-lived API keys:** All GCP authentication is via Workload Identity Federation; CI/CD workflows assume GitHub Actions' OIDC token exchange for short-lived GCP credentials.
+- **Frontend templating:** nginx image uses env substitution for the backend upstream (`${BACKEND_URL}`). Local compose sets it to `http://backend:8000`; Terraform template injects the backend Cloud Run URL.
+- **Secrets management:** All secrets (JWT, ingest token, scoring token, DB password) are stored in GCP Secret Manager. Service accounts have least-privilege access (IAM roles).
+- **Data residency:** All data persists in Cloud SQL + Memorystore within the GCP project region.
+- **Observability:** Cloud Monitoring + optional self-hosted Prometheus/Grafana (controlled via Terraform `deploy_observability` variable).
 
-> **Updated 2026-06-23:** pipeline decoupled from backend — own build context; channel + schema shared by contract.
+> **Updated 2026-08-08 (Phase 6 — Deploy):** Moved from polyrepo compose to GCP Cloud Run. Pipeline containers (ETL, replay) deleted. Each service owns CI/CD. Nginx templated for multi-environment.
 
-> **Updated 2026-06-25 (Phase 2):** the `garda-ai-scoring` service (Phase 1, stateless `POST /v1/score`) plus the backend `POST /api/v1/ingest` write-path are **additive**. The ingest path scores each batch via the scoring service (bearer scoring token), persists transactions/events/alerts, and publishes to Redis for the WS relay. The scoring API, the `garda:events:live` channel, and the DB schema are **contracts** — scoring and backend share no code. The existing replay path and all read endpoints are **unchanged** until Phase 5 (read re-anchoring).
+## Implementation status (as of 2026-08-08)
 
-## Implementation status (reconciled 2026-06-22 — all containers built)
-
-| Container | Status | Evidence |
+| Component | Status | Evidence |
 |---|---|---|
-| Backend API | ✅ implemented | `garda-ai-backend` main, 74 tests; per-repo C4 `docs/c4/` |
-| Pipeline (ETL one-shot + replay worker) | ✅ implemented | `garda-ai-pipeline` main, 31 tests; `garda-etl` + `garda-replay` |
-| Dashboard Web | ✅ implemented | `garda-ai-dashboard-web` main, 11 tests; all views wired |
-| PostgreSQL / Redis | ✅ provisioned | `garda-ai-deploy/docker-compose.yml` (healthchecked) |
-| Prometheus / Grafana | ✅ provisioned | `docker-compose.yml` + `observability/` (scrapes backend `/metrics`) |
+| Backend API | ✅ Implemented | `garda-ai-backend` with per-repo CI + GCP deploy workflow |
+| Frontend SPA | ✅ Implemented | `garda-ai-dashboard-web` with nginx templating + per-repo CI + deploy workflow |
+| Scoring Service | ✅ Implemented | `garda-ai-scoring` with per-repo CI + deploy workflow |
+| Ingest Job | ✅ Implemented | `garda-ai-ingest` with per-repo CI + deploy workflow |
+| Migrate Job | ✅ Implemented | Alembic integration in backend, deployed as Cloud Run Job |
+| Local Compose | ✅ Working | `docker-compose.yml` with `sim` and `observability` profiles |
+| GCP Terraform IaC | ✅ Authored | `garda-ai-deploy/terraform/` (validate + plan ready; apply is operator step) |
+| CI/CD Workflows | ✅ Wired | 4 service repos with `.github/workflows/{ci,deploy}.yml` |
+| Docs (C4 + Runbook) | ✅ Updated | This file + `docs/deploy/gcp-runbook.md` |
 
-The whole stack starts with `make up` (see `garda-ai-deploy/README.md`): backend migrates+seeds, the ETL one-shot loads the dataset, the replay worker streams scored events to Redis `garda:events:live`, and the dashboard consumes REST + the WS relay. The only **not-yet-built** element is the Phase-2 standalone **Trained ML Model Service** (the `MLModelScorer` swaps in behind `ScoringProvider`). Known observability gap: the replay worker has no HTTP `/metrics` endpoint yet, so Prometheus scrapes the backend only.
+Deployment to live GCP is the operator's step (requires GCP project, Workload Identity Federation setup, domain + DNS, and running `terraform apply` + job init).
