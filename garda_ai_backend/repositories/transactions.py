@@ -21,6 +21,7 @@ class TransactionsRepository:
                 TransactionEvent.typology,
                 TransactionEvent.status,
                 TransactionEvent.surfaced_at,
+                TransactionEvent.event_time,
                 Transaction.amount_paid,
                 Transaction.payment_format,
                 Bank.name.label("bank"),
@@ -42,6 +43,7 @@ class TransactionsRepository:
                 "type": r.payment_format, "amount": float(r.amount_paid),
                 "fraud_score": float(r.fraud_score), "typology": r.typology,
                 "status": r.status, "surfaced_at": r.surfaced_at.isoformat(),
+                "event_time": r.event_time.isoformat(),
             }
             for r in rows
         ]

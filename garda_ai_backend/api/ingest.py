@@ -133,6 +133,7 @@ async def ingest(
                 "amount": float(t.amount_paid), "fraud_score": e.fraud_score,
                 "typology": e.typology, "status": e.status,
                 "surfaced_at": now_iso,
+                "event_time": t.event_time.isoformat(),
             }
             await redis.publish(LIVE_EVENTS_CHANNEL, json.dumps(message, default=str))
 

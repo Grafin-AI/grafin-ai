@@ -275,6 +275,43 @@ async def test_ingest_publishes_live_event(client, session, seeded_reference, re
     assert "sim_now" not in message
 
 
+async def test_published_message_includes_event_time(client, seeded_reference, redis_url):
+    """The WS payload carries event_time so the dashboard labels events on the dataset
+    timeline; surfaced_at stays for detection-lag."""
+    subscriber = build_redis(redis_url)
+    pubsub = subscriber.pubsub()
+    await pubsub.subscribe("garda:events:live")
+    # Drain the subscribe-confirmation frame.
+    await pubsub.get_message(timeout=1.0)
+
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+    assert r.status_code == 200
+
+    message = None
+    for _ in range(20):
+        raw = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+        if raw is not None:
+            message = json.loads(raw["data"])
+            break
+        await asyncio.sleep(0.05)
+
+    await pubsub.aclose()
+    await subscriber.aclose()
+
+    assert message is not None
+    assert datetime.fromisoformat(message["event_time"]) == datetime(
+        2026, 6, 25, 9, 0, tzinfo=UTC
+    )
+    assert "surfaced_at" in message
+
+
 async def test_ingest_publish_matches_persisted_event_time(client, session, seeded_reference):
     # Sanity: event_time echoed from the producer is preserved on the row.
     app = client._app

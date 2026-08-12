@@ -61,6 +61,7 @@ class LiveItem(BaseModel):
     typology: str | None
     status: str
     surfaced_at: str
+    event_time: str
 
 
 class LiveResponse(BaseModel):
