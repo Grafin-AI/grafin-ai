@@ -31,6 +31,12 @@ resource "google_cloud_run_v2_service" "scoring" {
     }
   }
 
+  # terraform provisions this service; image rollout is owned by the operator
+  # (`make deploy` / the workflow_dispatch button -> gcloud run deploy).
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
+
   # Ensure the scoring SA can read its secret before the service mounts it.
   depends_on = [google_secret_manager_secret_iam_member.access]
 }
@@ -106,6 +112,12 @@ resource "google_cloud_run_v2_service" "backend" {
     timeout = "3600s"
   }
 
+  # terraform provisions this service; image rollout is owned by the operator
+  # (`make deploy` / the workflow_dispatch button -> gcloud run deploy).
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
+
   # Ensure the backend SA can read its secrets before the service mounts them.
   depends_on = [google_secret_manager_secret_iam_member.access]
 }
@@ -135,6 +147,12 @@ resource "google_cloud_run_v2_service" "frontend" {
         value = google_cloud_run_v2_service.backend.uri
       }
     }
+  }
+
+  # terraform provisions this service; image rollout is owned by the operator
+  # (`make deploy` / the workflow_dispatch button -> gcloud run deploy).
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
   }
 }
 

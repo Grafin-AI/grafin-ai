@@ -24,6 +24,8 @@ resource "google_cloud_run_v2_job" "migrate" {
     }
   }
 
+  # NOTE: deliberately no lifecycle block here — the migrate job stays
+  # terraform-owned so it tracks var.backend_image.
   # Ensure the jobs SA can read the DB-URL secret before the job mounts it.
   depends_on = [google_secret_manager_secret_iam_member.access]
 }
@@ -53,6 +55,12 @@ resource "google_cloud_run_v2_job" "ingest" {
         # GARDA_DATA_DIR defaults to the image's bundled data path.
       }
     }
+  }
+
+  # terraform provisions this job; image rollout is owned by the operator
+  # (`make deploy` in garda-ai-ingest -> gcloud run jobs deploy).
+  lifecycle {
+    ignore_changes = [template[0].template[0].containers[0].image]
   }
 
   # Ensure the jobs SA can read the DB-URL secret before the job mounts it.
