@@ -8,5 +8,8 @@ RUN uv sync --frozen --no-dev
 # Runtime needs GARDA_DATABASE_URL and the accounts CSV (mount the data dir + set GARDA_DATA_DIR).
 RUN useradd --system --uid 1001 garda
 USER garda
+# `useradd --system` creates no home dir, so uv's default cache path
+# (/home/garda/.cache/uv) is unwritable -> point it at a writable location.
+ENV UV_CACHE_DIR=/tmp/uv-cache
 # --no-sync: the venv is already built above; skip uv's startup resync for faster starts.
 CMD ["uv", "run", "--no-sync", "garda-ingest"]
