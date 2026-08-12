@@ -3,10 +3,10 @@
 ## Overview
 
 - **Name**: Garda AI Backend — Python Package
-- **Description**: Core application package for the Garda AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, all SQLAlchemy 2.0 ORM models, a full view-endpoint layer (sim clock, metrics, analytics, geo, transactions, user-risk, alerts, system health), and — as of Phase 2 — a token-gated ingest write-path (`POST /api/v1/ingest`) that scores batches via the outbound garda-ai-scoring service, persists them idempotently, and publishes new events to `garda:events:live`.
+- **Description**: Core application package for the Garda AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, all SQLAlchemy 2.0 ORM models, a full view-endpoint layer (metrics, analytics, geo, transactions, user-risk, alerts, system health), and — as of Phase 2 — a token-gated ingest write-path (`POST /api/v1/ingest`) that scores batches via the outbound garda-ai-scoring service, persists them idempotently, and publishes new events to `garda:events:live`.
 - **Location**: [`garda_ai_backend/`](../../garda_ai_backend/)
 - **Language**: Python 3.12+
-- **Purpose**: Serves the API surface for the AML dashboard, persists transaction and alert data, authenticates users via JWT access/refresh token pairs, enforces role-based access control, exposes simulation-clock-gated read aggregates backed by Redis caching, applies PII masking for non-admin roles, and provides health/metrics endpoints for platform observability.
+- **Purpose**: Serves the API surface for the AML dashboard, persists transaction and alert data, authenticates users via JWT access/refresh token pairs, enforces role-based access control, exposes read aggregates bounded by the data clock (`max(transaction_events.event_time)`) and backed by Redis caching, applies PII masking for non-admin roles, and provides health/metrics endpoints for platform observability.
 - **Version**: `0.1.0` (declared in `garda_ai_backend/__init__.py`)
 
 ---
@@ -24,7 +24,6 @@
 | `security.tokens` | `security/tokens.py` | JWT access/refresh token creation and decode; `InvalidToken` |
 | `security.refresh_store` | `security/refresh_store.py` | Redis-backed refresh JTI store with atomic consume |
 | `repositories.users` | `repositories/users.py` | `UserRepository` — DB access for `User` rows |
-| `repositories.sim` | `repositories/sim.py` | `SimRepository` — get/update singleton `SimState` row |
 | `repositories.metrics` | `repositories/metrics.py` | `MetricsRepository` — overview, volume, heatmap aggregates |
 | `repositories.analytics` | `repositories/analytics.py` | `AnalyticsRepository` — typology distribution and confusion counts |
 | `repositories.geo` | `repositories/geo.py` | `GeoRepository` — province-level fraud counts |
@@ -36,12 +35,11 @@
 | `services.scoring_client` *(Phase 2)* | `services/scoring_client.py` | `ScoringClient` — resilient httpx client for garda-ai-scoring `POST /v1/score`; `ScoringUnavailable` |
 | `api.schemas` | `api/schemas.py` | Pydantic request/response models for the auth API |
 | `api.view_schemas` | `api/view_schemas.py` | Pydantic response models for all view endpoints |
-| `api.deps` | `api/deps.py` | FastAPI dependency functions; `CurrentUser`; `SimNowDep`; `require_role` factory |
+| `api.deps` | `api/deps.py` | FastAPI dependency functions; `CurrentUser`; `NowDep` (data clock); `require_role` factory |
 | `api.masking` | `api/masking.py` | PII masking helpers: names and account/payment IDs |
-| `api.cache` | `api/cache.py` | `cached_json` — Redis aggregate cache with sim-now-keyed TTL |
+| `api.cache` | `api/cache.py` | `cached_json` — Redis aggregate cache with data-clock-keyed TTL |
 | `api.ratelimit` | `api/ratelimit.py` | `RateLimiter` — Redis fixed-window rate limiting |
 | `api.auth` | `api/auth.py` | Auth router: login / refresh / logout / me |
-| `api.sim` | `api/sim.py` | Sim router: state read / admin control |
 | `api.metrics` | `api/metrics.py` | Metrics router: overview / volume / heatmap (cached) |
 | `api.analytics` | `api/analytics.py` | Analytics router: fraud distribution + precision/recall/F1 (cached) |
 | `api.geo` | `api/geo.py` | Geo router: province fraud counts (cached) |
@@ -55,13 +53,12 @@
 | `api.ingest_schemas` *(Phase 2)* | `api/ingest_schemas.py` | Pydantic request/response models for the ingest write-path |
 | `api.ingest` *(Phase 2)* | `api/ingest.py` | Ingest router: `POST /api/v1/ingest` — enrich → score → persist → publish |
 | `realtime.channels` | `realtime/channels.py` | `LIVE_EVENTS_CHANNEL` constant — shared Redis pub/sub channel name (cross-repo coupling) |
-| `seed` | `seed.py` | `ensure_admin`, `ensure_sim_state` — idempotent DB seed |
+| `seed` | `seed.py` | `ensure_admin` — idempotent DB seed |
 | `schema.base` | `schema/base.py` | Declarative ORM base |
 | `schema.reference` | `schema/reference.py` | Reference tables: Bank, Entity, Account |
 | `schema.transactions` | `schema/transactions.py` | Core event tables: Transaction, TransactionEvent |
 | `schema.alerts` | `schema/alerts.py` | Alert table |
 | `schema.users` | `schema/users.py` | User table |
-| `schema.sim` | `schema/sim.py` | Simulation state singleton table |
 | `schema` | `schema/__init__.py` | Package re-exports for all ORM models |
 
 ---
@@ -543,68 +540,12 @@ async def create(
 
 ---
 
-## Module: `repositories.sim`
-
-- **File**: [`garda_ai_backend/repositories/sim.py`](../../garda_ai_backend/repositories/sim.py)
-- **External dependencies**: `sqlalchemy.ext.asyncio.AsyncSession`
-- **Internal dependencies**: `garda_ai_backend.schema.SimState`
-
-### Class: `SimRepository`
-
-```python
-class SimRepository
-```
-
-- **Description**: Data-access object for the singleton `sim_state` row. Used by the sim router for control plane reads/writes and by `get_sim_now` in `deps.py` as the shared simulation clock source for every view aggregate.
-
-#### Method: `__init__`
-
-```python
-def __init__(self, session: AsyncSession) -> None
-```
-
-#### Method: `get_state`
-
-```python
-async def get_state(self) -> SimState | None
-```
-
-- **Description**: Fetches the singleton `SimState` row (id=1) via `session.get`. Returns `None` if the row has not been seeded.
-- **Returns**: `SimState | None`
-
-#### Method: `get_sim_now`
-
-```python
-async def get_sim_now(self) -> datetime | None
-```
-
-- **Description**: Convenience wrapper around `get_state()`. Returns `state.sim_now` or `None` if uninitialized. Used by the `get_sim_now` FastAPI dependency in `deps.py`.
-- **Returns**: `datetime | None`
-
-#### Method: `update_state`
-
-```python
-async def update_state(
-    self,
-    running: bool | None = None,
-    speed: float | None = None,
-    sim_now: datetime | None = None,
-) -> SimState
-```
-
-- **Description**: Applies partial updates to the singleton `SimState` row. Only non-`None` fields are written. Calls `flush()` without committing — the sim router owns the commit.
-- **Parameters**: All optional; only provided values are applied.
-- **Returns**: `SimState` (updated in-session state)
-- **Raises**: `ValueError("sim_state not seeded")` if the row does not exist.
-
----
-
 ## Module: `repositories.metrics`
 
 - **File**: [`garda_ai_backend/repositories/metrics.py`](../../garda_ai_backend/repositories/metrics.py)
 - **External dependencies**: `sqlalchemy` (case, cast, func, select, Integer)
 - **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
-- **Cache note**: All three methods are called exclusively through `cached_json` in `api/metrics.py`. Cache keys are sim-now-keyed (`overview:{sim_now}`, `volume:{range}:{sim_now}`, `heatmap:{sim_now}`), TTL = 5 s.
+- **Cache note**: All three methods are called exclusively through `cached_json` in `api/metrics.py`. Cache keys carry the data clock (`overview:{now}`, `volume:{range}:{now}`, `heatmap:{now}`), TTL = 5 s.
 
 ### Class: `MetricsRepository`
 
@@ -612,7 +553,7 @@ async def update_state(
 class MetricsRepository
 ```
 
-- **Description**: SQL aggregate repository for the metrics dashboard panel. All queries apply the `surfaced_at <= sim_now` filter so results respect the simulation clock boundary.
+- **Description**: SQL aggregate repository for the metrics dashboard panel. All queries apply the `event_time <= now` filter, so results are bounded by business time on the replayed dataset's timeline rather than by ingestion time or the wall clock.
 
 #### Method: `__init__`
 
@@ -623,34 +564,34 @@ def __init__(self, session: AsyncSession) -> None
 #### Method: `overview`
 
 ```python
-async def overview(self, sim_now: datetime) -> dict
+async def overview(self, now: datetime) -> dict
 ```
 
-- **Description**: Returns a single-row aggregate over all `TransactionEvent` rows with `surfaced_at <= sim_now`, joined to `Transaction` for `amount_paid`. Computes total count, flagged count (status=`"flagged"`), blocked count (status=`"blocked"`), total amount, and fraud rate (flagged+blocked / total).
-- **Parameters**: `sim_now: datetime` — upper bound on `surfaced_at`
+- **Description**: Returns a single-row aggregate over all `TransactionEvent` rows with `event_time <= now`, joined to `Transaction` for `amount_paid`. Computes total count, flagged count (status=`"flagged"`), blocked count (status=`"blocked"`), total amount, and fraud rate (flagged+blocked / total).
+- **Parameters**: `now: datetime` — data clock; upper bound on `event_time`
 - **Returns**: `dict` with keys `total_transactions`, `flagged`, `blocked`, `total_amount`, `fraud_rate`
 
 #### Method: `volume`
 
 ```python
-async def volume(self, lower: datetime, sim_now: datetime, trunc: str) -> list[dict]
+async def volume(self, lower: datetime, now: datetime, trunc: str) -> list[dict]
 ```
 
-- **Description**: Time-bucketed event volume. Groups `TransactionEvent` rows within `[lower, sim_now]` by `date_trunc(trunc, surfaced_at)`, counting total events and flagged/blocked events per bucket.
+- **Description**: Time-bucketed event volume. Groups `TransactionEvent` rows within `[lower, now]` by `date_trunc(trunc, TransactionEvent.event_time)`, counting total events and flagged/blocked events per bucket. Bucketing on business time keeps the series aligned with the dataset's own timeline rather than with whenever the backfill happened to run.
 - **Parameters**:
   - `lower: datetime` — window start (derived from range selection in the router)
-  - `sim_now: datetime` — window end / sim clock upper bound
+  - `now: datetime` — window end / data clock upper bound
   - `trunc: str` — PostgreSQL `date_trunc` granularity (`"hour"`, `"day"`, or `"month"`)
 - **Returns**: `list[dict]` with keys `bucket` (ISO string), `count`, `flagged`
 
 #### Method: `heatmap`
 
 ```python
-async def heatmap(self, sim_now: datetime) -> list[list[int]]
+async def heatmap(self, now: datetime) -> list[list[int]]
 ```
 
-- **Description**: Builds a 7×24 activity heatmap (day-of-week × hour-of-day) counting all events up to `sim_now`. Returns a 2D list `grid[dow][hour]` where each cell is the event count. Unobserved cells are 0.
-- **Parameters**: `sim_now: datetime`
+- **Description**: Builds a 7×24 activity heatmap (day-of-week × hour-of-day) counting all events with `event_time <= now`. Day-of-week and hour are `extract`ed from `TransactionEvent.event_time`, so the cells describe when the transactions actually happened. Returns a 2D list `grid[dow][hour]` where each cell is the event count. Unobserved cells are 0.
+- **Parameters**: `now: datetime`
 - **Returns**: `list[list[int]]` — shape `[7][24]`
 
 ---
@@ -660,7 +601,7 @@ async def heatmap(self, sim_now: datetime) -> list[list[int]]
 - **File**: [`garda_ai_backend/repositories/analytics.py`](../../garda_ai_backend/repositories/analytics.py)
 - **External dependencies**: `sqlalchemy` (case, func, select)
 - **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
-- **Cache note**: Both methods are called through `cached_json` in `api/analytics.py`. Cache key `fraud:{sim_now}`, TTL = 5 s.
+- **Cache note**: Both methods are called through `cached_json` in `api/analytics.py`. Cache key `fraud:{now}`, TTL = 5 s.
 
 ### Class: `AnalyticsRepository`
 
@@ -679,21 +620,21 @@ def __init__(self, session: AsyncSession) -> None
 #### Method: `typology_distribution`
 
 ```python
-async def typology_distribution(self, sim_now: datetime) -> list[dict]
+async def typology_distribution(self, now: datetime) -> list[dict]
 ```
 
-- **Description**: Aggregates flagged `TransactionEvent` rows by `typology`, counting occurrences and summing `Transaction.amount_paid`. Filters to rows where `surfaced_at <= sim_now` and `typology IS NOT NULL`. Ordered by count descending.
-- **Parameters**: `sim_now: datetime`
+- **Description**: Aggregates flagged `TransactionEvent` rows by `typology`, counting occurrences and summing `Transaction.amount_paid`. Filters to rows where `event_time <= now` and `typology IS NOT NULL`. Ordered by count descending.
+- **Parameters**: `now: datetime` — data clock; upper bound on `event_time`
 - **Returns**: `list[dict]` with keys `typology`, `count`, `total_amount`
 
 #### Method: `confusion_counts`
 
 ```python
-async def confusion_counts(self, sim_now: datetime) -> dict
+async def confusion_counts(self, now: datetime) -> dict
 ```
 
-- **Description**: Computes true-positive (TP), false-positive (FP), and false-negative (FN) counts by joining `TransactionEvent` (model predictions) to `Transaction.is_laundering` (ground-truth labels). Predicted positive = status in (`"flagged"`, `"blocked"`); actual positive = `is_laundering IS TRUE`. Filters `surfaced_at <= sim_now`.
-- **Parameters**: `sim_now: datetime`
+- **Description**: Computes true-positive (TP), false-positive (FP), and false-negative (FN) counts by joining `TransactionEvent` (model predictions) to `Transaction.is_laundering` (ground-truth labels). Predicted positive = status in (`"flagged"`, `"blocked"`); actual positive = `is_laundering IS TRUE`. Filters `event_time <= now`.
+- **Parameters**: `now: datetime` — data clock; upper bound on `event_time`
 - **Returns**: `dict` with integer keys `tp`, `fp`, `fn`. Used by `api/analytics.py._metrics()` to derive precision, recall, and F1.
 
 ---
@@ -703,7 +644,7 @@ async def confusion_counts(self, sim_now: datetime) -> dict
 - **File**: [`garda_ai_backend/repositories/geo.py`](../../garda_ai_backend/repositories/geo.py)
 - **External dependencies**: `sqlalchemy` (func, select)
 - **Internal dependencies**: `garda_ai_backend.schema.Account`, `garda_ai_backend.schema.Entity`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
-- **Cache note**: Called through `cached_json` in `api/geo.py`. Cache key `geo:{sim_now}`, TTL = 10 s.
+- **Cache note**: Called through `cached_json` in `api/geo.py`. Cache key `geo:{now}`, TTL = 10 s.
 
 ### Class: `GeoRepository`
 
@@ -722,11 +663,11 @@ def __init__(self, session: AsyncSession) -> None
 #### Method: `province_fraud_counts`
 
 ```python
-async def province_fraud_counts(self, sim_now: datetime) -> list[dict]
+async def province_fraud_counts(self, now: datetime) -> list[dict]
 ```
 
-- **Description**: Counts flagged/blocked events per sender province by joining `TransactionEvent → Transaction → Account → Entity`. Applies `surfaced_at <= sim_now`, filters to status in (`"flagged"`, `"blocked"`), excludes rows where `Entity.province IS NULL`. Groups by province, orders by count descending.
-- **Parameters**: `sim_now: datetime`
+- **Description**: Counts flagged/blocked events per sender province by joining `TransactionEvent → Transaction → Account → Entity`. Applies `event_time <= now`, filters to status in (`"flagged"`, `"blocked"`), excludes rows where `Entity.province IS NULL`. Groups by province, orders by count descending.
+- **Parameters**: `now: datetime` — data clock; upper bound on `event_time`
 - **Returns**: `list[dict]` with keys `province`, `fraud_count`
 
 ---
@@ -756,16 +697,16 @@ def __init__(self, session: AsyncSession) -> None
 
 ```python
 async def live_window(
-    self, sim_now: datetime, after_seq: int | None, limit: int
+    self, now: datetime, after_seq: int | None, limit: int
 ) -> list[dict]
 ```
 
-- **Description**: Returns a paginated window of `TransactionEvent` rows up to `sim_now`, joined to `Transaction` and `Bank`. If `after_seq` is provided, returns events with `seq > after_seq` in ascending order (forward-streaming mode for the live feed). If `after_seq` is `None`, returns the most recent events in descending order (initial load). Respects `limit` (max 200 per call).
+- **Description**: Returns a paginated window of `TransactionEvent` rows with `event_time <= now`, joined to `Transaction` and `Bank`. If `after_seq` is provided, returns events with `seq > after_seq` in ascending order (forward-streaming mode for the live feed). If `after_seq` is `None`, returns the most recent events in descending order (initial load). Respects `limit` (max 200 per call).
 - **Parameters**:
-  - `sim_now: datetime` — upper bound on `surfaced_at`
+  - `now: datetime` — data clock; upper bound on `event_time`
   - `after_seq: int | None` — cursor for incremental polling; `None` for initial fetch
   - `limit: int` — maximum number of rows to return
-- **Returns**: `list[dict]` with keys `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`
+- **Returns**: `list[dict]` with keys `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time`. This is exactly the key set the WebSocket relay pushes (see `api/ingest.py`), so the live list and its `after_seq=` reconnect-backfill agree field-for-field.
 
 #### Method: `detail`
 
@@ -792,7 +733,7 @@ async def detail(self, transaction_id: int) -> dict | None
 class UserRiskRepository
 ```
 
-- **Description**: SQL aggregate repository for the entity risk-profile panel. Joins entities through accounts to transactions and events to compute per-entity risk metrics. The `surfaced_at <= sim_now` filter is applied as an outer-join condition so entities with no visible events are still returned (with zero counts).
+- **Description**: SQL aggregate repository for the entity risk-profile panel. Joins entities through accounts to transactions and events to compute per-entity risk metrics. The `event_time <= now` filter is applied as an outer-join condition so entities with no visible events are still returned (with zero counts).
 
 #### Method: `__init__`
 
@@ -803,12 +744,12 @@ def __init__(self, session: AsyncSession) -> None
 #### Method: `risk_list`
 
 ```python
-async def risk_list(self, sim_now: datetime, risk: str | None, limit: int) -> list[dict]
+async def risk_list(self, now: datetime, risk: str | None, limit: int) -> list[dict]
 ```
 
-- **Description**: Aggregates entity-level risk metrics by joining `Entity → Account → Transaction → TransactionEvent` (with `surfaced_at <= sim_now` as an outer-join predicate). Groups by entity + account. Optionally filters by `Account.risk_category`. Orders by `risk_score DESC NULLS LAST`. Returned names are unmasked — the router applies `mask_name` for non-admin callers.
+- **Description**: Aggregates entity-level risk metrics by joining `Entity → Account → Transaction → TransactionEvent` (with `event_time <= now` as an outer-join predicate). Groups by entity + account. Optionally filters by `Account.risk_category`. Orders by `risk_score DESC NULLS LAST`. Returned names are unmasked — the router applies `mask_name` for non-admin callers.
 - **Parameters**:
-  - `sim_now: datetime` — simulation clock upper bound (applied on the join condition)
+  - `now: datetime` — data clock upper bound (applied on the join condition, not as a `WHERE`, so entities without visible events survive the join)
   - `risk: str | None` — optional filter on `Account.risk_category`
   - `limit: int` — maximum rows to return
 - **Returns**: `list[dict]` with keys `entity_id`, `name`, `province`, `risk_level`, `risk_score`, `total_transactions`, `flagged_transactions`, `total_amount`
@@ -816,12 +757,12 @@ async def risk_list(self, sim_now: datetime, risk: str | None, limit: int) -> li
 #### Method: `profile`
 
 ```python
-async def profile(self, sim_now: datetime, entity_id: str) -> dict | None
+async def profile(self, now: datetime, entity_id: str) -> dict | None
 ```
 
 - **Description**: Fetches the risk profile for a single entity by calling `risk_list` with `limit=1000` and filtering the result by `entity_id`. Returns `None` if not found.
 - **Parameters**:
-  - `sim_now: datetime`
+  - `now: datetime`
   - `entity_id: str`
 - **Returns**: `dict | None` (same shape as `risk_list` rows)
 
@@ -1009,13 +950,6 @@ class MeResponse(BaseModel):
 
 Pydantic response models for all view endpoints. Every class is a pure `BaseModel` with no custom validators.
 
-### Sim models
-
-| Class | Fields | Used by |
-|---|---|---|
-| `SimStateResponse` | `sim_now: datetime`, `speed: float`, `running: bool` | `GET /api/v1/sim/state`, `POST /api/v1/sim/control` |
-| `SimControlRequest` | `running: bool \| None`, `speed: float \| None`, `sim_now: datetime \| None` | `POST /api/v1/sim/control` (request body) |
-
 ### Metrics models
 
 | Class | Fields | Used by |
@@ -1044,7 +978,7 @@ Pydantic response models for all view endpoints. Every class is a pure `BaseMode
 
 | Class | Fields | Used by |
 |---|---|---|
-| `LiveItem` | `seq: int`, `transaction_id: int`, `bank: str`, `type: str`, `amount: float`, `fraud_score: float`, `typology: str \| None`, `status: str`, `surfaced_at: str` | element of `LiveResponse.items` |
+| `LiveItem` | `seq: int`, `transaction_id: int`, `bank: str`, `type: str`, `amount: float`, `fraud_score: float`, `typology: str \| None`, `status: str`, `surfaced_at: str`, `event_time: str` | element of `LiveResponse.items`; carries both times so the client can show business time and derive detection lag |
 | `LiveResponse` | `items: list[LiveItem]` | `GET /api/v1/transactions/live` |
 | `TransactionDetail` | `id: int`, `bank: str`, `amount: float`, `currency: str`, `type: str`, `fraud_score: float`, `typology: str \| None`, `status: str`, `is_laundering: bool`, `event_time: str` | `GET /api/v1/transactions/{transaction_id}` |
 
@@ -1073,8 +1007,8 @@ Pydantic response models for all view endpoints. Every class is a pure `BaseMode
 ## Module: `api.deps`
 
 - **File**: [`garda_ai_backend/api/deps.py`](../../garda_ai_backend/api/deps.py)
-- **External dependencies**: `fastapi` (Depends, HTTPException, HTTPBearer, HTTPAuthorizationCredentials), `redis.asyncio.Redis`, `sqlalchemy.ext.asyncio.AsyncSession`
-- **Internal dependencies**: `config.Settings`, `config.get_settings`, `db._maker`, `redis_client.get_redis`, `repositories.sim.SimRepository`, `repositories.users.UserRepository`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, decode_token}`, `services.auth.AuthService`
+- **External dependencies**: `fastapi` (Depends, HTTPException, HTTPBearer, HTTPAuthorizationCredentials), `redis.asyncio.Redis`, `sqlalchemy` (func, select), `sqlalchemy.ext.asyncio.AsyncSession`
+- **Internal dependencies**: `config.Settings`, `config.get_settings`, `db._maker`, `redis_client.get_redis`, `repositories.users.UserRepository`, `schema.TransactionEvent`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, decode_token}`, `services.auth.AuthService`
 
 ### Dataclass: `CurrentUser`
 
@@ -1111,16 +1045,16 @@ def get_settings_dep() -> Settings
 
 - **Description**: Thin FastAPI dependency wrapper around `get_settings()`.
 
-### Function: `get_sim_now`
+### Function: `get_data_now`
 
 ```python
-async def get_sim_now(session: SessionDep) -> datetime
+async def get_data_now(session: SessionDep) -> datetime
 ```
 
-- **Description**: Shared typed dependency that reads the current simulation clock from `SimRepository.get_sim_now()`. All view aggregate routers (metrics, analytics, geo, transactions, users) inject this via `SimNowDep` to obtain the consistent `surfaced_at <= sim_now` upper bound without each re-implementing the lookup. Raises HTTP 404 if the `sim_state` row has not been seeded.
+- **Description**: The platform's data clock. Returns `max(TransactionEvent.event_time)` — the newest business time ingested — so "now" is derived from the data itself rather than from a control table or the wall clock. The views replay a historical dataset (IBM HI-Small, spanning `2025-09-01`..`2025-09-10`), so anchoring their windows to the wall clock would leave every window empty. On an empty table there is no data timeline to read, so it falls back to `datetime.now(UTC)`, giving a fresh install an empty dashboard rather than an error. All view aggregate routers (metrics, analytics, geo, transactions, users) inject it via `NowDep` to obtain the consistent `event_time <= now` upper bound without each re-implementing the lookup.
 - **Parameters**: `session: SessionDep` — injected DB session
 - **Returns**: `datetime`
-- **Raises**: `HTTPException(404)` if `sim_state` is uninitialized
+- **Invariant**: This clock is for read windows only. Token issuance in `security/tokens.py` uses its own `datetime.now(UTC)` for `iat` / `exp`; minting JWTs against the data clock would stamp them with 2025 timestamps and break login.
 
 ### Annotated Type Aliases
 
@@ -1131,7 +1065,7 @@ async def get_sim_now(session: SessionDep) -> datetime
 | `SettingsDep` | `Annotated[Settings, Depends(get_settings_dep)]` | Inject app settings |
 | `AuthServiceDep` | `Annotated[AuthService, Depends(get_auth_service)]` | Inject a fully wired `AuthService` |
 | `CurrentUserDep` | `Annotated[CurrentUser, Depends(get_current_user)]` | Inject the authenticated user |
-| `SimNowDep` | `Annotated[datetime, Depends(get_sim_now)]` | Inject the current simulation clock timestamp |
+| `NowDep` | `Annotated[datetime, Depends(get_data_now)]` | Inject the data clock — the newest ingested `event_time` |
 
 ### Function: `get_auth_service`
 
@@ -1232,7 +1166,7 @@ async def cached_json(
   - `ttl: int` — Redis `EX` value in seconds
   - `compute: Callable[[], Awaitable[Any]]` — zero-argument async factory called on cache miss
 - **Returns**: `Any` — the cached or freshly computed value
-- **Usage**: All metrics, analytics, and geo router handlers pass a sim-now-stamped key (e.g. `f"overview:{sim_now.isoformat()}"`) so each new simulation tick produces a distinct cache entry.
+- **Usage**: All metrics, analytics, and geo router handlers stamp the key with the data clock (e.g. `f"overview:{now.isoformat()}"`), so a distinct cache entry appears whenever the data clock advances — that is, whenever an event with a newer `event_time` is ingested.
 
 ---
 
@@ -1323,46 +1257,12 @@ async def me(user: CurrentUserDep, session: SessionDep) -> MeResponse
 
 ---
 
-## Module: `api.sim`
-
-- **File**: [`garda_ai_backend/api/sim.py`](../../garda_ai_backend/api/sim.py)
-- **External dependencies**: `fastapi` (APIRouter, Depends, HTTPException)
-- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, require_role}`, `api.view_schemas.{SimControlRequest, SimStateResponse}`, `repositories.sim.SimRepository`
-
-### Object: `router`
-
-```python
-router = APIRouter(prefix="/api/v1/sim", tags=["sim"])
-```
-
-### Route: `GET /api/v1/sim/state`
-
-```python
-@router.get("/state", response_model=SimStateResponse)
-async def get_state(session: SessionDep, _: CurrentUserDep) -> SimStateResponse
-```
-
-- **Description**: Returns the current simulation clock state. Accessible by any authenticated user. Raises HTTP 404 if `sim_state` has not been seeded.
-- **Role gate**: any authenticated user
-
-### Route: `POST /api/v1/sim/control`
-
-```python
-@router.post("/control", response_model=SimStateResponse)
-async def control(body: SimControlRequest, session: SessionDep, _: AdminDep) -> SimStateResponse
-```
-
-- **Description**: Applies partial updates to the simulation clock (`running`, `speed`, `sim_now`). Commits the change. Only non-`None` fields from the request body are applied.
-- **Role gate**: `admin` only (via `AdminDep = Depends(require_role("admin"))`)
-
----
-
 ## Module: `api.metrics`
 
 - **File**: [`garda_ai_backend/api/metrics.py`](../../garda_ai_backend/api/metrics.py)
 - **External dependencies**: `fastapi` (APIRouter, Query)
-- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{HeatmapResponse, MetricsOverviewResponse, VolumeResponse}`, `repositories.metrics.MetricsRepository`
-- **Cache**: All three routes use `cached_json` with 5 s TTL. Keys are sim-now-stamped.
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{HeatmapResponse, MetricsOverviewResponse, VolumeResponse}`, `repositories.metrics.MetricsRepository`
+- **Cache**: All three routes use `cached_json` with 5 s TTL. Keys are data-clock-stamped.
 
 ### Object: `router`
 
@@ -1387,10 +1287,10 @@ Maps the `range` query parameter to `(window_timedelta, date_trunc_granularity)`
 
 ```python
 @router.get("/overview", response_model=MetricsOverviewResponse)
-async def overview(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> MetricsOverviewResponse
+async def overview(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep) -> MetricsOverviewResponse
 ```
 
-- **Cache key**: `agg:overview:{sim_now.isoformat()}`, TTL 5 s
+- **Cache key**: `agg:overview:{now.isoformat()}`, TTL 5 s
 - **Role gate**: any authenticated user
 
 ### Route: `GET /api/v1/metrics/volume`
@@ -1398,22 +1298,23 @@ async def overview(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: 
 ```python
 @router.get("/volume", response_model=VolumeResponse)
 async def volume(
-    session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep,
+    session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep,
     time_range: str = Query("24h", alias="range"),
 ) -> VolumeResponse
 ```
 
-- **Cache key**: `agg:volume:{time_range}:{sim_now.isoformat()}`, TTL 5 s
+- **Description**: The selected `range` is subtracted from the data clock (`lower = now - window`), so the window walks the dataset's own timeline rather than the last 24 wall-clock hours.
+- **Cache key**: `agg:volume:{time_range}:{now.isoformat()}`, TTL 5 s
 - **Role gate**: any authenticated user
 
 ### Route: `GET /api/v1/metrics/heatmap`
 
 ```python
 @router.get("/heatmap", response_model=HeatmapResponse)
-async def heatmap(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> HeatmapResponse
+async def heatmap(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep) -> HeatmapResponse
 ```
 
-- **Cache key**: `agg:heatmap:{sim_now.isoformat()}`, TTL 5 s
+- **Cache key**: `agg:heatmap:{now.isoformat()}`, TTL 5 s
 - **Role gate**: any authenticated user
 
 ---
@@ -1422,7 +1323,7 @@ async def heatmap(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: C
 
 - **File**: [`garda_ai_backend/api/analytics.py`](../../garda_ai_backend/api/analytics.py)
 - **External dependencies**: `fastapi.APIRouter`
-- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{DetectionMetrics, FraudAnalyticsResponse, TypologyCount}`, `repositories.analytics.AnalyticsRepository`
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{DetectionMetrics, FraudAnalyticsResponse, TypologyCount}`, `repositories.analytics.AnalyticsRepository`
 - **Cache**: Single route cached with 5 s TTL.
 
 ### Object: `router`
@@ -1445,11 +1346,11 @@ def _metrics(c: dict) -> dict
 
 ```python
 @router.get("/fraud", response_model=FraudAnalyticsResponse)
-async def fraud(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> FraudAnalyticsResponse
+async def fraud(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep) -> FraudAnalyticsResponse
 ```
 
 - **Description**: Returns typology distribution and precision/recall/F1 detection metrics. The compute closure calls `AnalyticsRepository.typology_distribution` and `AnalyticsRepository.confusion_counts`, then applies `_metrics()` to derive the detection scores.
-- **Cache key**: `agg:fraud:{sim_now.isoformat()}`, TTL 5 s
+- **Cache key**: `agg:fraud:{now.isoformat()}`, TTL 5 s
 - **Role gate**: any authenticated user
 
 ---
@@ -1458,7 +1359,7 @@ async def fraud(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: Cur
 
 - **File**: [`garda_ai_backend/api/geo.py`](../../garda_ai_backend/api/geo.py)
 - **External dependencies**: `fastapi.APIRouter`
-- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, RedisDep, SessionDep, SimNowDep}`, `api.view_schemas.{GeoResponse, ProvinceFraud}`, `repositories.geo.GeoRepository`
+- **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{GeoResponse, ProvinceFraud}`, `repositories.geo.GeoRepository`
 - **Cache**: Single route cached with 10 s TTL.
 
 ### Private Function: `_risk_level`
@@ -1481,11 +1382,11 @@ router = APIRouter(prefix="/api/v1/geo", tags=["geo"])
 
 ```python
 @router.get("/provinces", response_model=GeoResponse)
-async def provinces(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _: CurrentUserDep) -> GeoResponse
+async def provinces(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep) -> GeoResponse
 ```
 
 - **Description**: Returns per-province fraud event counts enriched with a `risk_level` label (derived from `_risk_level`) and a placeholder `change_pct=0.0` (period-over-period change not yet implemented).
-- **Cache key**: `agg:geo:{sim_now.isoformat()}`, TTL 10 s
+- **Cache key**: `agg:geo:{now.isoformat()}`, TTL 10 s
 - **Role gate**: any authenticated user
 
 ---
@@ -1494,7 +1395,7 @@ async def provinces(session: SessionDep, redis: RedisDep, sim_now: SimNowDep, _:
 
 - **File**: [`garda_ai_backend/api/transactions.py`](../../garda_ai_backend/api/transactions.py)
 - **External dependencies**: `fastapi` (APIRouter, HTTPException, Query)
-- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, SimNowDep}`, `api.view_schemas.{LiveItem, LiveResponse, TransactionDetail}`, `repositories.transactions.TransactionsRepository`
+- **Internal dependencies**: `api.deps.{CurrentUserDep, NowDep, SessionDep}`, `api.view_schemas.{LiveItem, LiveResponse, TransactionDetail}`, `repositories.transactions.TransactionsRepository`
 - **Cache**: NOT cached. Live feed is a resync source; stale data would break incremental polling.
 
 ### Object: `router`
@@ -1509,14 +1410,14 @@ router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 @router.get("/live", response_model=LiveResponse)
 async def live(
     session: SessionDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     _: CurrentUserDep,
     after_seq: int | None = None,
     limit: int = Query(default=50, le=200),
 ) -> LiveResponse
 ```
 
-- **Description**: Streams recent `TransactionEvent` rows up to `sim_now`. If `after_seq` is supplied, returns events with `seq > after_seq` in ascending order (incremental polling mode). Otherwise returns the most recent `limit` events descending (initial load). Maximum `limit` is 200.
+- **Description**: Streams recent `TransactionEvent` rows with `event_time <= now`. If `after_seq` is supplied, returns events with `seq > after_seq` in ascending order (incremental polling mode). Otherwise returns the most recent `limit` events descending (initial load). Maximum `limit` is 200. Each `LiveItem` carries the same field set as a WebSocket push frame, so a reconnecting client's backfill and its live stream are field-for-field identical.
 - **Role gate**: any authenticated user
 
 ### Route: `GET /api/v1/transactions/{transaction_id}`
@@ -1535,7 +1436,7 @@ async def detail(transaction_id: int, session: SessionDep, _: CurrentUserDep) ->
 
 - **File**: [`garda_ai_backend/api/users_view.py`](../../garda_ai_backend/api/users_view.py)
 - **External dependencies**: `fastapi` (APIRouter, HTTPException)
-- **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep, SimNowDep}`, `api.masking.mask_name`, `api.view_schemas.{RiskProfile, UserRiskResponse}`, `repositories.users_view.UserRiskRepository`
+- **Internal dependencies**: `api.deps.{CurrentUserDep, NowDep, SessionDep}`, `api.masking.mask_name`, `api.view_schemas.{RiskProfile, UserRiskResponse}`, `repositories.users_view.UserRiskRepository`
 - **Cache**: NOT cached (masking is role-dependent and must execute per-request in the authenticated context).
 
 ### Object: `router`
@@ -1564,7 +1465,7 @@ def _shape(row: dict, user: CurrentUser, unmasked: bool) -> RiskProfile
 async def risk(
     session: SessionDep,
     user: CurrentUserDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     risk: str | None = None,
     unmasked: bool = False,
     limit: int = 100,
@@ -1582,7 +1483,7 @@ async def profile(
     entity_id: str,
     session: SessionDep,
     user: CurrentUserDep,
-    sim_now: SimNowDep,
+    now: NowDep,
     unmasked: bool = False,
 ) -> RiskProfile
 ```
@@ -1640,7 +1541,7 @@ async def ack(alert_id: int, session: SessionDep, user: CurrentUserDep) -> Alert
 
 - **File**: [`garda_ai_backend/api/system.py`](../../garda_ai_backend/api/system.py)
 - **External dependencies**: `fastapi.APIRouter`, `sqlalchemy` (func, select, text)
-- **Internal dependencies**: `api.deps.{CurrentUserDep, RedisDep, SessionDep}`, `api.view_schemas.SystemHealthResponse`, `repositories.sim.SimRepository`, `schema.TransactionEvent`
+- **Internal dependencies**: `api.deps.{CurrentUserDep, RedisDep, SessionDep}`, `api.view_schemas.SystemHealthResponse`, `schema.TransactionEvent`
 
 ### Object: `router`
 
@@ -1655,7 +1556,7 @@ router = APIRouter(prefix="/api/v1/system", tags=["system"])
 async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> SystemHealthResponse
 ```
 
-- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts `TransactionEvent` rows with `surfaced_at <= sim_now` as `events_surfaced`. Sets `model_accuracy_simulated=True` unconditionally because Phase 1 uses label-replay rather than a trained model. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
+- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts **all** `TransactionEvent` rows as `events_surfaced` — `select(func.count()).select_from(TransactionEvent)` with no time filter, because this is an operational "how much is in the database" probe rather than a windowed view. Sets `model_accuracy_simulated=True` unconditionally because Phase 1 uses label-replay rather than a trained model. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
 - **Role gate**: any authenticated user
 
 ---
@@ -1982,12 +1883,12 @@ async def persist(
 
 - **Description**: Idempotent atomic persist inside a single `async with self._session.begin()`:
   1. `pg_insert(Transaction).values(transactions).on_conflict_do_nothing(index_elements=[Transaction.id]).returning(Transaction.id)` — returns only the genuinely-new ids; short-circuits to `[]` if none are new.
-  2. Inserts one `TransactionEvent` per new id (`surfaced_at=now`, `fraud_score` / `typology` / `status` from `scores_by_id`), `RETURNING` `seq` + fields.
+  2. Inserts one `TransactionEvent` per new id (`surfaced_at=now` — the wall-clock ingestion time; `event_time` copied from the producer-supplied value on the parent transaction; `fraud_score` / `typology` / `status` from `scores_by_id`), `RETURNING` `seq` + fields. It iterates `sorted(new_ids)` rather than the returned set directly: a set iterates in hash order, which would assign `seq` out of transaction-id order and make the live feed's Time column jump backwards mid-list.
   3. Inserts one `Alert` (`severity="high"`) per event whose `status == "blocked"`.
 - **Parameters**:
-  - `transactions: list[dict]` — transaction rows (keyed by ORM column names, `id` = producer id)
+  - `transactions: list[dict]` — transaction rows (keyed by ORM column names, `id` = producer id, `event_time` = business time)
   - `scores_by_id: dict[int, dict]` — scoring results keyed by `transaction_id`
-  - `now: datetime` — surfaced/created timestamp for events and alerts
+  - `now: datetime` — ingestion timestamp; written to `TransactionEvent.surfaced_at` and `Alert.created_at`
 - **Returns**: `list[InsertedEvent]` — the newly-inserted events (empty on a full-duplicate batch)
 
 ---
@@ -2036,7 +1937,7 @@ async def ingest(
   3. **Score**: build the scoring items (including `from_risk_category`) and call `scoring.score(..., correlation_id=cid)` — timed via `perf_counter` and recorded to `INGEST_SCORING_LATENCY` in a `finally` (captures failing calls too). `ScoringUnavailable` → HTTP **503** (nothing persisted).
   4. **Validate**: any id missing from the results, a `status` outside `{approved, flagged, blocked}`, or a non-numeric `fraud_score` → HTTP **502**.
   5. **Persist**: `repo.persist(txn_rows, scores_by_id, now)`; an `IntegrityError` with SQLSTATE `23503` (FK) → HTTP **400** (unknown bank/account — seed reference data first). Increments `INGEST_TRANSACTIONS{inserted}` / `{duplicate}`.
-  6. **Publish**: commit-then-notify — for each new event, `redis.publish(LIVE_EVENTS_CHANNEL, json.dumps(message))` using the **same message shape** the WS relay/frontend consume (`seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `sim_now`). A publish failure after commit leaves events persisted-but-not-published (accepted for Phase 2).
+  6. **Publish**: commit-then-notify — for each new event, `redis.publish(LIVE_EVENTS_CHANNEL, json.dumps(message))` using the **same message shape** the WS relay/frontend consume (`seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time`) — the identical key set `TransactionsRepository.live_window` returns, so a client's WS stream and its `after_seq=` backfill never disagree on fields. A publish failure after commit leaves events persisted-but-not-published (accepted for Phase 2).
   7. **Respond**: one `IngestResultItem` per submitted transaction; duplicates get `ingested=False`, `seq=None`, `status=None`.
 - **Auth**: bearer `GARDA_INGEST_TOKEN` (router dependency)
 - **Error surface**: `200` / `400` (FK) / `401` (bad token) / `422` (schema) / `502` (invalid scoring results) / `503` (scoring unavailable)
@@ -2047,7 +1948,7 @@ async def ingest(
 
 - **File**: [`garda_ai_backend/seed.py`](../../garda_ai_backend/seed.py)
 - **External dependencies**: `asyncio`, `datetime`
-- **Internal dependencies**: `db._maker`, `repositories.users.UserRepository`, `schema.SimState`, `security.passwords.hash_password`
+- **Internal dependencies**: `db._maker`, `repositories.users.UserRepository`, `security.passwords.hash_password`
 
 ### Function: `ensure_admin`
 
@@ -2058,21 +1959,13 @@ async def ensure_admin(session: AsyncSession, email: str, password: str) -> User
 - **Description**: Idempotent admin creation. Checks whether a user with `email` already exists in the DB. If not, creates one with role `"admin"` and an Argon2id-hashed password. Returns the existing or new `User`.
 - **Dependencies**: `UserRepository`, `hash_password`
 
-### Function: `ensure_sim_state`
-
-```python
-async def ensure_sim_state(session: AsyncSession, start: datetime, speed: float) -> SimState
-```
-
-- **Description**: Idempotent simulation state creation. Returns the existing singleton `SimState` (id=1) if present, otherwise creates a new one with `running=False`.
-
 ### Private Function: `_main`
 
 ```python
 async def _main() -> None
 ```
 
-- **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@garda.local` / `admin`) and sets the simulation clock to `2025-09-01T00:00:00Z` at 60x speed. Commits the transaction.
+- **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@garda.local` / `admin`) and commits the transaction. There is no clock to seed: "now" is derived from the ingested data, so an empty database simply has no timeline yet.
 
 ---
 
@@ -2181,10 +2074,15 @@ class TransactionEvent(Base):
 |---|---|---|---|---|
 | `seq` | `int` | `BIGINT` | PRIMARY KEY, autoincrement | Monotonic sequence number |
 | `transaction_id` | `int` | `BIGINT` | FK → `transactions.id`, INDEX | Parent transaction |
-| `surfaced_at` | `datetime` | `TIMESTAMPTZ` | INDEX | When the scoring engine surfaced this event |
+| `surfaced_at` | `datetime` | `TIMESTAMPTZ` | INDEX | **Ingestion time** (wall clock) — when this event was written by the ingest path |
+| `event_time` | `datetime` | `TIMESTAMPTZ` | INDEX, NOT NULL | **Business time** — denormalized from `transactions.event_time`; the column every read view windows and buckets on |
 | `fraud_score` | `Decimal` | `NUMERIC` | NOT NULL | Model-assigned fraud probability (0–1) |
 | `typology` | `str \| None` | `VARCHAR` | INDEX, nullable | Detected AML typology |
 | `status` | `str` | `VARCHAR` | INDEX | `approved`, `flagged`, or `blocked` |
+
+Both timestamps are kept on purpose. `event_time` is denormalized onto the event row so the read queries stay single-table (no join back to `transactions` just to filter or bucket), and `surfaced_at` stays the real ingestion time, which makes detection lag (`surfaced_at - event_time`) a directly measurable quantity. Outside of that pairing and the live-feed payload, `surfaced_at` is not a window bound or a bucket key anywhere in the read layer.
+
+`event_time` was added by migration `d3c7e1f5a204_add_event_time_to_events` (revises `b2f1a9c4d7e0`): it adds the column nullable, backfills it from the parent transaction, sets `NOT NULL`, and creates index `ix_transaction_events_event_time` — the add-backfill-constrain order keeps the migration safe on a populated database.
 
 ---
 
@@ -2232,27 +2130,6 @@ class User(Base):
 
 ---
 
-### `schema/sim.py` — Simulation State Table
-
-- **File**: [`garda_ai_backend/schema/sim.py`](../../garda_ai_backend/schema/sim.py)
-
-#### Class: `SimState`
-
-```python
-class SimState(Base):
-    __tablename__ = "sim_state"
-    __table_args__ = (CheckConstraint("id = 1", name="sim_state_singleton"),)
-```
-
-| Column | Python Type | SQL Type | Constraints | Description |
-|---|---|---|---|---|
-| `id` | `int` | `INTEGER` | PRIMARY KEY, default=1, CHECK(id=1) | Enforces singleton row |
-| `sim_now` | `datetime` | `TIMESTAMPTZ` | NOT NULL | Current simulated clock time |
-| `speed` | `Decimal` | `NUMERIC` | default=1.0 | Playback speed multiplier |
-| `running` | `bool` | `BOOLEAN` | default=False | Whether the simulation clock is ticking |
-
----
-
 ### `schema/__init__.py` — Package Re-exports
 
 - **File**: [`garda_ai_backend/schema/__init__.py`](../../garda_ai_backend/schema/__init__.py)
@@ -2260,7 +2137,7 @@ class SimState(Base):
 Re-exports all ORM model classes and `Base`:
 
 ```python
-from garda_ai_backend.schema import Base, Bank, Entity, Account, Transaction, TransactionEvent, Alert, User, SimState
+from garda_ai_backend.schema import Base, Bank, Entity, Account, Transaction, TransactionEvent, Alert, User
 ```
 
 ---
@@ -2310,6 +2187,7 @@ classDiagram
             +seq: int PK
             +transaction_id: int FK
             +surfaced_at: datetime
+            +event_time: datetime
             +fraud_score: Decimal
             +typology: str?
             +status: str
@@ -2335,15 +2213,6 @@ classDiagram
             +password_hash: str
             +role: str
             +created_at: datetime
-        }
-    }
-
-    namespace Simulation {
-        class SimState {
-            +id: int PK CHECK(id=1)
-            +sim_now: datetime
-            +speed: Decimal
-            +running: bool
         }
     }
 
@@ -2375,7 +2244,7 @@ flowchart TB
     redis["redis_client.py\nbuild_redis / get_redis"]
     obs["observability.py\nREGISTRY / configure_logging"]
     main["main.py\nFastAPI app + system routes"]
-    seed["seed.py\nensure_admin / ensure_sim_state"]
+    seed["seed.py\nensure_admin"]
 
     subgraph security["security/"]
         passwords["passwords.py\nhash_password / verify_password / dummy_verify"]
@@ -2385,7 +2254,6 @@ flowchart TB
 
     subgraph repositories["repositories/"]
         users_repo["users.py\nUserRepository"]
-        sim_repo["sim.py\nSimRepository"]
         metrics_repo["metrics.py\nMetricsRepository"]
         analytics_repo["analytics.py\nAnalyticsRepository"]
         geo_repo["geo.py\nGeoRepository"]
@@ -2402,13 +2270,12 @@ flowchart TB
 
     subgraph api["api/"]
         schemas["schemas.py\nLoginRequest / RefreshRequest / TokenResponse / MeResponse"]
-        view_schemas["view_schemas.py\nSim / Metrics / Analytics / Geo / Txn / UserRisk / Alerts / SystemHealth models"]
-        deps["deps.py\nCurrentUser / SimNowDep / get_current_user / require_role / Deps"]
+        view_schemas["view_schemas.py\nMetrics / Analytics / Geo / Txn / UserRisk / Alerts / SystemHealth models"]
+        deps["deps.py\nCurrentUser / NowDep / get_data_now / get_current_user / require_role / Deps"]
         masking["masking.py\nmask_name / mask_account_id / mask_payment_id"]
         cache_mod["cache.py\ncached_json"]
         ratelimit["ratelimit.py\nRateLimiter"]
         auth_router["auth.py\nrouter — login/refresh/logout/me"]
-        sim_router["sim.py\nrouter — state/control"]
         metrics_router["metrics.py\nrouter — overview/volume/heatmap"]
         analytics_router["analytics.py\nrouter — fraud"]
         geo_router["geo.py\nrouter — provinces"]
@@ -2433,7 +2300,6 @@ flowchart TB
         txn["transactions.py — Transaction, TransactionEvent"]
         alerts_s["alerts.py — Alert"]
         users_s["users.py — User"]
-        sim["sim.py — SimState"]
         schema_init["__init__.py — re-exports"]
     end
 
@@ -2453,7 +2319,6 @@ flowchart TB
 
     %% Repository deps
     users_repo --> users_s
-    sim_repo --> sim
     metrics_repo --> txn
     analytics_repo --> txn
     geo_repo --> txn
@@ -2472,7 +2337,7 @@ flowchart TB
     deps --> users_repo
     deps --> refresh_store
     deps --> auth_svc
-    deps --> sim_repo
+    deps --> txn
 
     %% Cache + masking
     cache_mod --> redis
@@ -2487,10 +2352,6 @@ flowchart TB
     ratelimit --> redis
 
     %% View routers → deps + view_schemas
-    sim_router --> deps
-    sim_router --> view_schemas
-    sim_router --> sim_repo
-
     metrics_router --> deps
     metrics_router --> view_schemas
     metrics_router --> cache_mod
@@ -2521,7 +2382,6 @@ flowchart TB
 
     system_router --> deps
     system_router --> view_schemas
-    system_router --> sim_repo
     system_router --> txn
 
     %% WebSocket relay deps
@@ -2552,20 +2412,17 @@ flowchart TB
     seed --> db
     seed --> users_repo
     seed --> passwords
-    seed --> sim
 
     %% Schema internal deps
     ref --> base
     txn --> base
     alerts_s --> base
     users_s --> base
-    sim --> base
     schema_init --> base
     schema_init --> ref
     schema_init --> txn
     schema_init --> alerts_s
     schema_init --> users_s
-    schema_init --> sim
 ```
 
 ---
@@ -2592,6 +2449,16 @@ flowchart TB
 
 ### Changelog
 
+**Updated 2026-08-12 — Simulation clock removed; read layer re-anchored on the data clock**
+
+- **Simulation-clock subsystem deleted**: its router, repository, ORM model, response/request schemas, and the two control-plane endpoints under `/api/v1/sim` are all gone, and the singleton control table was dropped by migration `b2f1a9c4d7e0`. There is no replacement control plane; the ORM is down to 7 tables (banks, entities, accounts, transactions, transaction_events, alerts, users).
+- **`api/deps.py`**: the old clock dependency was replaced by `get_data_now` / `NowDep`, which returns `max(TransactionEvent.event_time)` and falls back to `datetime.now(UTC)` on an empty table. It no longer raises 404 — an uninitialised database is an empty dashboard, not an error.
+- **`schema/transactions.py`**: `TransactionEvent.event_time` added (TIMESTAMPTZ, NOT NULL, indexed), denormalized from `transactions.event_time` so read queries stay single-table. Migration `d3c7e1f5a204_add_event_time_to_events` adds it nullable, backfills from the parent transaction, sets NOT NULL, and indexes it. `surfaced_at` keeps its original meaning — ingestion time — leaving `surfaced_at - event_time` as a usable detection-lag signal.
+- **All view repositories**: window and bucket on `event_time`, never on `surfaced_at`; the clock parameter is now named `now`. Cache keys are stamped with the data clock.
+- **`api/system.py`**: `events_surfaced` counts all `TransactionEvent` rows with no time filter.
+- **`api/ingest.py`**: the published live-feed message carries `event_time` alongside `surfaced_at` (and no clock field), matching `TransactionsRepository.live_window` key-for-key. `repositories/ingest.py` writes `surfaced_at=now` and copies `event_time` from the producer payload, iterating `sorted(new_ids)` so `seq` follows transaction-id order.
+- **`seed.py`**: the clock-seeding helper was removed; the module now contains only `ensure_admin` and `_main`.
+
 **Updated 2026-06-25 — Ingest write-path (Phase 2, additive)**
 
 - **`services/scoring_client.py` added**: `ScoringClient` (`score()`) + `ScoringUnavailable`. Resilient httpx client for garda-ai-scoring `POST /v1/score` over a pooled `AsyncClient` (bearer token, `X-Correlation-ID` propagated, bounded retries with backoff, 4xx-no-retry, response validation). First outbound HTTP dependency of the backend.
@@ -2617,10 +2484,12 @@ flowchart TB
 - `Settings._require_strong_jwt_secret_outside_dev` is a fail-closed validator: it prevents the application from starting in any non-development environment without a proper JWT secret (>= 32 characters, not the default placeholder). This is enforced at Pydantic validation time, before the ASGI server begins serving requests.
 - `seed.py` seeds a default admin with password `"admin"`. This is intentionally weak for development; production deployments must rotate this before going live.
 - The `is_laundering` column on `Transaction` carries the IBM AMLSim ground-truth label used during the label-replay phase; it will be supplanted by `fraud_score` in live operation. It is currently used by `AnalyticsRepository.confusion_counts` to derive precision, recall, and F1.
-- `SimState` uses a DB-level `CHECK(id = 1)` constraint to enforce the singleton pattern at the SQL layer, making it safe to `UPSERT` from multiple concurrent processes without a distributed lock.
 - `REQUEST_COUNT` in `observability.py` is defined but not yet incremented — route-level instrumentation is expected in a future iteration.
-- The `surfaced_at <= sim_now` predicate is the central simulation gate: every view aggregate (metrics, analytics, geo, transactions, user-risk) applies it so the dashboard renders the world as it exists at the current simulation clock time. `SimNowDep` in `deps.py` is the single typed source for this value, shared across all eight view routers.
-- Metrics, analytics, and geo aggregates are Redis-cached (`cached_json`, `agg:` prefix) with sim-now-stamped keys so each tick of the simulation clock invalidates prior entries naturally (different key → cache miss → recompute). TTL is 5 s for metrics/analytics and 10 s for geo.
+- The `event_time <= now` predicate is the central temporal gate: every view aggregate (metrics, analytics, geo, transactions, user-risk) applies it so the dashboard renders the world as of the newest business time ingested. `NowDep` in `deps.py` is the single typed source for this value, shared across all seven view routers. "Now" is a property of the data — `max(TransactionEvent.event_time)` — not of a control table or the wall clock: the platform replays a historical dataset (IBM HI-Small, `2025-09-01`..`2025-09-10`), so a wall-clock window would select nothing at all.
+- The data clock governs read windows *only*. `security/tokens.py` mints `iat` / `exp` from its own `datetime.now(UTC)`; issuing JWTs against the data clock would stamp them with 2025 timestamps and make every freshly issued token look long expired.
+- `surfaced_at` and `event_time` on `TransactionEvent` answer different questions and both are retained: `surfaced_at` is when the platform learned about the event (written at ingest), `event_time` is when the transfer actually happened (denormalized from the parent transaction). Every window and bucket in the read layer uses `event_time`; `surfaced_at` survives only as a value written at ingest and a field in the live-feed payload, which together make detection lag (`surfaced_at - event_time`) measurable.
+- Metrics, analytics, and geo aggregates are Redis-cached (`cached_json`, `agg:` prefix) with data-clock-stamped keys, so entries invalidate naturally whenever the data clock advances — i.e. when an event with a newer `event_time` is ingested (different key → cache miss → recompute). TTL is 5 s for metrics/analytics and 10 s for geo.
+- The WebSocket push frame and the `GET /api/v1/transactions/live?after_seq=` response carry the identical key set (`seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time`). This is a deliberate contract: the dashboard's live list and its reconnect-backfill must render from the same fields, so a gap filled over REST is indistinguishable from one delivered over the socket.
 - The live transaction feed (`GET /api/v1/transactions/live`) is deliberately NOT cached because it acts as the resync source for the dashboard's live panel. Caching would delay event delivery and break incremental polling via `after_seq`.
 - User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.
 - `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. The pipeline keeps its own local copy of this value (duplicated by contract, not imported from this package). Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
