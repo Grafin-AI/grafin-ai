@@ -24,8 +24,10 @@ describe('TransactionMonitor timestamp', () => {
   it('renders event_time as an absolute UTC date, not a relative age', () => {
     render(<TransactionMonitor />);
 
-    // The dataset timestamp, formatted deterministically (en-GB + UTC).
-    expect(screen.getByText('03 Sept 2025, 14:22')).toBeInTheDocument();
+    // The dataset timestamp, formatted deterministically (en-GB + UTC). The month is
+    // matched as Sep/Sept because en-GB's short form for September is CLDR-version
+    // dependent; the day, year and time are pinned exactly, so a wrong date still fails.
+    expect(screen.getByText(/^03 Sept?\.? 2025, 14:22$/)).toBeInTheDocument();
 
     // Regression guard for the original defect: the wall-clock ingestion time
     // (surfaced_at) must not be what the feed shows.
