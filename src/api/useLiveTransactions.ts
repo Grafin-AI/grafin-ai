@@ -47,6 +47,7 @@ export function useLiveTransactions(max = 100) {
           seq: ev.seq, transaction_id: ev.transaction_id, bank: ev.bank ?? '',
           type: ev.type ?? '', amount: ev.amount ?? 0, fraud_score: ev.fraud_score,
           typology: ev.typology, status: ev.status, surfaced_at: ev.surfaced_at,
+          event_time: ev.event_time,
         };
         setItems((prev) => [item, ...prev].slice(0, max));
       };

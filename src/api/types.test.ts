@@ -10,6 +10,7 @@ describe('api types', () => {
     const li: LiveItem = {
       seq: 1, transaction_id: 1, bank: 'BRI', type: 'ACH', amount: 1, fraud_score: 0.1,
       typology: null, status: 'approved', surfaced_at: '2025-09-01T00:00:00Z',
+      event_time: '2025-09-01T00:00:00Z',
     };
     expect(tok.token_type).toBe('bearer');
     expect(m.total_transactions).toBe(1);

@@ -215,7 +215,7 @@ export function TransactionMonitor() {
                     <TableCell>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Clock className="w-3 h-3" />
-                        {formatTime(item.surfaced_at)}
+                        {formatTime(item.event_time)}
                       </div>
                     </TableCell>
 

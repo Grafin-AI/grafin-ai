@@ -44,6 +44,7 @@ export interface LiveItem {
   typology: string | null;
   status: Status;
   surfaced_at: string;
+  event_time: string;
 }
 export interface LiveResponse { items: LiveItem[]; }
 
@@ -100,4 +101,5 @@ export interface LiveEvent {
   typology: string | null;
   status: Status;
   surfaced_at: string;
+  event_time: string;
 }
