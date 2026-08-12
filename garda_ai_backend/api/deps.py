@@ -90,7 +90,9 @@ async def get_data_now(session: SessionDep) -> datetime:
     NOTE: auth/token expiry must NEVER use this clock — see security/tokens.py.
     """
     latest = await session.scalar(select(func.max(TransactionEvent.event_time)))
-    return latest or datetime.now(UTC)
+    if latest is None:
+        return datetime.now(UTC)
+    return latest
 
 
 NowDep = Annotated[datetime, Depends(get_data_now)]

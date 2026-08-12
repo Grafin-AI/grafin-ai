@@ -81,7 +81,11 @@ class IngestRepository:
                     "typology": scores_by_id[tid]["typology"],
                     "status": scores_by_id[tid]["status"],
                 }
-                for tid in new_ids
+                # sorted(): new_ids is a set, so iterating it raw assigns seq in hash
+                # order. seq stays a total order either way, but the live feed renders
+                # in seq order, so out-of-order insertion makes its Time column jump
+                # backwards mid-list.
+                for tid in sorted(new_ids)
             ]
             ins_ev = (
                 pg_insert(TransactionEvent)

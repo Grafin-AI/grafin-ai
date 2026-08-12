@@ -362,6 +362,34 @@ async def test_event_row_carries_transaction_event_time(client, session, seeded_
     assert ev.surfaced_at != ev.event_time  # ingestion time is "now", not the CSV time
 
 
+async def test_seq_is_assigned_in_transaction_id_order(client, session, seeded_reference):
+    """seq must be assigned in a stable order, not set-hash order.
+
+    These four ids iterate out of order as a Python set ([40049, 40097, 40005, 40053]),
+    so inserting straight from the set assigns seq out of order. The live feed renders
+    in seq order, so that makes its Time column jump backwards mid-list.
+    """
+    ids = [40005, 40049, 40053, 40097]
+    txns = [{**_TXN, "transaction_id": i} for i in ids]
+
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": txns}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+    assert r.status_code == 200
+
+    rows = (
+        await session.execute(
+            select(TransactionEvent.transaction_id).order_by(TransactionEvent.seq)
+        )
+    ).scalars().all()
+    assert list(rows) == ids
+
+
 async def test_ingest_enrichment_reaches_scoring(client, session, seeded_reference):
     # from_account 1000000001 is seeded risk_category="High"; the route must enrich
     # the scoring payload with it. Removing the enrichment line fails this test.
