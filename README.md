@@ -3,7 +3,8 @@
 Local-only simulation producer for the Garda AML platform. Streams the HI-Small
 transactions CSV as batches to the backend `POST /api/v1/ingest` (bearer ingest token),
 pacing by the CSV's real inter-arrival gaps compressed by `speed` (capped by `max_gap_s`)
-and stamping `event_time = now`. Owns pacing/speed/start-stop locally. **Never deployed.**
+and sending each row's own CSV timestamp as `event_time`. Owns pacing/speed/start-stop
+locally. **Never deployed.**
 
 ## Run
 

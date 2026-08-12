@@ -19,8 +19,9 @@
 
 ## `producer.py`
 - `SimStats(dataclass)` — `batches, sent, ingested, duplicate`.
-- `Producer(client, *, speed, max_gap_s, batch_size, sleep=…, now=…, new_correlation_id=…)`;
-  `run(rows, *, dry_run=False) -> SimStats`.
+- `Producer(client, *, speed, max_gap_s, batch_size, sleep=…, new_correlation_id=…)`;
+  `run(rows, *, dry_run=False) -> SimStats` — each row is sent with its own `csv_ts` as
+  `event_time`.
 
 ## `run.py`
 - `run_sim(settings) -> None` — resolve paths (missing → `SystemExit(2)`); stream → produce;

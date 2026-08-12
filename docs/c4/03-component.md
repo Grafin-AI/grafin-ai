@@ -9,11 +9,12 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
   Trans CSV paths, builds the pooled httpx client + `IngestClient` + `Producer`, runs the stream,
   logs the run summary, maps outcomes to exit codes (0/1/2), handles Ctrl-C.
 - **Reader** (`reader.py`) — streams the Trans CSV parts into `SimTxn`s, assigning a stable 1-based
-  `transaction_id` ordinal (continuous across parts) and parsing the pacing timestamp. Never
-  materializes the file.
+  `transaction_id` ordinal (continuous across parts) and parsing the CSV timestamp (which both
+  paces sending and is sent as `event_time`). Never materializes the file.
 - **Producer** (`producer.py`) — the paced batch loop: groups rows into batches, waits
-  `clamp(csv_gap / speed, 0, max_gap_s)` between batches, stamps `event_time = now`, POSTs via the
-  client, accumulates `SimStats`. Injectable `sleep`/`now`/`correlation-id` for deterministic tests.
+  `clamp(csv_gap / speed, 0, max_gap_s)` between batches, sends each row's own CSV timestamp as
+  `event_time`, POSTs via the client, accumulates `SimStats`. Injectable `sleep`/`correlation-id`
+  for deterministic tests.
 - **IngestClient** (`client.py`) — pooled httpx wrapper for `POST /api/v1/ingest`; bearer token +
   per-batch correlation id; bounded retry with backoff (4xx → `IngestError` fail-fast; transport/5xx
   → retry → `IngestUnavailable`).

@@ -1,8 +1,8 @@
 """Local simulation producer entrypoint.
 
 Streams the HI-Small transactions CSV as batches to the backend POST /api/v1/ingest, paced by the
-CSV's real inter-arrival gaps (compressed by ``speed``, clamped by ``max_gap_s``) and stamped with
-``event_time = now``. Local-only; never deployed.
+CSV's real inter-arrival gaps (compressed by ``speed``, clamped by ``max_gap_s``). Each row is sent
+with its own CSV timestamp as ``event_time``. Local-only; never deployed.
 
 Invoke: ``uv run garda-sim`` or ``uv run python -m garda_ai_sim.run``.
 
