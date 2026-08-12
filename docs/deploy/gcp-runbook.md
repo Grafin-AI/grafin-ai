@@ -12,6 +12,27 @@
 
 ---
 
+## Deploy Sequence
+
+**Deploys are always a deliberate operator action — nothing deploys on a merge to `main`.**
+
+**Cold start (first time, once):**
+
+1. **Foundation:** `terraform apply -target=...` (VPC, Cloud SQL, Redis, Artifact Registry, secrets) — Phase 2.4.1.
+2. **Seed first images:** in each service repo, `make push` (build + push only — does NOT create the service) — Phase 2.4.2.
+3. **Create services/jobs:** full `terraform apply` — images now exist, so services get created with their VPC / secret / ingress wiring — Phase 2.4.3.
+4. **Init data:** `gcloud run jobs execute garda-migrate --region $REGION --wait`, then in `garda-ai-ingest` run `make execute` (seeds reference data) — Phase 3.
+
+**Routine redeploy (the common case):**
+
+- In the changed service repo: `make deploy` (build → push → `gcloud run deploy` a new revision). No terraform, no other services touched.
+- Or: GitHub Actions tab → **deploy** → **Run workflow** (`workflow_dispatch`).
+- Breaking DB migration: run the `garda-migrate` job first. Because the migrate job stays terraform-owned, refresh it with `terraform apply` (re-resolves the backend `:latest` digest) before `gcloud run jobs execute garda-migrate --wait`.
+
+**Division of labor:** `terraform` owns resource creation and wiring; `make deploy` owns image rollout. The terraform `lifecycle { ignore_changes = [...image] }` on the three services and the ingest job keeps `terraform apply` from reverting an operator's rollout.
+
+---
+
 ## Phase 1: GCP Project Setup
 
 ### Step 1.1: Create GCP Project & Enable Billing
@@ -181,7 +202,7 @@ docker build -t ${REGISTRY}/backend:latest .
 # Push image
 docker push ${REGISTRY}/backend:latest
 
-# Repeat for frontend, scoring, ingest (or trigger CI deploy.yml on push to main)
+# Repeat for frontend, scoring, ingest (or use `make push` in each repo)
 cd ../garda-ai-dashboard-web
 docker build -t ${REGISTRY}/frontend:latest .
 docker push ${REGISTRY}/frontend:latest
@@ -195,8 +216,21 @@ docker build -t ${REGISTRY}/ingest:latest .
 docker push ${REGISTRY}/ingest:latest
 ```
 
-**Alternative:** Let CI/CD do the build and push:
-- Push each service repo to `main` → deploy.yml triggers → images are built and pushed automatically to Artifact Registry
+**Deploying a service (two equivalent manual routes — neither auto-fires):**
+
+1. **Local (operator clones the repo):**
+   ```bash
+   cd garda-ai-<service>
+   cp deploy.env.example deploy.env   # edit GCP_PROJECT / GCP_REGION (or export them)
+   make deploy                        # build -> push -> gcloud run deploy
+   ```
+   Uses your own `gcloud auth login`. For the ingest job: `make deploy` then `make execute`.
+
+2. **GitHub button:** Actions tab → **deploy** → **Run workflow** (`workflow_dispatch`).
+   Requires the Workload Identity Federation setup (Phase 4). Never triggers on a merge to `main`.
+
+**Note:** during cold start use `make push` (build + push only). The Cloud Run services do not exist yet
+at that point — terraform creates them in Phase 2.4.3. Use `make deploy` for routine redeploys afterwards.
 
 #### Phase 2.4.3: Deploy Services and Jobs
 

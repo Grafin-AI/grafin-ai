@@ -102,11 +102,14 @@ Backend ingest → score via scoring service → INSERT `transaction_events` + a
 
 ## Deployment flow
 
-1. **Build phase (per repo CI):** Each service repo runs `.github/workflows/ci.yml` (test/lint) and `.github/workflows/deploy.yml` on push to `main`.
-   - Deploy workflow: authenticate via Workload Identity Federation, build image, push to Artifact Registry.
-2. **Terraform provisioning:** `garda-ai-deploy/terraform/` provisions GCP infrastructure: networking, Cloud SQL, Memorystore, Secret Manager, services, jobs.
-3. **Deploy-init jobs:** Operator runs `gcloud run jobs execute garda-migrate` then `gcloud run jobs execute garda-ingest` to prepare data.
-4. **Service deployment:** Backend, frontend, and scoring services auto-deploy from Artifact Registry on push (or manual trigger).
+Deploys are **always a deliberate operator action** — nothing deploys automatically on a merge to `main`.
+
+1. **CI (automatic):** Each service repo runs `.github/workflows/ci.yml` (test/lint) on pushes and PRs. CI never deploys.
+2. **Terraform provisioning:** `garda-ai-deploy/terraform/` provisions GCP infrastructure: networking, Cloud SQL, Memorystore, Secret Manager, services, jobs. Terraform owns resource creation and wiring; it ignores subsequent image changes.
+3. **Image build + rollout (manual):** Either route, operator-triggered:
+   - **Local:** `make deploy` in the service repo (build → push to Artifact Registry → `gcloud run deploy`), using the operator's own `gcloud auth login`.
+   - **GitHub:** Actions tab → **deploy** → **Run workflow** (`workflow_dispatch`), authenticating via Workload Identity Federation.
+4. **Deploy-init jobs:** Operator runs `gcloud run jobs execute garda-migrate` then (in `garda-ai-ingest`) `make execute` to prepare data.
 
 ## Notes
 
