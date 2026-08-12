@@ -24,3 +24,6 @@ yarn-error.log*
 # build output
 build/
 !.env.example
+
+# operator deploy config (see deploy.env.example)
+deploy.env
