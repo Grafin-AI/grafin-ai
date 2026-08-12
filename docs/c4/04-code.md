@@ -75,7 +75,6 @@
 | `AlertItem` | `id`, `event_seq`, `severity`, `typology`, `created_at`, `acknowledged` | — |
 | `AlertsResponse` | `alerts: AlertItem[]` | `/alerts` |
 | `SystemHealth` | `db_ok`, `redis_ok`, `events_surfaced`, `model_accuracy_simulated` | `/system/health` |
-| `SimState` | `sim_now`, `speed`, `running` | `/sim/state`, `/sim/control` |
 | `LiveEvent` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time` | WebSocket `/api/v1/ws/live` |
 
 **Note**: `LiveEvent` (WebSocket push) has nullable `bank`, `type`, `amount` fields (worker may omit them) whereas `LiveItem` (REST response) has non-nullable equivalents — `useLiveTransactions` maps between the two.
@@ -92,7 +91,7 @@
 
 Internal helpers:
 - `get<T>(url: string, params?: Record<string, unknown>): Promise<T>` — thin wrapper over `api.get` that unwraps `.data`.
-- `LIVE` — `const { refetchInterval: 4000 }` options object spread into every aggregate-view hook so they poll the backend every 4 s while the simulation advances. The backend caches aggregate responses ~5 s, so this is cheap. Detail/profile hooks (`useTransactionDetail`, `useUserProfile`) intentionally do **not** use `LIVE` — they are on-demand modals.
+- `LIVE` — `const { refetchInterval: 4000 }` options object spread into every aggregate-view hook so they poll the backend every 4 s while the dataset replay advances. The backend caches aggregate responses ~5 s, so this is cheap. Detail/profile hooks (`useTransactionDetail`, `useUserProfile`) intentionally do **not** use `LIVE` — they are on-demand modals.
 
 | Hook | Signature | Query key | Endpoint | Poll | Notes |
 |---|---|---|---|---|---|
@@ -108,8 +107,6 @@ Internal helpers:
 | `useAckAlert` | `(): UseMutationResult` | — | POST `/alerts/:id/ack` | — | Invalidates `['alerts']` on success |
 | `useTransactionDetail` | `(id: number \| null): UseQueryResult<TransactionDetail>` | `['transaction', id]` | GET `/transactions/:id` | none | `enabled: id != null`; on-demand modal |
 | `useLiveRecent` | `(limit?: number): UseQueryResult<LiveResponse>` | `['transactions', 'live', limit]` | GET `/transactions/live?limit=` | none | Default `limit=50`; used for initial seeding |
-| `useSimState` | `(): UseQueryResult<SimState>` | `['sim', 'state']` | GET `/sim/state` | 5 s | Separate interval; sim clock only |
-| `useSimControl` | `(): UseMutationResult` | — | POST `/sim/control` | — | Sends `Partial<SimState>`; invalidates `['sim', 'state']` |
 
 **Dependencies**: `@tanstack/react-query`, `./client`, `./types`
 
@@ -224,11 +221,11 @@ QueryClientProvider (queryClient)
 
 ### `src/App.tsx`
 
-**Purpose**: Shell component. Renders fixed `Sidebar` + `Header`, then switches between views via `currentView` state. Handles `/dashboard`, `/user-risk-profiling`, and `/simulation` routes. Also defines the `SystemHealthCards` inline component.
+**Purpose**: Shell component. Renders fixed `Sidebar` + `Header`, then switches between views via `currentView` state. Handles the `/dashboard` and `/user-risk-profiling` routes; any other `currentView` falls through to an "Halaman Sedang Dibangun" placeholder. Also defines the `SystemHealthCards` inline component.
 
 | Symbol | Description |
 |---|---|
-| `App` | Main shell; state `currentView: string`. Renders `<SimulationControl />` when `currentView === '/simulation'`. |
+| `App` | Main shell; state `currentView: string` (initial `'/dashboard'`). |
 | `SystemHealthCards` | Inline component; calls `useSystemHealth()` and renders four status cards (Database, Model Accuracy, Redis, Events Surfaced). |
 
 **Location**: [`src/App.tsx`](../../src/App.tsx)
@@ -299,24 +296,6 @@ Full-page view for the `/user-risk-profiling` route. Renders a risk-distribution
 
 ---
 
-### `src/components/SimulationControl.tsx`
-
-Dedicated full-page view rendered when `currentView === '/simulation'`. Displays the simulation clock and read-only status for all authenticated users; exposes admin-only play/pause and speed controls.
-
-| Symbol | Signature | Description |
-|---|---|---|
-| `SPEED_OPTIONS` | `readonly [1, 2, 5, 10, 20]` | Allowed multiplier values for the speed selector. Module-level constant (moved here from `Header`). |
-| `formatSimNow` | `(simNow: string): string` | Formats an ISO datetime string using `id-ID` locale (`dd MMM yyyy, HH:mm`). Falls back to the raw string on parse error. Module-level helper (moved here from `Header`). |
-| `SimulationControl` | `(): JSX.Element` | Reads `useAuth().user?.role`; derives `isAdmin`. Calls `useSimState()` for the clock, `useSimControl()` for mutations, and `useSystemHealth()` for `events_surfaced`. Shows a `<Skeleton>` while loading and a "Simulation unavailable" fallback when `simState` is absent. Admin section (play/pause button + speed `<select>`) is conditionally rendered only when `isAdmin === true`. |
-| `toggleRunning` | `(): void` | (inner) Calls `simControl.mutate({ running: !simState.running })`. |
-| `changeSpeed` | `(speed: number): void` | (inner) Calls `simControl.mutate({ speed })`. |
-
-**Hooks**: `useAuth`, `useSimState`, `useSimControl`, `useSystemHealth`
-
-**Location**: [`src/components/SimulationControl.tsx`](../../src/components/SimulationControl.tsx)
-
----
-
 ### `src/components/AlertsPanel.tsx`
 
 Renders a scrollable list of `AlertItem` rows. Calls `useAlerts('all')`. Each row has an Acknowledge button that fires `useAckAlert().mutate(id)`, which POSTs `/alerts/:id/ack` and invalidates the alerts query.
@@ -327,11 +306,9 @@ Renders a scrollable list of `AlertItem` rows. Calls `useAlerts('all')`. Each ro
 
 ### `src/components/Header.tsx`
 
-Fixed top bar. Renders the dashboard title, a search input, an alerts badge button, a settings button, and the user identity panel (`user?.email` / `user?.role` from `useAuth()`). The simulation clock and controls that previously lived here have been removed — they now live in `SimulationControl`.
+Fixed top bar. Renders the dashboard title, a search input, an alerts badge button, a settings button, and the user identity panel (`user?.email` / `user?.role` from `useAuth()`). It contains no simulation clock or controls; `Header.test.tsx` asserts their absence.
 
 **Hooks**: `useAuth`
-
-**Removed since prior revision**: `useSimState`, `useSimControl`, `Skeleton`, `SPEED_OPTIONS`, `Clock`, `Play`, `Pause` imports are all gone.
 
 ---
 
@@ -353,9 +330,9 @@ Dialog modal opened from `TransactionMonitor` or `UserRiskProfiling`. Calls `use
 
 ### `src/components/Sidebar.tsx`
 
-Navigation sidebar. Accepts `currentView` and `onNavigate` props from `App`. Reads `useAuth().user?.role` and conditionally inserts a "Simulation" nav item (href `/simulation`, icon `Activity`) between "User Risk Profiling" and "Settings" when `role === 'admin'`. Non-admin users see only Dashboard, User Risk Profiling, and Settings.
+Navigation sidebar. Accepts `currentView` and `onNavigate` props from `App`. Renders a static nav list — Dashboard (`/dashboard`), User Risk Profiling (`/user-risk-profiling`), and Settings (`/settings`) — identically for every user. It reads no auth context and performs no role gating.
 
-**Hooks**: `useAuth`
+**Hooks**: none
 
 ---
 
@@ -380,9 +357,7 @@ main.tsx
 
 App.tsx
   → components/Header.tsx            → auth/AuthContext (useAuth)
-  → components/Sidebar.tsx           → auth/AuthContext (useAuth)
-  → components/SimulationControl.tsx → api/queries (useSimState, useSimControl, useSystemHealth)
-                                        auth/AuthContext (useAuth)
+  → components/Sidebar.tsx           → (no data or auth dependencies)
   → components/MetricsOverview.tsx   → api/queries (useMetricsOverview)
   → components/TransactionVolume.tsx → api/queries (useVolume)
   → components/TransactionHeatmap.tsx → api/queries (useHeatmap)
@@ -449,8 +424,7 @@ flowchart TB
 
     subgraph Views["src/components/ (wired views)"]
         HDR["Header\n(useAuth only)"]
-        SB["Sidebar\n(useAuth — admin nav item)"]
-        SC["SimulationControl\n(useSimState useSimControl\nuseSystemHealth useAuth)"]
+        SB["Sidebar\n(static nav, no hooks)"]
         MO["MetricsOverview\n(useMetricsOverview)"]
         TV["TransactionVolume\n(useVolume)"]
         TH["TransactionHeatmap\n(useHeatmap)"]
@@ -495,9 +469,6 @@ flowchart TB
 
     %% Views → queries
     HDR --> AC
-    SB --> AC
-    SC --> QS
-    SC --> AC
     MO --> QS
     TV --> QS
     TH --> QS
@@ -553,3 +524,15 @@ The browser `WebSocket` constructor does not accept custom headers, so the acces
 ### 2026-06-23 — Simulation controls moved to dedicated admin page
 
 The simulation clock and controls were extracted out of `Header` into a new dedicated component `SimulationControl` (`src/components/SimulationControl.tsx`), rendered at the `/simulation` route. `SPEED_OPTIONS` and `formatSimNow` moved with it. `Header` is now clean — it only handles the title, search, alerts, settings, and user identity panel. `Sidebar` gained a `useAuth` dependency so it can conditionally insert the "Simulation" nav item for admin users only. `App.tsx` was updated to route `currentView === '/simulation'` to `<SimulationControl />`.
+
+> **Superseded** by the Phase 5 sim-shedding removal below. The entry above is retained as history: it records what was built at the time, not the current state.
+
+### Phase 5 — Simulation feature removed from the frontend
+
+The dashboard-side simulation feature was deleted in the Phase 5 sim-shedding work. `src/components/SimulationControl.tsx`, the `SimState` type, and the `useSimState` / `useSimControl` hooks no longer exist, and `sim_now` is no longer part of the `LiveEvent` WebSocket payload. `Sidebar` lost the `useAuth` dependency it had gained for admin gating and is now a static nav list; `App.tsx` no longer routes `/simulation`, so that path falls through to the placeholder view. Simulation is now driven entirely outside the dashboard by the `garda-ai-sim` producer.
+
+*(Recorded 2026-08-12 during a docs sync — these C4 documents had continued to describe the feature as live well after the code was removed.)*
+
+### 2026-08-12 — Live feed shows dataset time
+
+The dashboard replays a historical dataset, so the live feed now labels events with `event_time` (when the transaction actually happened, carried from the CSV through the backend) instead of `surfaced_at` (wall-clock ingestion time). `LiveItem` and `LiveEvent` carry both fields. `TransactionMonitor`'s `formatTime` was changed from a relative age ("N hours ago", which degenerated into a five-figure hour count against a September-2025 dataset) to an absolute timestamp with locale and timezone pinned to `en-GB`/UTC for deterministic output. `surfaced_at` is retained because `surfaced_at - event_time` remains a usable detection-lag signal.

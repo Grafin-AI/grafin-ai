@@ -27,8 +27,8 @@ Provides all outbound communication with the Backend API container. Centralises 
 - **Single-flight token refresh**: Module-level `refreshing` promise coalesces concurrent 401 failures into one `POST /auth/refresh` call; all waiting requests are retried with the new token.
 - **Auth-failure callback**: `onAuthFailure(cb)` lets the Auth component register a logout trigger when refresh also fails.
 - **Token persistence**: `tokenStore` reads/writes `garda.access` and `garda.refresh` keys in `localStorage`; exposes `getAccess`, `getRefresh`, `set`, and `clear`.
-- **Response type contracts**: Hand-authored TypeScript mirrors of backend Pydantic models (`TokenResponse`, `Me`, `MetricsOverview`, `VolumeResponse`, `HeatmapResponse`, `FraudAnalytics`, `GeoResponse`, `LiveItem / LiveResponse`, `TransactionDetail`, `RiskProfile`, `UserRiskResponse`, `AlertsResponse`, `SystemHealth`, `SimState`, `LiveEvent`). Regenerable from the live OpenAPI spec via `npm run gen:api`.
-- **TanStack Query hooks**: Fourteen hooks covering all REST endpoints — `useMetricsOverview`, `useVolume(range)`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk(risk?)`, `useUserProfile(entityId)`, `useAlerts(status?)`, `useAckAlert` (mutation), `useTransactionDetail(id)`, `useLiveRecent(limit?)`, `useSystemHealth`, `useSimState` (5 s poll), `useSimControl` (mutation). Mutations invalidate relevant query keys on success.
+- **Response type contracts**: Hand-authored TypeScript mirrors of backend Pydantic models (`TokenResponse`, `Me`, `MetricsOverview`, `VolumeResponse`, `HeatmapResponse`, `FraudAnalytics`, `GeoResponse`, `LiveItem / LiveResponse`, `TransactionDetail`, `RiskProfile`, `UserRiskResponse`, `AlertsResponse`, `SystemHealth`, `LiveEvent`). Regenerable from the live OpenAPI spec via `npm run gen:api`.
+- **TanStack Query hooks**: Twelve hooks covering all REST endpoints — `useMetricsOverview`, `useVolume(range)`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk(risk?)`, `useUserProfile(entityId)`, `useAlerts(status?)`, `useAckAlert` (mutation), `useTransactionDetail(id)`, `useLiveRecent(limit?)`, `useSystemHealth`. Mutations invalidate relevant query keys on success.
 
 #### Interfaces
 
@@ -48,8 +48,6 @@ Provides all outbound communication with the Backend API container. Centralises 
 | `useTransactionDetail` | GET | `/transactions/:id` | `enabled: id != null` |
 | `useLiveRecent` | GET | `/transactions/live?limit=` | initial seed |
 | `useSystemHealth` | GET | `/system/health` | — |
-| `useSimState` | GET | `/sim/state` | 5 s refetchInterval |
-| `useSimControl` | POST | `/sim/control` | mutation, `Partial<SimState>` |
 | `api` (login) | POST | `/auth/login` | via AuthContext |
 | `api` (logout) | POST | `/auth/logout` | via AuthContext |
 | `api` (me) | GET | `/auth/me` | via AuthContext |
@@ -120,7 +118,7 @@ Manages the full authentication lifecycle: login, session restoration on page lo
 - **`ready` flag**: Prevents the route guard from flashing the login form during the async session-restore check.
 - **Route guard**: `RequireAuth` renders `null` while `ready === false`, `<LoginPage />` when unauthenticated, and children when authenticated.
 - **Login form**: `LoginPage` provides email/password form with inline error display and disabled-while-busy submit button.
-- **Role exposure**: `useAuth().user.role` is consumed by `SimulationControl` to gate the admin-only Simulation page; non-admins see a read-only clock/status view.
+- **Role exposure**: `useAuth().user.role` is exposed on the context and rendered by `Header` in the user identity panel. No view is currently role-gated on the client.
 
 #### Interfaces
 
@@ -151,28 +149,27 @@ RequireAuth({ children: ReactNode }): JSX.Element | null
 ### 4. View Components
 
 - **Name**: View Components
-- **Modules**: `src/components/MetricsOverview.tsx`, `src/components/TransactionVolume.tsx`, `src/components/TransactionHeatmap.tsx`, `src/components/TransactionMonitor.tsx`, `src/components/FraudAnalytics.tsx`, `src/components/GeographicMap.tsx`, `src/components/UserRiskProfiling.tsx`, `src/components/AlertsPanel.tsx`, `src/components/Header.tsx`, `src/components/SimulationControl.tsx`, `src/components/TransactionDetailsModal.tsx`, `src/components/UserProfileDetailsModal.tsx`, `src/components/Sidebar.tsx`
+- **Modules**: `src/components/MetricsOverview.tsx`, `src/components/TransactionVolume.tsx`, `src/components/TransactionHeatmap.tsx`, `src/components/TransactionMonitor.tsx`, `src/components/FraudAnalytics.tsx`, `src/components/GeographicMap.tsx`, `src/components/UserRiskProfiling.tsx`, `src/components/AlertsPanel.tsx`, `src/components/Header.tsx`, `src/components/TransactionDetailsModal.tsx`, `src/components/UserProfileDetailsModal.tsx`, `src/components/Sidebar.tsx`
 - **Type**: Presentation / View
 
 #### Purpose
 
-All dashboard views and controls that render data fetched by the API Client / Data Layer or Live Feed Hook. Provides the user-facing AML monitoring interface — metrics, charts, live transaction feed, fraud analytics, geographic risk, user risk profiles, alerts, system health, and a dedicated admin-only Simulation page for sim-clock controls.
+All dashboard views and controls that render data fetched by the API Client / Data Layer or Live Feed Hook. Provides the user-facing AML monitoring interface — metrics, charts, live transaction feed, fraud analytics, geographic risk, user risk profiles, alerts, and system health.
 
 #### Software Features
 
 - **KPI cards** (`MetricsOverview`): Total Transactions, Fraud Detected, Fraud Rate, Total Amount (IDR-formatted). Skeleton on load, error card on failure.
 - **Volume chart** (`TransactionVolume`): Recharts `AreaChart` with animated period-selector (`24h` / `weekly` / `monthly` / `yearly`); drives `useVolume(range)`.
 - **Activity heatmap** (`TransactionHeatmap`): 7×24 grid (day × hour) with intensity normalised to `rawValue / maxValue`; hover shows raw count.
-- **Live transaction monitor** (`TransactionMonitor`): Scrollable real-time table driven by `useLiveTransactions(100)`. Row click opens `TransactionDetailsModal`; bank cell opens `UserProfileDetailsModal`.
+- **Live transaction monitor** (`TransactionMonitor`): Scrollable real-time table driven by `useLiveTransactions(100)`. Row click opens `TransactionDetailsModal`; bank cell opens `UserProfileDetailsModal`. The time column shows `event_time` (dataset time) as an absolute `en-GB`/UTC timestamp, not `surfaced_at` (ingestion time).
 - **Fraud analytics** (`FraudAnalytics`): Three cards — detection metrics (precision/recall/F1 bars), fraud-by-typology count bar chart, top-suspected-fraud-by-amount bar chart.
 - **Geographic risk** (`GeographicMap`): Ranked province list with fraud count, change percentage, and risk-level badge. PII is masked server-side; the UI renders what it receives.
 - **User risk profiling** (`UserRiskProfiling`): Full-page view with risk-distribution PieChart + BarChart (client-derived), search/filter bar, paginated risk-profile table. Opens `UserProfileDetailsModal` on row click.
 - **Alerts panel** (`AlertsPanel`): Scrollable alert list; Acknowledge button fires `useAckAlert` mutation.
 - **Transaction detail modal** (`TransactionDetailsModal`): Shows fraud score, typology badge, bank details, and a four-panel AI narrative (pattern matching, behaviour analysis, network analysis, recommendation) keyed from the static `typologyAnalysis` map.
 - **User profile detail modal** (`UserProfileDetailsModal`): Shows risk score, risk factors, and static analysis narratives from `riskAnalysisTemplates` keyed by `risk_level`. Phase-1 note: monthly activity / risk-history charts are hidden because the API does not yet expose that data.
-- **Clean monitoring header** (`Header`): Displays title, search, alerts indicator, settings, and user info. The sim clock and sim controls are **no longer in the Header** (relocated 2026-06-23 — see change note below). No API dependencies for sim state in this component.
-- **Simulation control page** (`SimulationControl`): Admin-only page at `/simulation` (reached via a "Simulation" item in `Sidebar`). Displays `sim_now` (formatted sim timestamp), events-surfaced count, and running/paused status via `useSimState`. Admin users (`user.role === 'admin'`) additionally see play/pause toggle and speed selector powered by `useSimControl` mutation. Non-admins (`role !== 'admin'`) see a read-only clock/status view. Role is gated client-side and also enforced server-side on `POST /sim/control`.
-- **Navigation sidebar** (`Sidebar`): Nav with links to all views including the admin "Simulation" item (`/simulation`). No API dependencies.
+- **Clean monitoring header** (`Header`): Displays title, search, alerts indicator, settings, and user info. It contains no simulation clock or controls; `Header.test.tsx` asserts their absence.
+- **Navigation sidebar** (`Sidebar`): Static nav list — Dashboard, User Risk Profiling, Settings — rendered identically for every user. No API, auth, or role dependencies.
 - **System health cards** (inline in `App.tsx` as `SystemHealthCards`): Four cards — Database, Model Accuracy (labelled "Simulated" when `model_accuracy_simulated === true`), Redis, Events Surfaced. Unavailable or unimplemented series are hidden rather than shown as zero (Phase-1 honesty).
 
 #### Interfaces
@@ -181,14 +178,13 @@ Components accept props from `App` (navigation callbacks, `currentView`) and con
 
 - `Sidebar({ currentView: string; onNavigate: (view: string) => void })`
 - `TransactionMonitor` — opens modals internally; no required external props
-- `Header` — clean monitoring header; no sim-state hooks
-- `SimulationControl` — reads auth context via `useAuth()` and sim state via `useSimState`/`useSimControl` directly via hooks; rendered by `App` when `currentView === 'simulation'`
+- `Header` — clean monitoring header; consumes `useAuth()` only
 
 #### Dependencies
 
-- **API Client / Data Layer**: All `use*` REST query hooks (`useMetricsOverview`, `useVolume`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk`, `useUserProfile`, `useAlerts`, `useAckAlert`, `useTransactionDetail`, `useSystemHealth`, `useSimState`, `useSimControl`); `useSimState` and `useSimControl` are consumed exclusively by `SimulationControl`
+- **API Client / Data Layer**: All `use*` REST query hooks (`useMetricsOverview`, `useVolume`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk`, `useUserProfile`, `useAlerts`, `useAckAlert`, `useTransactionDetail`, `useSystemHealth`)
 - **Live Feed Hook**: `useLiveTransactions` (used by `TransactionMonitor`)
-- **Auth**: `useAuth()` (used by `SimulationControl` to read `user.role` for admin gating)
+- **Auth**: `useAuth()` (used by `Header` to render the user identity panel)
 - **Shared UI Kit**: All presentational primitives from `components/ui/*`
 
 ---
@@ -207,7 +203,7 @@ Bootstraps the application by assembling the provider tree and the top-level nav
 
 - **Provider tree**: `main.tsx` mounts React with the following provider order (outer to inner): `QueryClientProvider` → `AuthProvider` → `RequireAuth` → `App`. `QueryClientProvider` wraps `AuthProvider` to allow future query invalidation from within auth actions.
 - **QueryClient singleton**: `queryClient.ts` exports a shared `QueryClient` with `retry: 1`, `refetchOnWindowFocus: false`, `staleTime: 2000 ms`.
-- **Navigation shell**: `App.tsx` renders fixed `Sidebar` + `Header`, then switches between views via `currentView` state: the main dashboard view, `/user-risk-profiling`, and `/simulation` (the admin-only Simulation page rendered by `SimulationControl`).
+- **Navigation shell**: `App.tsx` renders fixed `Sidebar` + `Header`, then switches between views via `currentView` state: the main dashboard view and `/user-risk-profiling`. Any other value falls through to an "under construction" placeholder.
 - **Inline system health**: `App.tsx` defines the `SystemHealthCards` inline component (calls `useSystemHealth`).
 
 #### Interfaces
@@ -234,7 +230,7 @@ C4Component
         Component(auth, "Auth", "React Context", "Login/logout, session restore, route gating (AuthContext, LoginPage, RequireAuth)")
         Component(apiClient, "API Client / Data Layer", "Axios + TanStack Query", "Axios instance, refresh-on-401, token store, response types, REST query hooks (client.ts, tokenStore.ts, types.ts, queries.ts)")
         Component(liveFeed, "Live Feed Hook", "React + WebSocket", "REST seed + WebSocket append + cursor dedup + resync-on-reconnect (useLiveTransactions.ts)")
-        Component(viewComponents, "View Components", "React + Recharts", "All dashboard views: metrics, volume, heatmap, live monitor, fraud, geo, user-risk, alerts, system-health, detail modals; admin-only SimulationControl page at /simulation (components/*)")
+        Component(viewComponents, "View Components", "React + Recharts", "All dashboard views: metrics, volume, heatmap, live monitor, fraud, geo, user-risk, alerts, system-health, detail modals (components/*)")
         Component(uiKit, "Shared UI Kit", "Radix UI / shadcn / Tailwind", "~30 presentational primitives: Card, Dialog, Table, Badge, Skeleton, Chart wrapper, etc. (components/ui/*)")
     }
 
@@ -246,9 +242,9 @@ C4Component
 
     Rel(auth, apiClient, "Calls login/logout/me via api; registers onAuthFailure; reads/writes tokenStore")
 
-    Rel(viewComponents, apiClient, "Consumes all REST query hooks (useMetricsOverview, useVolume, useHeatmap, useFraudAnalytics, useProvinces, useUserRisk, useUserProfile, useAlerts, useAckAlert, useTransactionDetail, useSystemHealth, useSimState, useSimControl)")
+    Rel(viewComponents, apiClient, "Consumes all REST query hooks (useMetricsOverview, useVolume, useHeatmap, useFraudAnalytics, useProvinces, useUserRisk, useUserProfile, useAlerts, useAckAlert, useTransactionDetail, useSystemHealth)")
     Rel(viewComponents, liveFeed, "TransactionMonitor calls useLiveTransactions(100)")
-    Rel(viewComponents, auth, "SimulationControl reads user.role via useAuth() for admin sim-control gating")
+    Rel(viewComponents, auth, "Header reads user email/role via useAuth() for the identity panel")
     Rel(viewComponents, uiKit, "Uses shared presentational primitives")
 
     Rel(apiClient, backendApi, "REST /api/v1/* — Bearer token via Authorization header", "HTTPS")
@@ -264,11 +260,15 @@ C4Component
 
 PII is masked server-side before responses leave the Backend API. View Components render exactly what they receive; no client-side masking or redaction is applied.
 
-### Admin Sim Controls
+### Simulation Controls (removed)
 
-Simulation controls (play/pause/speed selector, sim clock display, events-surfaced count, running status) live in the dedicated `SimulationControl` page (`/simulation`), not the dashboard `Header`. The `Header` is a clean monitoring header (title, search, alerts, settings, user). Admins (`user.role === 'admin'`) see interactive play/pause/speed controls; non-admins see a read-only clock/status view. The role gate is client-side (read from `useAuth()`); the same gate is enforced server-side on the Backend API (`POST /sim/control`), so client-side gating is defence-in-depth only.
+The dashboard no longer contains any simulation controls. `SimulationControl`, the `/simulation` route, the `SimState` type, and the `useSimState` / `useSimControl` hooks were all deleted in the Phase 5 sim-shedding work, and `sim_now` was dropped from the `LiveEvent` payload. Replay is driven entirely outside the dashboard by the `garda-ai-sim` producer, so there is no client-side sim clock, speed selector, or admin role gate.
 
-> **Change note (2026-06-23):** Simulation controls were relocated from the dashboard `Header` component into a dedicated admin-only `SimulationControl` page reachable at `/simulation` via a "Simulation" item in `Sidebar`. The `Header` no longer contains sim state or sim-control hooks. No backend change — reuses `useSimState`, `useSimControl`, and `useSystemHealth`.
+> **History:** these controls originally lived in `Header`, were relocated to a dedicated admin-only `SimulationControl` page on 2026-06-23, and were removed altogether in Phase 5. The `Sidebar` briefly gained a `useAuth` dependency for admin gating during that period; it no longer has one.
+
+### Dataset Time vs Ingestion Time
+
+Live payloads carry two timestamps: `surfaced_at` (when the backend ingested the event — wall clock) and `event_time` (when the transaction actually happened, replayed from the dataset). Because the dashboard replays a historical dataset, user-facing surfaces read `event_time`; `surfaced_at` is retained because `surfaced_at - event_time` is a usable detection-lag signal.
 
 ### Phase-1 Honesty
 
