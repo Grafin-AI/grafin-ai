@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Protocol
 
 import structlog
@@ -42,7 +42,6 @@ class Producer:
         max_gap_s: float,
         batch_size: int,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        now: Callable[[], datetime] | None = None,
         new_correlation_id: Callable[[], str] | None = None,
     ) -> None:
         self._client = client
@@ -50,7 +49,6 @@ class Producer:
         self._max_gap_s = max_gap_s
         self._batch_size = batch_size
         self._sleep = sleep
-        self._now = now or (lambda: datetime.now(UTC))
         self._new_cid = new_correlation_id or (lambda: str(uuid.uuid4()))
 
     async def run(self, rows: Iterable[SimTxn], *, dry_run: bool = False) -> SimStats:
@@ -70,9 +68,9 @@ class Producer:
                 )
                 if delay > 0:
                     await self._sleep(delay)
-            stamp = self._now().isoformat()
             payloads: list[dict[str, object]] = [
-                {**t.fields, "transaction_id": t.ordinal, "event_time": stamp} for t in batch
+                {**t.fields, "transaction_id": t.ordinal, "event_time": t.csv_ts.isoformat()}
+                for t in batch
             ]
             if dry_run:
                 log.info("sim.batch.dry_run", size=len(payloads), first_id=batch[0].ordinal)

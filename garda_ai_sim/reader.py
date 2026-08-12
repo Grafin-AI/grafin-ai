@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 class SimTxn(NamedTuple):
     ordinal: int                    # 1-based, continuous across parts -> the transaction_id
-    csv_ts: datetime                # original CSV timestamp; used ONLY for pacing, never sent
+    csv_ts: datetime                # original CSV timestamp; paces sending AND is sent as event_time
     fields: dict[str, object]       # ingest fields minus event_time (producer stamps that)
 
 
