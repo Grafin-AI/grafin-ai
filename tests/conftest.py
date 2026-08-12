@@ -109,9 +109,13 @@ async def seeded_dataset(session):
     await session.flush()
 
     def _ev(seq, tid, score, typ, status, hour):
-        ts = datetime(2025, 9, 1, hour, tzinfo=UTC)
+        # The two clocks MUST differ, otherwise no test can tell which column a
+        # query windows/buckets on and the whole event_time switch is untestable.
         return TransactionEvent(
-            seq=seq, transaction_id=tid, surfaced_at=ts, event_time=ts,
+            seq=seq, transaction_id=tid,
+            # ingestion is wall-clock "today"; business time is the dataset's
+            surfaced_at=datetime(2026, 8, 12, hour, tzinfo=UTC),
+            event_time=datetime(2025, 9, 1, hour, tzinfo=UTC),
             fraud_score=Decimal(score), typology=typ, status=status,
         )
     session.add_all([

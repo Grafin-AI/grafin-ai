@@ -27,6 +27,7 @@ from garda_ai_backend.api import deps
 from garda_ai_backend.api.ingest import get_scoring_client
 from garda_ai_backend.observability import REGISTRY
 from garda_ai_backend.redis_client import build_redis
+from garda_ai_backend.repositories.transactions import TransactionsRepository
 from garda_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
 from garda_ai_backend.services.scoring_client import ScoringUnavailable
 
@@ -275,7 +276,7 @@ async def test_ingest_publishes_live_event(client, session, seeded_reference, re
     assert "sim_now" not in message
 
 
-async def test_published_message_includes_event_time(client, seeded_reference, redis_url):
+async def test_published_message_includes_event_time(client, session, seeded_reference, redis_url):
     """The WS payload carries event_time so the dashboard labels events on the dataset
     timeline; surfaced_at stays for detection-lag."""
     subscriber = build_redis(redis_url)
@@ -310,6 +311,15 @@ async def test_published_message_includes_event_time(client, seeded_reference, r
         2026, 6, 25, 9, 0, tzinfo=UTC
     )
     assert "surfaced_at" in message
+
+    # Contract: the WS push and the after_seq= REST backfill must carry the SAME keys,
+    # or the dashboard's live list and its reconnect-backfill disagree field-for-field.
+    # No single module owns this agreement, so assert it here.
+    rest_items = await TransactionsRepository(session).live_window(
+        now=datetime(2026, 6, 25, 12, 0, tzinfo=UTC), after_seq=None, limit=10
+    )
+    rest_item = next(i for i in rest_items if i["transaction_id"] == 40217)
+    assert set(message) == set(rest_item)
 
 
 async def test_ingest_publish_matches_persisted_event_time(client, session, seeded_reference):

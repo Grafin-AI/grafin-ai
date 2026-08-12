@@ -58,6 +58,10 @@ async def test_heatmap_shape(client):
     cells = r.json()["cells"]
     assert len(cells) == 7
     assert all(len(row) == 24 for row in cells)
+    # Load-bearing: dow/hour are extracted from event_time. 2025-09-01 is a Monday
+    # (Postgres dow=1) and one event sits at 09:00. Bucketing on surfaced_at
+    # (2026-08-12, a Wednesday) would put this cell elsewhere.
+    assert cells[1][9] == 1
 
 
 async def test_volume_range_weekly_buckets_by_day(client):
@@ -67,3 +71,6 @@ async def test_volume_range_weekly_buckets_by_day(client):
     # seeded events all fall on 2025-09-01 -> one day bucket
     assert len(series) == 1
     assert series[0]["count"] == 4
+    # Load-bearing: buckets key off event_time (dataset time), not surfaced_at
+    # (which the fixture stamps at 2026-08-12).
+    assert series[0]["bucket"].startswith("2025-09-01")
