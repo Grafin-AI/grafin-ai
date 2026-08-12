@@ -28,6 +28,10 @@ class TransactionEvent(Base):
     seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), index=True)
     surfaced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    # Business time of the transaction (denormalized from transactions.event_time so the
+    # read views stay single-table). surfaced_at stays = ingestion time, so
+    # (surfaced_at - event_time) remains a usable detection-lag signal.
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     fraud_score: Mapped[Decimal] = mapped_column(Numeric)
     typology: Mapped[str | None] = mapped_column(String, index=True)
     status: Mapped[str] = mapped_column(String, index=True)  # approved | flagged | blocked

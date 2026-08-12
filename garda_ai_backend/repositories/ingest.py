@@ -71,10 +71,12 @@ class IngestRepository:
             if not new_ids:
                 return []
 
+            event_time_by_id = {t["id"]: t["event_time"] for t in transactions}
             event_values = [
                 {
                     "transaction_id": tid,
                     "surfaced_at": now,
+                    "event_time": event_time_by_id[tid],
                     "fraud_score": scores_by_id[tid]["fraud_score"],
                     "typology": scores_by_id[tid]["typology"],
                     "status": scores_by_id[tid]["status"],

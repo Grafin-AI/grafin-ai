@@ -293,6 +293,28 @@ async def test_ingest_publish_matches_persisted_event_time(client, session, seed
     assert txn.event_time == datetime(2026, 6, 25, 9, 0, tzinfo=UTC)
 
 
+async def test_event_row_carries_transaction_event_time(client, session, seeded_reference):
+    """The denormalized transaction_events.event_time mirrors the producer's event_time,
+    while surfaced_at stays ingestion (wall-clock) time — so detection lag stays measurable."""
+    app = client._app
+    app.dependency_overrides[get_scoring_client] = lambda: _FakeScoring()
+    try:
+        r = await client.post(
+            "/api/v1/ingest", json={"transactions": [_TXN]}, headers=_ingest_headers()
+        )
+    finally:
+        app.dependency_overrides.pop(get_scoring_client, None)
+    assert r.status_code == 200
+
+    ev = (
+        await session.execute(
+            select(TransactionEvent).where(TransactionEvent.transaction_id == 40217)
+        )
+    ).scalar_one()
+    assert ev.event_time == datetime(2026, 6, 25, 9, 0, tzinfo=UTC)
+    assert ev.surfaced_at != ev.event_time  # ingestion time is "now", not the CSV time
+
+
 async def test_ingest_enrichment_reaches_scoring(client, session, seeded_reference):
     # from_account 1000000001 is seeded risk_category="High"; the route must enrich
     # the scoring payload with it. Removing the enrichment line fails this test.

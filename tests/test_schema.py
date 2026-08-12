@@ -18,7 +18,7 @@ def test_transaction_tables_registered():
     assert {"id", "event_time", "from_account", "to_account",
             "amount_paid", "is_laundering"} <= txn_cols
     ev_cols = {c.name for c in tables["transaction_events"].columns}
-    assert {"seq", "transaction_id", "surfaced_at",
+    assert {"seq", "transaction_id", "surfaced_at", "event_time",
             "fraud_score", "typology", "status"} <= ev_cols
 
 

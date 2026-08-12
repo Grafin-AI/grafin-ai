@@ -92,25 +92,26 @@ async def seeded_dataset(session):
     ])
     await session.flush()
 
-    def _txn(i, frm, to, amount, launder):
+    def _txn(i, frm, to, amount, launder, hour):
         return Transaction(
-            id=i, event_time=datetime(2025, 9, 1, 9 + i, tzinfo=UTC),
+            id=i, event_time=datetime(2025, 9, 1, hour, tzinfo=UTC),
             from_bank_id="10", from_account=frm, to_bank_id="20", to_account=to,
             amount_paid=Decimal(amount), payment_currency="IDR",
             amount_received=Decimal(amount), receiving_currency="IDR",
             payment_format="ACH", is_laundering=launder,
         )
     session.add_all([
-        _txn(1, "ACC1", "ACC2", "15000000", True),
-        _txn(2, "ACC2", "ACC1", "250000", False),
-        _txn(3, "ACC1", "ACC2", "5000000", True),
-        _txn(4, "ACC2", "ACC1", "150000", False),
+        _txn(1, "ACC1", "ACC2", "15000000", True, 9),
+        _txn(2, "ACC2", "ACC1", "250000", False, 10),
+        _txn(3, "ACC1", "ACC2", "5000000", True, 11),
+        _txn(4, "ACC2", "ACC1", "150000", False, 11),
     ])
     await session.flush()
 
     def _ev(seq, tid, score, typ, status, hour):
+        ts = datetime(2025, 9, 1, hour, tzinfo=UTC)
         return TransactionEvent(
-            seq=seq, transaction_id=tid, surfaced_at=datetime(2025, 9, 1, hour, tzinfo=UTC),
+            seq=seq, transaction_id=tid, surfaced_at=ts, event_time=ts,
             fraud_score=Decimal(score), typology=typ, status=status,
         )
     session.add_all([
