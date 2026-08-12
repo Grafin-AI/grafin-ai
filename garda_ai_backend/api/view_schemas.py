@@ -101,7 +101,8 @@ class AlertItem(BaseModel):
     event_seq: int
     severity: str
     typology: str | None
-    created_at: str
+    created_at: str  # real ingestion (wall-clock) time
+    event_time: str  # dataset time of the underlying transaction
     acknowledged: bool
 
 

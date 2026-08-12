@@ -125,9 +125,21 @@ async def seeded_dataset(session):
         _ev(4, 4, "0.05", None, "approved", 11),
     ])
     await session.flush()
-    session.add(Alert(
-        id=1, event_seq=1, severity="high", typology="Fan-Out",
-        created_at=datetime(2025, 9, 1, 9, tzinfo=UTC),
-    ))
+    # Both alerts share created_at: they came from ONE ingest batch, stamped with that
+    # batch's wall-clock now(). Their underlying events have different event_times
+    # (seq 1 -> 09:00, seq 3 -> 11:00), so ordering on created_at leaves the tie broken
+    # arbitrarily while ordering on event_time is deterministic. Inserted oldest-event
+    # first, so physical order is the WRONG display order.
+    batch_ingested_at = datetime(2026, 8, 12, 12, tzinfo=UTC)
+    session.add_all([
+        Alert(
+            id=1, event_seq=1, severity="high", typology="Fan-Out",
+            created_at=batch_ingested_at,
+        ),
+        Alert(
+            id=2, event_seq=3, severity="medium", typology="Smurfing",
+            created_at=batch_ingested_at,
+        ),
+    ])
     await session.commit()
     return SIM_NOW

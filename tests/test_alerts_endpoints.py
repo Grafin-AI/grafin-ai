@@ -41,9 +41,31 @@ async def test_list_alerts(client):
     r = await client.get("/api/v1/alerts", headers=_auth())
     assert r.status_code == 200
     alerts = r.json()["alerts"]
-    assert len(alerts) == 1
-    assert alerts[0]["typology"] == "Fan-Out"
-    assert alerts[0]["acknowledged"] is False
+    assert len(alerts) == 2
+    fan_out = next(a for a in alerts if a["typology"] == "Fan-Out")
+    assert fan_out["acknowledged"] is False
+    # Dataset time of the underlying transaction, formatted like the live feed.
+    assert fan_out["event_time"] == "2025-09-01T09:00:00+00:00"
+    # created_at is kept: it is real ingestion (wall-clock) time.
+    assert fan_out["created_at"].startswith("2026-08-12")
+
+
+async def test_alerts_ordered_by_event_time_not_created_at(client):
+    """Alerts from one ingest batch share created_at, so ordering on it breaks ties
+    arbitrarily. The list now DISPLAYS per-row event_time, so an arbitrary tie order
+    makes the shown timestamps jump around within a batch."""
+    r = await client.get("/api/v1/alerts", headers=_auth())
+    assert r.status_code == 200
+    alerts = r.json()["alerts"]
+
+    # Precondition: created_at cannot be what ordered these -- it is identical on both.
+    assert len({a["created_at"] for a in alerts}) == 1
+
+    assert [a["id"] for a in alerts] == [2, 1]
+    assert [a["event_time"] for a in alerts] == [
+        "2025-09-01T11:00:00+00:00",
+        "2025-09-01T09:00:00+00:00",
+    ]
 
 
 async def test_ack_alert(client):
