@@ -22,7 +22,7 @@ class MetricsRepository:
             )
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
-            .where(TransactionEvent.surfaced_at <= now)
+            .where(TransactionEvent.event_time <= now)
         )
         row = (await self._session.execute(stmt)).one()
         total = row.total or 0
@@ -36,14 +36,14 @@ class MetricsRepository:
         }
 
     async def volume(self, lower: datetime, now: datetime, trunc: str) -> list[dict]:
-        bucket = func.date_trunc(trunc, TransactionEvent.surfaced_at).label("bucket")
+        bucket = func.date_trunc(trunc, TransactionEvent.event_time).label("bucket")
         flagged = func.sum(
             case((TransactionEvent.status.in_(("flagged", "blocked")), 1), else_=0)
         )
         stmt = (
             select(bucket, func.count().label("count"), func.coalesce(flagged, 0).label("flagged"))
-            .where(TransactionEvent.surfaced_at <= now)
-            .where(TransactionEvent.surfaced_at >= lower)
+            .where(TransactionEvent.event_time <= now)
+            .where(TransactionEvent.event_time >= lower)
             .group_by(bucket)
             .order_by(bucket)
         )
@@ -54,11 +54,11 @@ class MetricsRepository:
         ]
 
     async def heatmap(self, now: datetime) -> list[list[int]]:
-        dow = cast(func.extract("dow", TransactionEvent.surfaced_at), Integer).label("dow")
-        hour = cast(func.extract("hour", TransactionEvent.surfaced_at), Integer).label("hour")
+        dow = cast(func.extract("dow", TransactionEvent.event_time), Integer).label("dow")
+        hour = cast(func.extract("hour", TransactionEvent.event_time), Integer).label("hour")
         stmt = (
             select(dow, hour, func.count().label("count"))
-            .where(TransactionEvent.surfaced_at <= now)
+            .where(TransactionEvent.event_time <= now)
             .group_by(dow, hour)
         )
         rows = (await self._session.execute(stmt)).all()

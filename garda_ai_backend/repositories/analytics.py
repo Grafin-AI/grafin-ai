@@ -19,7 +19,7 @@ class AnalyticsRepository:
             )
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
-            .where(TransactionEvent.surfaced_at <= now)
+            .where(TransactionEvent.event_time <= now)
             .where(TransactionEvent.typology.is_not(None))
             .group_by(TransactionEvent.typology)
             .order_by(func.count().desc())
@@ -40,7 +40,7 @@ class AnalyticsRepository:
             select(func.coalesce(tp, 0), func.coalesce(fp, 0), func.coalesce(fn, 0))
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
-            .where(TransactionEvent.surfaced_at <= now)
+            .where(TransactionEvent.event_time <= now)
         )
         tp_v, fp_v, fn_v = (await self._session.execute(stmt)).one()
         return {"tp": int(tp_v), "fp": int(fp_v), "fn": int(fn_v)}

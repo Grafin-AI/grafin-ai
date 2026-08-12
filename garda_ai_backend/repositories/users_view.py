@@ -29,7 +29,7 @@ class UserRiskRepository:
             .join(
                 TransactionEvent,
                 (TransactionEvent.transaction_id == Transaction.id)
-                & (TransactionEvent.surfaced_at <= now),
+                & (TransactionEvent.event_time <= now),
                 isouter=True,
             )
             .group_by(Entity.id, Entity.name, Entity.province, Account.risk_score, Account.risk_category)

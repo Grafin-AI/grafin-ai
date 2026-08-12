@@ -28,7 +28,7 @@ class TransactionsRepository:
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
             .join(Bank, Bank.id == Transaction.from_bank_id)
-            .where(TransactionEvent.surfaced_at <= now)
+            .where(TransactionEvent.event_time <= now)
         )
         if after_seq is not None:
             stmt = stmt.where(TransactionEvent.seq > after_seq).order_by(TransactionEvent.seq.asc())
