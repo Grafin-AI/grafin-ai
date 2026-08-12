@@ -67,7 +67,7 @@
 | `FraudAnalytics` | `distribution: TypologyCount[]`, `detection: DetectionMetrics` | `/analytics/fraud` |
 | `ProvinceFraud` | `name`, `fraud_count`, `change_pct`, `risk_level` | — |
 | `GeoResponse` | `provinces: ProvinceFraud[]` | `/geo/provinces` |
-| `LiveItem` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at` | REST `/transactions/live` |
+| `LiveItem` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time` | REST `/transactions/live` |
 | `LiveResponse` | `items: LiveItem[]` | `/transactions/live` |
 | `TransactionDetail` | `id`, `bank`, `amount`, `currency`, `type`, `fraud_score`, `typology`, `status`, `is_laundering`, `event_time` | `/transactions/:id` |
 | `RiskProfile` | `entity_id`, `name`, `province`, `risk_level`, `risk_score`, `total_transactions`, `flagged_transactions`, `total_amount` | `/users/:id/profile` |
@@ -76,9 +76,11 @@
 | `AlertsResponse` | `alerts: AlertItem[]` | `/alerts` |
 | `SystemHealth` | `db_ok`, `redis_ok`, `events_surfaced`, `model_accuracy_simulated` | `/system/health` |
 | `SimState` | `sim_now`, `speed`, `running` | `/sim/state`, `/sim/control` |
-| `LiveEvent` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `sim_now` | WebSocket `/api/v1/ws/live` |
+| `LiveEvent` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time` | WebSocket `/api/v1/ws/live` |
 
 **Note**: `LiveEvent` (WebSocket push) has nullable `bank`, `type`, `amount` fields (worker may omit them) whereas `LiveItem` (REST response) has non-nullable equivalents — `useLiveTransactions` maps between the two.
+
+**Two clocks**: both carry `surfaced_at` *and* `event_time`. `surfaced_at` is backend ingestion time (wall clock); `event_time` is when the transaction actually happened, taken from the replayed dataset. The dashboard replays a historical dataset, so anything user-facing should read `event_time` — `surfaced_at` is retained because `surfaced_at - event_time` is a usable detection-lag signal.
 
 **Location**: [`src/api/types.ts`](../../src/api/types.ts)
 
@@ -262,6 +264,8 @@ Renders a 7×24 heatmap grid (days × hours) from `HeatmapResponse.cells`. Inten
 ### `src/components/TransactionMonitor.tsx`
 
 Renders a live scrollable table of recent transactions. Calls `useLiveTransactions(100)` which drives real-time append via WebSocket. Row click opens `TransactionDetailsModal`; bank cell can open `UserProfileDetailsModal`.
+
+The time column renders `item.event_time` (dataset time), not `surfaced_at` (ingestion time), via the local `formatTime` helper. `formatTime` returns an absolute timestamp with locale and timezone pinned to `en-GB`/UTC, so output is deterministic across machines and matches the UTC timestamps stored in the database.
 
 **Hooks**: `useLiveTransactions` (WS hook)
 
