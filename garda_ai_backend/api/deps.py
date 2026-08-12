@@ -6,12 +6,14 @@ from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from garda_ai_backend.config import Settings, get_settings
 from garda_ai_backend.db import _maker
 from garda_ai_backend.redis_client import get_redis
 from garda_ai_backend.repositories.users import UserRepository
+from garda_ai_backend.schema import TransactionEvent
 from garda_ai_backend.security.refresh_store import RefreshTokenStore
 from garda_ai_backend.security.tokens import InvalidToken, decode_token
 from garda_ai_backend.services.auth import AuthService
@@ -78,14 +80,20 @@ def get_current_user(
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 
-def get_now() -> datetime:
-    """Shared 'now' for the read views. Events enter via /ingest stamped
-    surfaced_at = now(), so each view's `surfaced_at <= now` filter reflects
-    real wall-clock-current data (the old accelerated sim clock is gone)."""
-    return datetime.now(UTC)
+async def get_data_now(session: SessionDep) -> datetime:
+    """'Now' on the dataset's timeline: the latest event_time we have ingested.
+
+    The views replay a historical dataset, so anchoring their windows to the wall
+    clock would leave every window empty. Falls back to wall-clock now() on an empty
+    database so a fresh install shows an empty dashboard rather than erroring.
+
+    NOTE: auth/token expiry must NEVER use this clock — see security/tokens.py.
+    """
+    latest = await session.scalar(select(func.max(TransactionEvent.event_time)))
+    return latest or datetime.now(UTC)
 
 
-NowDep = Annotated[datetime, Depends(get_now)]
+NowDep = Annotated[datetime, Depends(get_data_now)]
 
 
 def require_role(*roles: str) -> Callable[[CurrentUser], CurrentUser]:

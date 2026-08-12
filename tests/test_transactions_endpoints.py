@@ -20,7 +20,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
     from garda_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
-    app.dependency_overrides[deps.get_now] = lambda: seeded_dataset
+    app.dependency_overrides[deps.get_data_now] = lambda: seeded_dataset
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
