@@ -9,6 +9,7 @@ import { Clock, Building, CreditCard, Activity, TrendingUp, Eye, AlertTriangle, 
 import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { UserProfileDetailsModal } from './UserProfileDetailsModal';
 import { useLiveTransactions } from '../api/useLiveTransactions';
+import { formatTime } from '../lib/formatTime';
 import type { LiveItem } from '../api/types';
 
 export function TransactionMonitor() {
@@ -40,22 +41,6 @@ export function TransactionMonitor() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
-  };
-
-  // Absolute dataset time, rendered in UTC. The feed replays a historical dataset, so an
-  // analyst needs when the transaction actually happened — not its age against the wall
-  // clock, which would read as "8000 hours ago" for every row. The locale and timeZone are
-  // pinned so the output is deterministic across machines and CI, and UTC is deliberate:
-  // the stored timestamps are UTC and the CSV carried no zone, so converting to local/WIB
-  // would shift the displayed value away from what is in the database.
-  const formatTime = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return iso;
-    return date.toLocaleString('en-GB', {
-      timeZone: 'UTC',
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
   };
 
   const handleViewTransaction = (transactionId: number) => {

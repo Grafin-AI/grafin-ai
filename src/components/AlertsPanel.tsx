@@ -4,6 +4,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { AlertTriangle, Shield, Clock, Bell, Check } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { useAlerts, useAckAlert } from '../api/queries';
+import { formatTime } from '../lib/formatTime';
 import type { AlertItem } from '../api/types';
 
 function getAlertColor(severity: string) {
@@ -29,17 +30,6 @@ function getIcon(severity: string) {
     case 'info': return <Bell className="w-4 h-4" style={{color: '#139EF6'}} />;
     default: return <Bell className="w-4 h-4 text-gray-600" />;
   }
-}
-
-function formatRelativeTime(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
 function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => void }) {
@@ -88,7 +78,7 @@ function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => v
 
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {formatRelativeTime(alert.created_at)}
+              {formatTime(alert.event_time)}
             </div>
           </div>
         </div>

@@ -79,6 +79,7 @@ export interface AlertItem {
   severity: string;
   typology: string | null;
   created_at: string;
+  event_time: string;
   acknowledged: boolean;
 }
 export interface AlertsResponse { alerts: AlertItem[]; }
