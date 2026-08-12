@@ -85,6 +85,12 @@ services:
       GARDA_INGEST_URL: http://backend:8000/api/v1/ingest
       GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
       GARDA_DATA_DIR: /data
+      # Replay knobs — override in .env or with `docker compose run -e ...`.
+      # GARDA_LIMIT is deliberately NOT defaulted here: an empty value would be
+      # passed as "" and fail int|None parsing. Pass it with -e when you want it.
+      GARDA_BATCH_SIZE: ${GARDA_BATCH_SIZE:-100}
+      GARDA_SPEED: ${GARDA_SPEED:-60}
+      GARDA_MAX_GAP_S: ${GARDA_MAX_GAP_S:-2.0}
     volumes:
       - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
     depends_on:
