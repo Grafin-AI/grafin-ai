@@ -88,6 +88,7 @@ services:
       # Replay knobs — override in .env or with `docker compose run -e ...`.
       # GARDA_LIMIT is deliberately NOT defaulted here: an empty value would be
       # passed as "" and fail int|None parsing. Pass it with -e when you want it.
+      GARDA_SKIP: ${GARDA_SKIP:-0}
       GARDA_BATCH_SIZE: ${GARDA_BATCH_SIZE:-100}
       GARDA_SPEED: ${GARDA_SPEED:-60}
       GARDA_MAX_GAP_S: ${GARDA_MAX_GAP_S:-2.0}
