@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
@@ -74,3 +76,21 @@ async def test_volume_range_weekly_buckets_by_day(client):
     # Load-bearing: buckets key off event_time (dataset time), not surfaced_at
     # (which the fixture stamps at 2026-08-12).
     assert series[0]["bucket"].startswith("2025-09-01")
+
+
+def test_floor_to_bucket_aligns_window_start():
+    """The chart window anchors to the current bucket's start, not to `now`.
+
+    Anchoring to a mid-bucket `now` leaves a sliver of a leading bucket — e.g. a
+    window starting 23:59 yields an 'hour' bucket holding one minute of data,
+    which plots as a near-zero point next to full ones and reads as missing data.
+    """
+    from garda_ai_backend.api.metrics import _floor_to_bucket
+
+    mid = datetime(2025, 9, 8, 23, 59, 30, 500000, tzinfo=UTC)
+    assert _floor_to_bucket(mid, "hour") == datetime(2025, 9, 8, 23, 0, tzinfo=UTC)
+    assert _floor_to_bucket(mid, "day") == datetime(2025, 9, 8, 0, 0, tzinfo=UTC)
+    assert _floor_to_bucket(mid, "month") == datetime(2025, 9, 1, 0, 0, tzinfo=UTC)
+
+    on_boundary = datetime(2025, 9, 8, 23, 0, tzinfo=UTC)
+    assert _floor_to_bucket(on_boundary, "hour") == on_boundary  # already aligned

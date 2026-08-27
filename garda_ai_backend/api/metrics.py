@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Query
 
@@ -22,6 +22,24 @@ _RANGE_WINDOWS: dict[str, tuple[timedelta, str]] = {
 }
 
 
+def _floor_to_bucket(dt: datetime, trunc: str) -> datetime:
+    """Snap a timestamp down to the start of its bucket.
+
+    The window is anchored to the CURRENT bucket's start rather than to `now`
+    itself, so the oldest bucket in the series is a whole one. Anchoring to a
+    mid-bucket `now` leaves a sliver of a leading bucket (e.g. one minute of an
+    hour), which plots as a near-zero point beside full ones and reads as a gap
+    in the data. A partial bucket at the END is expected — that one is "now".
+    """
+    if trunc == "hour":
+        return dt.replace(minute=0, second=0, microsecond=0)
+    if trunc == "day":
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if trunc == "month":
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return dt
+
+
 @router.get("/overview", response_model=MetricsOverviewResponse)
 async def overview(
     session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep
@@ -42,7 +60,7 @@ async def volume(
     time_range: str = Query("24h", alias="range"),
 ) -> VolumeResponse:
     window, trunc = _RANGE_WINDOWS.get(time_range, _RANGE_WINDOWS["24h"])
-    lower = now - window
+    lower = _floor_to_bucket(now, trunc) - window
     repo = MetricsRepository(session)
     series = await cached_json(
         redis,
