@@ -64,5 +64,8 @@ class MetricsRepository:
         rows = (await self._session.execute(stmt)).all()
         grid = [[0] * 24 for _ in range(7)]
         for r in rows:
-            grid[int(r.dow)][int(r.hour)] = int(r.count)
+            # Postgres extract(dow) is 0=Sunday..6=Saturday, but the dashboard renders
+            # rows Mon-first. Rotate so index 0 is Monday, or every row is drawn one
+            # day late (Wednesday data appearing under "Thu").
+            grid[(int(r.dow) + 6) % 7][int(r.hour)] = int(r.count)
         return grid

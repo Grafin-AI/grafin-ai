@@ -61,7 +61,7 @@ async def test_heatmap_shape(client):
     # Load-bearing: dow/hour are extracted from event_time. 2025-09-01 is a Monday
     # (Postgres dow=1) and one event sits at 09:00. Bucketing on surfaced_at
     # (2026-08-12, a Wednesday) would put this cell elsewhere.
-    assert cells[1][9] == 1
+    assert cells[0][9] == 1
 
 
 async def test_volume_range_weekly_buckets_by_day(client):
