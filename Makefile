@@ -41,22 +41,24 @@ dataset-sort:
 
 # --- Demo replay -------------------------------------------------------------
 # The first ~1.87M rows are IBM's account-initialization block (73% self-transfers,
-# near-zero laundering) plus the dense Sep 1-2 ramp — poor demo material. The demo
-# starts at 2025-09-03, the cheapest full day in the dataset: 207,382 rows buys all
-# 24 hours, so the 24h volume chart fills completely (24/24 hourly buckets).
+# near-zero laundering) plus the dense Sep 1-2 ramp — poor demo material. History
+# starts at 2025-09-03 and covers six days (Wed..Mon), which fills 6 of the 7
+# heatmap rows and gives the 24h volume chart a full 24/24 hourly buckets. The
+# 7th row (Tue) fills in live, because demo-live streams 2025-09-09.
 DEMO_SEED_SKIP  ?= 1869370
-DEMO_SEED_LIMIT ?= 207382
-DEMO_LIVE_SKIP  ?= 2076752
+DEMO_SEED_LIMIT ?= 2345075
+DEMO_LIVE_SKIP  ?= 4214445
 DEMO_LIVE_SPEED ?= 60
 
-# 1) Pre-populate one full day of history, unpaced (MAX_GAP_S=0). Takes ~15-20 min:
-#    every transaction goes through the real scoring call, ~180 txn/s.
+# 1) Pre-populate six days of history, unpaced (MAX_GAP_S=0). ~16 min at the
+#    ~2,400 txn/s the stack sustains with BATCH_SIZE=1000.
 demo-seed:
 	docker compose --profile sim run --rm --build \
 	  -e GARDA_SKIP=$(DEMO_SEED_SKIP) -e GARDA_LIMIT=$(DEMO_SEED_LIMIT) \
 	  -e GARDA_MAX_GAP_S=0 -e GARDA_BATCH_SIZE=1000 sim
 
-# 2) Stream live from exactly where the seed stopped: 1 dataset-hour per wall-minute,
+# 2) Stream live from exactly where the seed stopped (2025-09-09): 1 dataset-hour
+#    per wall-minute,
 #    so a new bucket appears on the chart every minute. Ctrl-C to stop.
 demo-live:
 	docker compose --profile sim run --rm --build \
