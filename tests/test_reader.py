@@ -37,3 +37,27 @@ def test_timestamps_parsed_utc():
 def test_limit_respected():
     rows = list(stream_transactions(_paths(), limit=2))
     assert [r.ordinal for r in rows] == [1, 2]
+
+
+def test_skip_offsets_without_renumbering():
+    """Skipped rows are never yielded, but ordinals keep counting from 1 so
+    transaction_id stays the stable CSV position — that is what makes the
+    backend's ON CONFLICT dedup and mid-run resume work."""
+    rows = list(stream_transactions(_paths(), skip=2))
+    assert [r.ordinal for r in rows] == [3, 4]
+    assert rows[0].csv_ts == datetime(2025, 9, 1, 0, 2, tzinfo=UTC)
+
+
+def test_skip_spans_file_boundary():
+    rows = list(stream_transactions(_paths(), skip=3))
+    assert [r.ordinal for r in rows] == [4]  # skipped past the end of part1
+
+
+def test_skip_and_limit_compose():
+    """limit counts rows SENT, not the ordinal reached."""
+    rows = list(stream_transactions(_paths(), skip=1, limit=2))
+    assert [r.ordinal for r in rows] == [2, 3]
+
+
+def test_skip_beyond_end_yields_nothing():
+    assert list(stream_transactions(_paths(), skip=99)) == []

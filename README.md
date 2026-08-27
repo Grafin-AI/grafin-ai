@@ -39,8 +39,36 @@ GARDA_DATA_DIR=../garda-ai-data/HI-Small \
 ```
 
 Useful knobs: `GARDA_SPEED` (pacing multiplier), `GARDA_BATCH_SIZE` (≤1000),
-`GARDA_MAX_GAP_S` (cap on any single wait), `GARDA_LIMIT` (stop after N), `GARDA_DRY_RUN=true`
-(build+log batches, don't POST). Ctrl-C stops gracefully.
+`GARDA_MAX_GAP_S` (cap on any single wait; `0` disables pacing entirely),
+`GARDA_SKIP` (advance past the first N rows without sending them),
+`GARDA_LIMIT` (stop after N sent), `GARDA_DRY_RUN=true` (build+log batches, don't POST).
+Ctrl-C stops gracefully.
+
+## Starting mid-dataset, and resuming
+
+`GARDA_SKIP` advances past rows without sending them. Ordinals keep counting from 1, so
+`transaction_id` stays the row's true CSV position — which is what makes both of these work:
+
+**Pre-populate then go live.** Load a block of history unpaced, then stream onward from where
+it stopped, so the two line up instead of overlapping:
+
+```bash
+# history: rows 1,869,371..2,076,752 (all of 2025-09-03), as fast as the backend accepts
+GARDA_SKIP=1869370 GARDA_LIMIT=207382 GARDA_MAX_GAP_S=0 GARDA_BATCH_SIZE=1000 uv run garda-sim
+
+# live: continue from 2025-09-04 at 1 dataset-hour per wall-minute
+GARDA_SKIP=2076752 GARDA_SPEED=60 GARDA_BATCH_SIZE=100 uv run garda-sim
+```
+
+**Resume after stopping.** The database already knows where you stopped, because
+`transaction_id` is the CSV ordinal:
+
+```sql
+SELECT max(transaction_id) FROM transactions;   -- use as the next GARDA_SKIP
+```
+
+Re-sending rows is safe either way (the backend dedups by `transaction_id`), but each one
+still costs a scoring call — so skipping is much faster than replaying from the start.
 
 Exit codes: `0` ok / interrupted · `1` backend rejected or unreachable · `2` Trans CSV not found.
 

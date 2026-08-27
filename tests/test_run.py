@@ -16,7 +16,7 @@ def _settings(**over):
     base = dict(
         ingest_url="http://x/api/v1/ingest", ingest_token="tok",
         data_dir="X", trans_files=["p1.csv"],
-        batch_size=10, speed=60.0, max_gap_s=2.0, limit=None, dry_run=False,
+        batch_size=10, speed=60.0, max_gap_s=2.0, skip=0, limit=None, dry_run=False,
         request_timeout_s=30.0, retries=3, log_level="INFO",
     )
     base.update(over)

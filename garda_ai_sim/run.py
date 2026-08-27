@@ -57,7 +57,7 @@ async def run_sim(settings: Settings) -> None:
             client, speed=settings.speed, max_gap_s=settings.max_gap_s,
             batch_size=settings.batch_size,
         )
-        rows = stream_transactions(paths, limit=settings.limit)
+        rows = stream_transactions(paths, limit=settings.limit, skip=settings.skip)
         try:
             stats = await producer.run(rows, dry_run=settings.dry_run)
         except (IngestError, IngestUnavailable) as exc:

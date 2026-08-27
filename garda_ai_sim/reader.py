@@ -26,16 +26,31 @@ def _row_fields(r: dict[str, str]) -> dict[str, object]:
     }
 
 
-def stream_transactions(paths: list[str], *, limit: int | None = None) -> Iterator[SimTxn]:
+def stream_transactions(
+    paths: list[str], *, limit: int | None = None, skip: int = 0
+) -> Iterator[SimTxn]:
     """Stream transactions from the Trans CSV parts, assigning a stable 1-based ordinal id
     continuous across parts. Streamed (never materialized) so the multi-million-row parts
-    cost negligible memory."""
+    cost negligible memory.
+
+    ``skip`` advances past the first N rows without sending them; ordinals keep counting
+    from 1 regardless, so ``transaction_id`` stays the row's true CSV position. That is what
+    lets a run resume mid-dataset (the backend dedups by transaction_id) and what makes a
+    pre-populated history and a later live run line up instead of overlapping.
+
+    ``limit`` caps the number of rows YIELDED (not the ordinal reached), so it means the same
+    thing with or without ``skip``.
+    """
     ordinal = 0
+    yielded = 0
     for path in paths:
         with open(path, newline="", encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                if limit is not None and ordinal >= limit:
-                    return
                 ordinal += 1
+                if ordinal <= skip:
+                    continue  # advance the ordinal, but do no parsing work
+                if limit is not None and yielded >= limit:
+                    return
+                yielded += 1
                 ts = datetime.strptime(r["Timestamp"], "%Y/%m/%d %H:%M").replace(tzinfo=UTC)
                 yield SimTxn(ordinal=ordinal, csv_ts=ts, fields=_row_fields(r))

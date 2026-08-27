@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     batch_size: int = Field(default=100, gt=0, le=1000)
     speed: float = Field(default=60.0, gt=0)
     max_gap_s: float = Field(default=2.0, ge=0)
+    # Rows to advance past without sending. Ordinals (= transaction_id) still count from 1,
+    # so this both starts a run mid-dataset and resumes one: set it to the last
+    # transaction_id already in the database.
+    skip: int = Field(default=0, ge=0)
     limit: int | None = None
     dry_run: bool = False
     request_timeout_s: float = 30.0
