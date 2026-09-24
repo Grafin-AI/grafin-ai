@@ -1,4 +1,4 @@
-.PHONY: up down logs seed-secret config sim obs dataset-sort demo-seed demo-live
+.PHONY: up down logs seed-secret config sim obs dataset-sort demo-seed demo-live tunnel admin-password
 
 DATA_DIR ?= ../garda-ai-data/HI-Small
 
@@ -64,3 +64,28 @@ demo-live:
 	docker compose --profile sim run --rm --build \
 	  -e GARDA_SKIP=$(DEMO_LIVE_SKIP) -e GARDA_SPEED=$(DEMO_LIVE_SPEED) \
 	  -e GARDA_BATCH_SIZE=100 sim
+
+# --- Public access -----------------------------------------------------------
+# Change a dashboard password (default admin@garda.local). Do this BEFORE sharing a
+# public URL: the seeded admin/admin would otherwise work for anyone who finds it.
+admin-password:
+	@./scripts/set-admin-password.sh $(EMAIL)
+
+# Expose the dashboard on the internet via ngrok. Only the frontend is tunnelled:
+# its nginx proxies /api and /api/v1/ws to the backend inside the compose network,
+# and the app uses relative URLs, so the browser upgrades to https/wss on its own.
+# The backend is never exposed.
+#
+# Do NOT add ngrok basic-auth: the app sends `Authorization: Bearer <jwt>` on every
+# API call, and basic-auth checks that same header, so every request after login
+# would be rejected with a 401.
+#
+# One-time: ngrok config add-authtoken <token from dashboard.ngrok.com>
+# Optional: NGROK_URL=<your free static domain> keeps the same URL across restarts.
+tunnel:
+	@command -v ngrok >/dev/null || { echo "install ngrok first: brew install ngrok"; exit 1; }
+	@PORT=$$(sed -n 's/^FRONTEND_HOST_PORT=//p' .env 2>/dev/null); \
+	  curl -s -o /dev/null --max-time 3 http://localhost:$${PORT:-3000} \
+	    || { echo "dashboard not reachable on :$${PORT:-3000} (start it with: make up)"; exit 1; }; \
+	  echo "tunnelling http://localhost:$${PORT:-3000}"; \
+	  ngrok http $${PORT:-3000} $(if $(NGROK_URL),--url $(NGROK_URL),)
