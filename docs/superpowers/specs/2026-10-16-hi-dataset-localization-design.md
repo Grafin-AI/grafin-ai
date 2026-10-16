@@ -68,7 +68,7 @@ Rule: the dataset never contains anything a model is supposed to infer. Otherwis
 
 ```
 garda-ai-dataset/
-├── pyproject.toml            uv; Python 3.12; polars, faker, kaggle (official API client)
+├── pyproject.toml            uv; Python 3.12; polars, faker (Kaggle REST via stdlib urllib)
 ├── Makefile                  fetch / localize / validate / all, DATASET=small|medium
 ├── mappings/                 versioned, reviewable CSVs (the "recipe")
 │   ├── fx_rates.csv
@@ -76,6 +76,7 @@ garda-ai-dataset/
 │   ├── institutions.csv
 │   ├── provinces_cities.csv
 │   ├── kyc_status.csv
+│   ├── entity_types.csv
 │   └── sectors_occupations.csv
 ├── garda_ai_dataset/
 │   ├── config.py             GARDA_ env settings
@@ -117,7 +118,7 @@ Each dataset gets a folder `garda-ai-data/HI-<Size>-ID/`. `<X>` below means `HI-
 | `<X>_entities.csv` *(new)* | `Entity ID, Entity Name, Entity Type, Province, City, Registration Date, KYC Status, Sector` | backend / ingest (sub-project 4) |
 | `<X>_Patterns.txt` | IBM format, with the same transforms applied as the transactions | humans, training |
 | `<X>_typologies.csv` *(new)* | `transaction_id, attempt_id, motif` for laundering rows. `transaction_id` is the 1-based row ordinal in `_Trans_sorted.csv`, which is the same id the sim sends. Laundering rows not found in Patterns get motif `UNATTRIBUTED`. | training (sub-project 2) |
-| `MANIFEST.json` | pipeline version, dataset, input sha256s, mapping-table sha256s, row counts, entity-type source, typology coverage, wall time | everyone |
+| `MANIFEST.json` | pipeline version, dataset, input sha256s, mapping-table sha256s, row counts, typology coverage, wall time | everyone |
 
 **Risk columns are transitional.** `risk_score` and `risk_category` are model outputs (layer 3), so this pipeline does not invent them.
 
@@ -136,15 +137,22 @@ Rows that share a minute may be ordered differently from today's text-sorted fil
 
 - **Pure and deterministic.** The same input and mapping tables always produce byte-identical output. Randomness only ever comes from a hash-derived seed, keyed by `Entity ID` or `Bank ID`.
 - **Never reads `Is Laundering`.** The orchestrator passes transforms a frame **without** the label column. The label is re-attached by row position just before writing.
-- **The graph key is untouched.** `(Bank ID, Account Number)` stays exactly as IBM has it, so nodes never merge. This matters because 8 account numbers appear under more than one bank.
+- **The graph key is untouched.** `(Bank ID, Account Number)` keeps IBM's identity, so nodes never merge. This matters because 8 account numbers appear under more than one bank.
+  - IBM's Trans file zero-pads bank IDs, and 58 banks appear with two spellings ("010" and "0010"). The output writes bank IDs as plain integers, matching `accounts.csv` and the platform.
+  - On HI-Small this was verified to merge **0** `(bank, account)` keys. The validator re-checks it on every build (§8.3).
+- **Columns are read by position.** IBM's Trans header names both account columns `Account`. The output header writes the second one as `To Account`, which is what the sim expects.
 
 ### 6.2 Transaction-level transforms
 
 **FX (`fx_rates.csv`: currency, iso_code, idr_per_unit, rate_date, source)**
 
-- There is one fixed rate per IBM currency, all taken from a single date. The sources are BI's JISDOR rate for USD, BI's transaction rates for other fiat currencies, and one recorded BTC/IDR price for Bitcoin.
+- There is one fixed rate per IBM currency, all for **2025-09-04** (the localized start date). No single source covers all 15 currencies, so each row records its source:
+  - **ECB reference rates** (via frankfurter.dev): USD, EUR, CHF, CNY, ILS, INR, GBP, JPY, CAD, AUD, MXN, BRL.
+  - **Central Bank of Russia** official rate: RUB.
+  - **The USD peg (3.75)**: SAR.
+  - **Yahoo Finance's BTC-USD daily close (110,723.60) × the ECB USD/IDR rate**: BTC.
 - `Amount Paid` is multiplied by the rate for `Payment Currency`. `Amount Received` is multiplied by the rate for `Receiving Currency`.
-- Both amounts are rounded half-even to whole rupiah, and both currency columns become `IDR`.
+- Both amounts are rounded to whole rupiah with Polars `round(0)`, and both currency columns become `IDR`.
 - **No capping or clipping, ever.** Patterns where launderers keep amounts just under a threshold survive, because relative magnitudes within each currency are preserved.
 - Rows that were cross-currency in IBM keep their slightly different paid and received IDR amounts. That is the conversion spread, and it is real.
 
@@ -178,7 +186,7 @@ Rows that share a minute may be ordered differently from today's text-sorted fil
 The `Bank ID` itself is unchanged; only `Bank Name` is assigned. Assignment works in four steps:
 
 1. Rank IBM banks by number of accounts, descending, breaking ties by `Bank ID`.
-2. If at least 50% of a bank's outgoing transactions are Bitcoin, it joins the crypto-exchange pool. (Computed from `Payment Format`, never from the label.)
+2. IBM banks named `Crytpo Bank #…` (IBM's own spelling) join the crypto-exchange pool; all others join the bank pool. The rule uses IBM's bank name, never the label.
 3. Within each pool, walk the ranked list and fill institutions in descending weight order until each one's cumulative account share reaches its weight. Big IBM banks become big Indonesian banks.
 4. Each IBM bank gets exactly one name. Many IBM banks share a name, which is realistic: one bank, many branches or BINs.
 
@@ -186,21 +194,26 @@ Real names are used, per the brainstorming decision. The dashboard's "Top Lembag
 
 ### 6.4 Entities and accounts
 
-**Entity type** comes from IBM's original `Entity Name` prefix, assumed to be `Corporation #…`, `Sole Proprietorship #…`, `Partnership #…`, or a person-like name (to be verified on download):
+**Entity type** comes from IBM's original `Entity Name` prefix (`<Prefix> #<n>`). On HI-Small, every entity carries one of six prefixes:
 
-| IBM | Indonesian type |
-|---|---|
-| Corporation | PT |
-| Sole Proprietorship | UD |
-| Partnership | Firma |
-| (person) | Perorangan |
+| IBM prefix | HI-Small count | Indonesian type | Kind |
+|---|---|---|---|
+| Partnership | 189,683 | CV | business |
+| Corporation | 172,351 | PT | business |
+| Sole Proprietorship | 149,048 | UD | business |
+| Country | 6,692 | Lembaga | business |
+| Individual | 740 | Perorangan | individual |
+| Direct | 67 | Lembaga | business |
 
-*Fallback:* if the markers are absent, the type is assigned from a hash of `Entity ID` with documented weights, and `MANIFEST.json` records `entity_type_source: "synthetic"` instead of `"ibm"`.
+- CV is the usual Indonesian partnership form, so it replaces the Firma from the brainstorm.
+- What IBM means by "Country" and "Direct" is undocumented. The "Country" entities own accounts at IBM's crypto banks. Both map to the generic `Lembaga`.
+- The table lives in `mappings/entity_types.csv`. An unknown prefix is a hard error (exit 3), so there is no synthetic fallback.
 
 **Names** use Faker's `id_ID` locale, seeded by `sha256(Entity ID)`:
 
 - Perorangan: a person name.
-- PT, UD, Firma: `PT/UD/Firma <generated business name>`.
+- PT, CV, UD: `PT/CV/UD <surname> <suffix>`, for example `PT Wibisono Sejahtera`.
+- Lembaga: `Lembaga <surname> <suffix>`.
 
 Every account of an entity shows that entity's name.
 
@@ -219,9 +232,12 @@ Every account of an entity shows that entity's name.
 ### 6.5 Patterns and motif labels
 
 - `Patterns.txt` is parsed into attempts: a `BEGIN LAUNDERING ATTEMPT - <MOTIF>: <detail>` header, CSV rows, then an `END` line.
-- Each row is matched to the raw Trans file **before** localization, on all 11 raw fields. Duplicate rows are matched as a multiset.
-- Matched rows get `attempt_id` (sequential, in file order) and `motif` (the normalized header token, e.g. `FAN-OUT`, `CYCLE`, `GATHER-SCATTER`).
-- The localized `Patterns.txt` is written by applying the same transaction transforms to each row and keeping the header lines verbatim.
+- Each row is matched to the raw Trans file **before** localization, on the exact raw line text of all 11 fields. A 200-row sample on HI-Small matched byte for byte.
+  - Matching only considers rows with `Is Laundering = 1`. `typologies.csv` is a label product by design, so reading the label here is allowed.
+  - Duplicate rows are matched as a multiset.
+- Matched rows get `attempt_id` (sequential, in file order) and `motif` (the header token, e.g. `FAN-OUT`, `CYCLE`, `GATHER-SCATTER`).
+  - HI-Small has 370 attempts across 8 motifs and 3,209 pattern rows, against 5,177 laundering rows. At most 62% of laundering rows can get a motif; the rest are `UNATTRIBUTED`.
+- The localized `Patterns.txt` copies each matched row's **already-localized Trans line**, so the two files can never disagree. Header and END lines are kept verbatim.
 - Coverage is recorded in the manifest: matched laundering rows out of all laundering rows, and unmatched pattern rows. Unmatched pattern rows fail validation.
 
 ## 7. Fetch
@@ -237,7 +253,7 @@ Every account of an entity shows that entity's name.
 
 1. **Row count:** output rows equal raw rows.
 2. **Labels:** after mapping each sorted row back to its original row, `Is Laundering` is identical for every row.
-3. **Graph keys:** `(From Bank, Account)` and `(To Bank, To Account)` are identical per row, so the topology is identical.
+3. **Graph keys:** `(From Bank, Account)` and `(To Bank, To Account)` are identical per row, with bank IDs compared as integers. The number of distinct `(bank, account)` keys is the same before and after integer normalization, so no nodes merged.
 4. **FX:** for every row, `new_amount == round(raw_amount × rate[raw_currency])`, for both paid and received.
 5. **Time:** for every row, `new_ts − raw_ts == 1,099 days`, and the output is non-decreasing in time.
 6. **Channels:** every row's channel equals `channels[raw_format]`.
@@ -257,10 +273,10 @@ The development machine has 16 GB of RAM and about 65 GB of free disk.
 
 - Polars **lazy and streaming** mode is used throughout. The raw Trans file is scanned, not loaded.
 - **Small:** target under 2 minutes end-to-end.
-- **Medium (about 32M rows):** the sort is the memory peak.
-  - Plan A is a Polars streaming sort on `(timestamp, original_row)`.
-  - Plan B, if Plan A exceeds memory, writes a fixed-width, key-prefixed temp file and runs `LC_ALL=C sort` (an external, disk-backed sort), then strips the key.
-  - Which plan was used is recorded in the manifest.
+- **Medium (about 32M rows)** is processed in two passes, and the same code runs for Small:
+  1. **Pass 1 streams** the raw file through the transforms into a temporary Parquet file.
+  2. **Pass 2 handles one dataset day at a time:** it filters that day from the Parquet, sorts it by `(timestamp, original_row)` in memory, and appends it to the output CSV. Memory is bounded by the largest day, about 22% of rows.
+  - The validator works per day in the same way, so a global sort or join over 32M rows is never needed.
 - **Disk:** Medium needs about 3.2 GB raw, plus about 3.2 GB output, plus temporary files. That is checked before starting, and the run fails early if fewer than 10 GB are free.
 
 ## 10. Error handling and exit codes
@@ -272,7 +288,7 @@ The scheme matches the other repos:
 | `0` | OK |
 | `1` | Validation failed |
 | `2` | Raw input missing, or hash mismatch |
-| `3` | Mapping table invalid (unknown currency or format, malformed CSV, weights not summing within tolerance) |
+| `3` | Mapping table invalid (unknown currency or format, malformed CSV, a non-positive weight, or a comma inside a name) |
 | `4` | Fetch or credentials error |
 | `5` | Insufficient disk |
 
@@ -302,7 +318,7 @@ Error messages name the file and row or key involved, never credential values.
 ## 12. Acceptance criteria
 
 - `make all DATASET=small` and `make all DATASET=medium` both complete, with every invariant in §8 passing.
-- `MANIFEST.json` for each dataset records the hashes, the coverage, and whether entity types came from IBM or were synthetic.
+- `MANIFEST.json` for each dataset records the hashes and the typology coverage.
 - **Consumer smoke test:**
   - the sim's reader parses `HI-Small-ID/HI-Small_Trans_sorted.csv`;
   - the ingest seed parses `HI-Small-ID/HI-Small_accounts.csv`;
@@ -314,7 +330,7 @@ Error messages name the file and row or key involved, never credential values.
 
 ## 13. Assumptions to verify on first download
 
-1. IBM's original `Entity Name` values carry company and individual markers (§6.4). There is a fallback if not.
-2. `Patterns.txt` covers most laundering rows. Actual coverage is recorded, and the value is accepted as-is.
+1. ~~IBM's original `Entity Name` values carry company and individual markers.~~ **Verified on HI-Small:** 6 prefixes (§6.4).
+2. ~~`Patterns.txt` covers most laundering rows.~~ **Verified on HI-Small:** at most 62% coverage. Actual coverage is recorded in the manifest and accepted as-is.
 3. HI-Medium's currency and payment-format vocabulary equals HI-Small's. Any new value is a hard error, and the fix is to add a mapping row.
 4. Exact HI-Medium row, account and laundering counts. These are recorded in the manifest.
