@@ -1,0 +1,7 @@
+ibm_prefix,entity_type,kind
+Partnership,CV,business
+Corporation,PT,business
+Sole Proprietorship,UD,business
+Country,Lembaga,business
+Direct,Lembaga,business
+Individual,Perorangan,individual

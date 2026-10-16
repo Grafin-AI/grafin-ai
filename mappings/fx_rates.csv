@@ -1,0 +1,16 @@
+currency,iso_code,idr_per_unit,rate_date,source
+US Dollar,USD,16445,2025-09-04,ECB reference rate via api.frankfurter.dev
+Euro,EUR,19154.37,2025-09-04,ECB reference rate via api.frankfurter.dev
+Swiss Franc,CHF,20414,2025-09-04,ECB reference rate via api.frankfurter.dev
+Yuan,CNY,2303.05,2025-09-04,ECB reference rate via api.frankfurter.dev
+Shekel,ILS,4889.47,2025-09-04,ECB reference rate via api.frankfurter.dev
+Rupee,INR,186.63,2025-09-04,ECB reference rate via api.frankfurter.dev
+UK Pound,GBP,22110,2025-09-04,ECB reference rate via api.frankfurter.dev
+Yen,JPY,110.87,2025-09-04,ECB reference rate via api.frankfurter.dev
+Canadian Dollar,CAD,11901,2025-09-04,ECB reference rate via api.frankfurter.dev
+Australian Dollar,AUD,10719,2025-09-04,ECB reference rate via api.frankfurter.dev
+Mexican Peso,MXN,876.09,2025-09-04,ECB reference rate via api.frankfurter.dev
+Brazil Real,BRL,3012.35,2025-09-04,ECB reference rate via api.frankfurter.dev
+Ruble,RUB,203.0704,2025-09-04,Central Bank of Russia official rate (49.2440 RUB per 10000 IDR)
+Saudi Riyal,SAR,4385.3333,2025-09-04,USD peg 3.75 SAR/USD x ECB USD/IDR 16445
+Bitcoin,BTC,1820849602,2025-09-04,Yahoo Finance BTC-USD daily close 110723.60 x ECB USD/IDR 16445

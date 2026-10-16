@@ -1,0 +1,8 @@
+ibm_format,channel
+ACH,BI-FAST
+Wire,RTGS
+Cheque,SKNBI (Cek/BG)
+Credit Card,Kartu Kredit
+Cash,Setor/Tarik Tunai
+Reinvestment,Pemindahbukuan
+Bitcoin,Aset Kripto

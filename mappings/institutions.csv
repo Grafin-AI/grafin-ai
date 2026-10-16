@@ -1,0 +1,115 @@
+name,short_name,kind,group,weight
+Bank Rakyat Indonesia,BRI,bank,BUMN,140
+Bank Mandiri,Mandiri,bank,BUMN,130
+Bank Central Asia,BCA,bank,Swasta Nasional,110
+Bank Negara Indonesia,BNI,bank,BUMN,70
+Bank Tabungan Negara,BTN,bank,BUMN,35
+Bank Syariah Indonesia,BSI,bank,Syariah,30
+CIMB Niaga,CIMB Niaga,bank,KCBA/Campuran,25
+Bank Danamon,Danamon,bank,KCBA/Campuran,18
+Bank Permata,Permata,bank,KCBA/Campuran,18
+Bank OCBC Indonesia,OCBC,bank,KCBA/Campuran,18
+SMBC Indonesia,SMBC,bank,KCBA/Campuran,15
+Panin Bank,Panin,bank,Swasta Nasional,15
+Maybank Indonesia,Maybank,bank,KCBA/Campuran,14
+Bank BJB,BJB,bank,BPD,12
+Bank Mega,Mega,bank,Swasta Nasional,10
+Bank UOB Indonesia,UOB,bank,KCBA/Campuran,10
+Bank DKI,Bank DKI,bank,BPD,9
+Bank Jago,Jago,bank,Bank Digital,8
+KB Bank,KB Bank,bank,KCBA/Campuran,8
+Bank Jateng,Bank Jateng,bank,BPD,7
+Bank Jatim,Bank Jatim,bank,BPD,7
+HSBC Indonesia,HSBC,bank,KCBA/Campuran,6
+SeaBank Indonesia,SeaBank,bank,Bank Digital,6
+Bank Sinarmas,Sinarmas,bank,Swasta Nasional,6
+Bank Mayapada,Mayapada,bank,Swasta Nasional,6
+Bank DBS Indonesia,DBS,bank,KCBA/Campuran,5
+MUFG Bank Jakarta,MUFG,bank,KCBA/Campuran,5
+Bank Muamalat,Muamalat,bank,Syariah,4
+Allo Bank,Allo Bank,bank,Bank Digital,4
+blu by BCA Digital,blu,bank,Bank Digital,4
+Bank Neo Commerce,BNC,bank,Bank Digital,4
+Standard Chartered Indonesia,StanChart,bank,KCBA/Campuran,4
+Citibank Indonesia,Citi,bank,KCBA/Campuran,4
+Bank Woori Saudara,Woori Saudara,bank,KCBA/Campuran,4
+Bank KEB Hana Indonesia,KEB Hana,bank,KCBA/Campuran,4
+Bank Sumut,Bank Sumut,bank,BPD,3
+Bank Nagari,Bank Nagari,bank,BPD,3
+Bank Sumsel Babel,Sumsel Babel,bank,BPD,3
+Bank BPD Bali,BPD Bali,bank,BPD,3
+Bankaltimtara,Bankaltimtara,bank,BPD,3
+Bank Raya,Bank Raya,bank,Bank Digital,3
+Superbank,Superbank,bank,Bank Digital,3
+BTPN Syariah,BTPN Syariah,bank,Syariah,3
+Bank Nationalnobu,Nobu,bank,Swasta Nasional,3
+Bank Shinhan Indonesia,Shinhan,bank,KCBA/Campuran,3
+Bank ICBC Indonesia,ICBC,bank,KCBA/Campuran,3
+Bank Mizuho Indonesia,Mizuho,bank,KCBA/Campuran,3
+Bank Mandiri Taspen,Mantap,bank,Swasta Nasional,2
+Bank Sulselbar,Sulselbar,bank,BPD,2
+Bank Kalbar,Bank Kalbar,bank,BPD,2
+Bank Kalsel,Bank Kalsel,bank,BPD,2
+Bank Papua,Bank Papua,bank,BPD,2
+Bank BPD DIY,BPD DIY,bank,BPD,2
+Bank Aceh Syariah,Bank Aceh,bank,Syariah,2
+Bank Resona Perdania,Resona,bank,KCBA/Campuran,2
+Bank Capital Indonesia,Capital,bank,Swasta Nasional,2
+Bank QNB Indonesia,QNB,bank,KCBA/Campuran,2
+Bank China Construction Bank Indonesia,CCB Indonesia,bank,KCBA/Campuran,2
+Bank of China Jakarta,BOC,bank,KCBA/Campuran,2
+Bank Artha Graha,Artha Graha,bank,Swasta Nasional,2
+Bank MNC Internasional,MNC Bank,bank,Swasta Nasional,2
+Bank Commonwealth,Commonwealth,bank,KCBA/Campuran,2
+Bank NTT,Bank NTT,bank,BPD,1
+Bank NTB Syariah,NTB Syariah,bank,Syariah,1
+Bank SulutGo,SulutGo,bank,BPD,1
+Bank Kalteng,Bank Kalteng,bank,BPD,1
+Bank Jambi,Bank Jambi,bank,BPD,1
+Bank Lampung,Bank Lampung,bank,BPD,1
+Bank Bengkulu,Bank Bengkulu,bank,BPD,1
+Bank Banten,Bank Banten,bank,BPD,1
+Bank Sultra,Bank Sultra,bank,BPD,1
+Bank Sulteng,Bank Sulteng,bank,BPD,1
+Bank Maluku Malut,Maluku Malut,bank,BPD,1
+Bank Riau Kepri Syariah,BRK Syariah,bank,Syariah,1
+Bank BJB Syariah,BJB Syariah,bank,Syariah,1
+BCA Syariah,BCA Syariah,bank,Syariah,1
+Bank Mega Syariah,Mega Syariah,bank,Syariah,1
+Bank Panin Dubai Syariah,Panin Dubai Syariah,bank,Syariah,1
+Bank Victoria Syariah,Victoria Syariah,bank,Syariah,1
+KB Bank Syariah,KB Syariah,bank,Syariah,1
+Bank Nano Syariah,Nano Syariah,bank,Syariah,1
+Bank Aladin Syariah,Aladin,bank,Bank Digital,1
+Krom Bank Indonesia,Krom,bank,Bank Digital,1
+Hibank,Hibank,bank,Bank Digital,1
+Bank Amar Indonesia,Amar Bank,bank,Bank Digital,1
+Bank Victoria International,Victoria,bank,Swasta Nasional,1
+Bank Index Selindo,Index,bank,Swasta Nasional,1
+Bank Ganesha,Ganesha,bank,Swasta Nasional,1
+Bank Maspion,Maspion,bank,Swasta Nasional,1
+Bank Multiarta Sentosa,MAS,bank,Swasta Nasional,1
+Bank Oke Indonesia,Bank Oke,bank,Swasta Nasional,1
+Bank Ina Perdana,Bank Ina,bank,Swasta Nasional,1
+Bank Mestika Dharma,Mestika,bank,Swasta Nasional,1
+Bank Sahabat Sampoerna,Sampoerna,bank,Swasta Nasional,1
+Bank Jasa Jakarta,Jasa Jakarta,bank,Swasta Nasional,1
+Bank Fama Internasional,Fama,bank,Swasta Nasional,1
+Bank Mayora,Mayora,bank,Swasta Nasional,1
+Bank JTrust Indonesia,JTrust,bank,KCBA/Campuran,1
+Bank CTBC Indonesia,CTBC,bank,KCBA/Campuran,1
+Bank IBK Indonesia,IBK,bank,KCBA/Campuran,1
+BNP Paribas Indonesia,BNP Paribas,bank,KCBA/Campuran,1
+Deutsche Bank Jakarta,Deutsche Bank,bank,KCBA/Campuran,1
+JPMorgan Chase Bank Jakarta,JPMorgan,bank,KCBA/Campuran,1
+Bank of America Jakarta,BofA,bank,KCBA/Campuran,1
+Indodax,Indodax,crypto_exchange,Pedagang Aset Kripto,35
+Tokocrypto,Tokocrypto,crypto_exchange,Pedagang Aset Kripto,15
+Pintu,Pintu,crypto_exchange,Pedagang Aset Kripto,15
+Reku,Reku,crypto_exchange,Pedagang Aset Kripto,8
+Ajaib Kripto,Ajaib,crypto_exchange,Pedagang Aset Kripto,8
+Pluang,Pluang,crypto_exchange,Pedagang Aset Kripto,6
+Triv,Triv,crypto_exchange,Pedagang Aset Kripto,4
+Upbit Indonesia,Upbit,crypto_exchange,Pedagang Aset Kripto,4
+Nanovest,Nanovest,crypto_exchange,Pedagang Aset Kripto,3
+Mobee,Mobee,crypto_exchange,Pedagang Aset Kripto,2
