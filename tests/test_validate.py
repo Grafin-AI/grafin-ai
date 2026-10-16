@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 import garda_ai_dataset.validate as validate_mod
+from garda_ai_dataset.hashing import sha256_file
 from garda_ai_dataset.localize import run_localize
 from garda_ai_dataset.mappings import Mappings
 from garda_ai_dataset.paths import DatasetPaths
@@ -73,6 +74,18 @@ def test_swapped_rows_are_caught(built: DatasetPaths, maps: Mappings) -> None:
     lines[2], lines[3] = lines[3], lines[2]  # tids 2 and 3: 08:00 and 08:05
     built.out_trans.write_text("\n".join(lines) + "\n")
     assert not _check(validate_dataset(built, maps), "order").ok
+
+
+def test_swap_across_day_boundary_is_caught(built: DatasetPaths, maps: Mappings) -> None:
+    lines = built.out_trans.read_text().splitlines()
+    lines[5], lines[6] = lines[6], lines[5]  # tid 5 (09/04 09:30) and tid 6 (09/05 10:00)
+    built.out_trans.write_text("\n".join(lines) + "\n")
+    manifest = json.loads(built.manifest.read_text())
+    manifest["outputs"][built.out_trans.name] = sha256_file(built.out_trans)
+    built.manifest.write_text(json.dumps(manifest))
+    report = validate_dataset(built, maps)
+    assert not _check(report, "order").ok
+    assert _check(report, "manifest").ok
 
 
 def test_typologies_tamper_is_caught(built: DatasetPaths, maps: Mappings) -> None:

@@ -136,6 +136,7 @@ def _validate(paths: DatasetPaths, maps: Mappings, label_sample_rows: int) -> Va
     day_errors: list[str] = []
     id_parts: list[pl.DataFrame] = []
     last_ts: datetime | None = None
+    next_tid = 1
     raw_days: list[date] = (
         raw.select(pl.col("raw_day").unique().sort()).collect().to_series().to_list()
     )
@@ -155,6 +156,10 @@ def _validate(paths: DatasetPaths, maps: Mappings, label_sample_rows: int) -> Va
             if last_ts is not None and o["out_ts"][0] < last_ts:
                 mismatches["order"] += 1
             last_ts = o["out_ts"][-1]
+            tids = o["transaction_id"]
+            if tids[0] != next_tid or tids[-1] - tids[0] + 1 != o.height:
+                mismatches["order"] += 1
+            next_tid = tids[-1] + 1
         id_parts.append(
             pl.DataFrame({"raw_row": r["raw_row"], "transaction_id": o["transaction_id"],
                           "is_laundering": r["is_laundering"]})
