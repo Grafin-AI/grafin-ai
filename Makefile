@@ -1,5 +1,5 @@
 DATASET ?= small
-KAGGLE_JSON ?= $(HOME)/.kaggle/kaggle.json
+KAGGLE_JSON ?= $(or $(GARDA_KAGGLE_JSON),$(HOME)/.kaggle/kaggle.json)
 
 .PHONY: install lint typecheck test check fetch localize validate all
 

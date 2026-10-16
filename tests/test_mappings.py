@@ -87,3 +87,29 @@ def test_non_numeric_rate(mapdir: Path) -> None:
     )
     with pytest.raises(MappingError, match="not a number"):
         load_mappings(mapdir)
+
+
+def test_unquoted_comma_too_many_fields(mapdir: Path) -> None:
+    (mapdir / "channels.csv").write_text("ibm_format,channel\nCheque,SKNBI (Cek,BG)\n")
+    with pytest.raises(MappingError, match="too many fields"):
+        load_mappings(mapdir)
+
+
+def test_channels_must_be_one_to_one(mapdir: Path) -> None:
+    (mapdir / "channels.csv").write_text("ibm_format,channel\nACH,RTGS\nWire,RTGS\n")
+    with pytest.raises(MappingError, match="duplicate"):
+        load_mappings(mapdir)
+
+
+def test_non_finite_rate(mapdir: Path) -> None:
+    (mapdir / "fx_rates.csv").write_text(
+        "currency,iso_code,idr_per_unit,rate_date,source\nUS Dollar,USD,nan,2025-09-04,x\n"
+    )
+    with pytest.raises(MappingError):
+        load_mappings(mapdir)
+
+
+def test_undecodable_table(mapdir: Path) -> None:
+    (mapdir / "kyc_status.csv").write_bytes(b"status,weight\n\xe9t\xe9,1\n")
+    with pytest.raises(MappingError):
+        load_mappings(mapdir)

@@ -1,6 +1,7 @@
 """Load and validate the versioned mapping tables in ``mappings/`` (the localization recipe)."""
 
 import csv
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,12 +38,18 @@ class Mappings:
 def _read(path: Path, columns: tuple[str, ...]) -> list[dict[str, str]]:
     if not path.exists():
         raise MappingError(f"mapping table missing: {path}")
-    with path.open(newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        missing = [c for c in columns if c not in (reader.fieldnames or [])]
-        if missing:
-            raise MappingError(f"{path.name}: missing columns {missing}")
-        rows = list(reader)
+    try:
+        with path.open(newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            missing = [c for c in columns if c not in (reader.fieldnames or [])]
+            if missing:
+                raise MappingError(f"{path.name}: missing columns {missing}")
+            rows = list(reader)
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise MappingError(f"{path.name}: {exc}") from None
+    for line, row in enumerate(rows, start=2):
+        if None in row:
+            raise MappingError(f"{path.name}:{line}: too many fields (unquoted comma?)")
     if not rows:
         raise MappingError(f"{path.name}: has no rows")
     cleaned: list[dict[str, str]] = []
@@ -94,7 +101,7 @@ def _load_fx(path: Path) -> dict[str, float]:
             raise MappingError(
                 f"{path.name}:{line}: rate {row['idr_per_unit']!r} is not a number"
             ) from None
-        if rate <= 0:
+        if not math.isfinite(rate) or rate <= 0:
             raise MappingError(f"{path.name}:{line}: rate must be positive")
         fx[row["currency"]] = rate
     return fx
@@ -156,6 +163,7 @@ def load_mappings(directory: Path = MAPPINGS_DIR) -> Mappings:
 
     channel_rows = _read(channels_path, ("ibm_format", "channel"))
     _unique(channels_path, [r["ibm_format"] for r in channel_rows], "ibm_format")
+    _unique(channels_path, [r["channel"] for r in channel_rows], "channel")
     channels = {r["ibm_format"]: r["channel"] for r in channel_rows}
 
     type_rows = _read(types_path, ("ibm_prefix", "entity_type", "kind"))
