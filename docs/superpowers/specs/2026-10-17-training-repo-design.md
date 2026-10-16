@@ -271,3 +271,19 @@ Explainer / fraud type / risk factors (next spec); scorer and backend changes (s
 | Parity misses the band | compare against the upstream code run unmodified on the same machine (scratchpad clone) to separate port bugs from seed variance before changing anything |
 | Constant currency feature lowers F1 on ID data | measured by criterion 2; fix lives in `garda-ai-dataset` |
 | Embedding snapshot volume (Small: 518 k × 20 × 4 B ≈ 41 MB/day) | small at D = 20; `float16` option |
+
+## 15. Implementation notes (added 2026-10-17 during planning; verified by probes)
+
+- **Two plans.** Plan A = foundation + paper protocol (enough for Wave 1 parity on the VM). Plan B = causal protocol, embedding snapshots, heads, ONNX, bundle, transfer. Plan A is self-contained and shippable on its own.
+- **Pinned stack (verified to lock for macOS arm64 + Linux CPU + Linux CUDA 12.4):** Python 3.11, `torch==2.5.1`, `torch_geometric==2.6.1`, `pyg-lib==0.4.0` (direct wheel URLs per platform: `+pt25` macOS universal2, `+pt25cpu` / `+pt25cu124` Linux), `polars==2.0.0`, numpy 2.x. Linux needs `--extra cpu` (CI) or `--extra cu124` (VM). uv must use an **arm64** interpreter on the Mac (an x86_64 3.11 is also installed for the datatable/Rosetta formatter) — `.python-version` pins `cpython-3.11-macos-aarch64-none`.
+- **MLflow:** the file store is in maintenance mode in MLflow 3 (raises unless `MLFLOW_ALLOW_FILE_STORE=true`), so tracking uses `sqlite:///mlruns/mlflow.db` with artifacts in `mlruns/artifacts`; `mlflow-skinny` + explicit `sqlalchemy`/`alembic`. MLflow failures never fail a run (run directory is the source of truth). UI: `uvx mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`.
+- **Run directory writes `config.json`** (not TOML) — no extra dependency.
+- **Upstream quirk reproduced on purpose:** in `create_hetero_obj` the `rev_to` port swap is done in place on a tensor shared with the forward edge type, so **both** edge types get the last two columns swapped (probe-confirmed). Kept for parity, documented in code.
+- **Upstream detail reproduced:** node features are a constant 1 that `z_norm` turns into **all zeros**; with ego IDs the model input is `[0, ego]`.
+- **Seed edges not sampled into their own batch are skipped** by upstream's training/evaluation (except for its Small_J/Q datasets). Paper protocol reproduces this and logs **seed coverage**; the causal protocol (Plan B) scores every seed edge.
+- **Best epoch** = highest validation F1 over all epochs (upstream ignored epoch 0 for best-model bookkeeping; negligible).
+- **Ports / time-deltas** are computed once on the full sorted edge list with a vectorised implementation proven equal to upstream's loops on the fixture. Both are causal (depend only on earlier edges), so values match upstream's per-split computation.
+- **Node state extraction** (Plan B) uses forward hooks on `node_emb[.node]` and `batch_norms.{i}[.node]` and recomputes `x_i = (x_{i-1} + relu(bn_i)) / 2` — probe-verified to reproduce exactly what the vendored head consumes (homo and `to_hetero`).
+- **Neighbour sampling is reproducible** from the torch RNG (pyg-lib sampler), so resume restores RNG states and continues identically.
+- **HI-Small paper split** (raw and ID identical): daily counts `[1114921, 754449, 207382, 207430, 482650, 482089, 482751, 482773, 654467, 208325, 396, 281, 184, 121, 46, 46, 23, 11]` → train days 0–5, val 6–7, test 8–17.
+- **VM RAM:** 52 GB is enough for Wave 1 (HI-Small). Four parallel **HI-Medium** jobs need ≈ 15 GB each → use **n1-highmem-16 (104 GB)** for Wave 2, or run Medium jobs two at a time.
