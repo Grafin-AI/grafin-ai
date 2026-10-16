@@ -68,7 +68,7 @@ Rule: the dataset never contains anything a model is supposed to infer. Otherwis
 
 ```
 garda-ai-dataset/
-├── pyproject.toml            uv; Python 3.12; polars, faker, kaggle (or httpx)
+├── pyproject.toml            uv; Python 3.12; polars, faker, kaggle (official API client)
 ├── Makefile                  fetch / localize / validate / all, DATASET=small|medium
 ├── mappings/                 versioned, reviewable CSVs (the "recipe")
 │   ├── fx_rates.csv
