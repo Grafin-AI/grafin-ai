@@ -1,0 +1,39 @@
+[project]
+name = "garda-ai-dataset"
+version = "0.1.0"
+description = "Deterministic Indonesian localization of the IBM AML (AMLworld) HI datasets"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "polars>=2.0,<3",
+    "faker>=40,<41",
+]
+
+[project.scripts]
+garda-dataset = "garda_ai_dataset.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["garda_ai_dataset"]
