@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import garda_ai_dataset.fetch as fetch_mod
 from garda_ai_dataset.errors import FetchError, RawInputError
 from garda_ai_dataset.fetch import run_fetch
 from garda_ai_dataset.paths import dataset_paths
@@ -109,3 +110,57 @@ def test_incomplete_credentials(tmp_path: Path) -> None:
     path.write_text("{}")
     with pytest.raises(FetchError, match="username"):
         run_fetch(dataset_paths(tmp_path, "small"), path)
+
+
+def test_credentials_not_forwarded_across_redirect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import http.server
+    import threading
+
+    seen: dict[str, str | None] = {}
+
+    class Target(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen["authorization"] = self.headers.get("Authorization")
+            body = b"redirected body"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    target_server = http.server.HTTPServer(("127.0.0.1", 0), Target)
+    target_url = f"http://127.0.0.1:{target_server.server_port}/blob"
+
+    class Redirector(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(302)
+            self.send_header("Location", target_url)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    redirect_server = http.server.HTTPServer(("127.0.0.1", 0), Redirector)
+    threads = [
+        threading.Thread(target=server.serve_forever, daemon=True)
+        for server in (target_server, redirect_server)
+    ]
+    for thread in threads:
+        thread.start()
+    try:
+        monkeypatch.setattr(
+            fetch_mod, "DOWNLOAD_URL",
+            f"http://127.0.0.1:{redirect_server.server_port}/{{dataset}}/{{file}}",
+        )
+        target = tmp_path / "HI-Small_Trans.csv"
+        fetch_mod._download(target, "Basic c2VjcmV0", fetch_mod._urlopen)
+    finally:
+        for server in (target_server, redirect_server):
+            server.shutdown()
+            server.server_close()
+    assert seen["authorization"] is None
+    assert target.read_bytes() == b"redirected body"

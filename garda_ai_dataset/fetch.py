@@ -8,6 +8,7 @@ import base64
 import json
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from collections.abc import Callable
@@ -24,8 +25,31 @@ ZIP_MAGIC = b"PK\x03\x04"
 Opener = Callable[[urllib.request.Request], Any]  # urlopen-compatible context manager
 
 
+class _DropAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
+    """Kaggle redirects downloads to signed storage URLs; never send our credentials there."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and (
+            urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc
+        ):
+            new.remove_header("Authorization")
+        return new
+
+
+_OPENER = urllib.request.build_opener(_DropAuthOnCrossHostRedirect())
+
+
 def _urlopen(request: urllib.request.Request) -> Any:
-    return urllib.request.urlopen(request, timeout=600)
+    return _OPENER.open(request, timeout=600)
 
 
 def _authorization(kaggle_json: Path) -> str:
