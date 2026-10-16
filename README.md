@@ -64,3 +64,25 @@ The demo row offsets still land on day boundaries, because the number of rows pe
 > be trained on partner-bank data under an MoU.
 
 QRIS, e-wallets and Indonesia-specific typologies (judi online, mule fan-in, pig-butchering) are not in this version. They are planned as a separate, injected-typology dataset.
+
+## Verified builds
+
+### HI-Small (2026-10-16)
+
+`make all DATASET=small`: every validation check `PASS`, exit 0.
+
+| Item | Value |
+|---|---|
+| Transactions | 5,078,345 |
+| Laundering rows | 5,177 |
+| Accounts / entities / banks | 518,581 / 166,207 / 30,470 |
+| Days | 18 (2025-09-04 to 2025-09-21) |
+| Typology | 370 attempts, 3,209 of 3,209 pattern rows matched, laundering coverage 0.6199 |
+| Risk source | `legacy-carryover` |
+| Wall time | 15.8 s end to end (6.9 s for `localize`) |
+| Peak RSS | 1.98 GB |
+
+Consumer smoke tests (read-only):
+- **garda-ai-sim reader**: PASS. The first 1,000 rows stream with `payment_currency` = `IDR`.
+- **garda-ai-ingest seed parser**: PASS. `LoadCounts(banks=30470, entities=166207, accounts=518581)`, and the account count equals the manifest.
+- **Multi-GNN formatter** (`format_kaggle_files.py`): NOT RUN. `datatable==1.1.0` installs on this machine but its native library is x86_64 and will not load on arm64 (`dlopen ... incompatible architecture (have 'x86_64', need 'arm64')`).
