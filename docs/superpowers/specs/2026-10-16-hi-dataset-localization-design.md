@@ -257,7 +257,9 @@ Every account of an entity shows that entity's name.
 4. **FX:** for every row, `new_amount == round(raw_amount × rate[raw_currency])`, for both paid and received.
 5. **Time:** for every row, `new_ts − raw_ts == 1,099 days`, and the output is non-decreasing in time.
 6. **Channels:** every row's channel equals `channels[raw_format]`.
-7. **Label independence:** take the first 200,000 raw rows, shuffle `Is Laundering` among them, and re-run localize. Every non-label output column must be byte-identical. The full-data version of this check runs in tests on fixtures.
+7. **Label independence:** take the first 200,000 raw rows, **invert** `Is Laundering` on every row, and re-run the in-memory localize. Every non-label output column must be byte-identical.
+   - Inverting changes every label. A shuffle of a sample with no laundering rows would change nothing and pass vacuously.
+   - The same check runs on the full fixture in tests.
 8. **Patterns:** every pattern row matches a Trans row. Typology coverage is reported.
 9. **Entities:**
    - every account's entity exists in `entities.csv`;
@@ -312,7 +314,7 @@ Error messages name the file and row or key involved, never credential values.
   - Patterns parsing and multiset matching.
 - **Validator mutation tests.** Each invariant in §8 gets a test that corrupts exactly one output value and asserts that the validator catches it. This proves the checks are not vacuous.
 - **Determinism test:** running localize twice gives byte-identical outputs.
-- **Label-independence test:** a full shuffle on the fixture leaves non-label outputs identical.
+- **Label-independence test:** inverting every label on the fixture leaves non-label outputs identical.
 - **Tooling:** ruff and mypy `--strict`, matching the other repos.
 
 ## 12. Acceptance criteria
