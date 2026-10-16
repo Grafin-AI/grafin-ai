@@ -85,4 +85,25 @@ QRIS, e-wallets and Indonesia-specific typologies (judi online, mule fan-in, pig
 Consumer smoke tests (read-only):
 - **garda-ai-sim reader**: PASS. The first 1,000 rows stream with `payment_currency` = `IDR`.
 - **garda-ai-ingest seed parser**: PASS. `LoadCounts(banks=30470, entities=166207, accounts=518581)`, and the account count equals the manifest.
-- **Multi-GNN formatter** (`format_kaggle_files.py`): NOT RUN. `datatable==1.1.0` installs on this machine but its native library is x86_64 and will not load on arm64 (`dlopen ... incompatible architecture (have 'x86_64', need 'arm64')`).
+- **Multi-GNN formatter** (`format_kaggle_files.py`): PASS, run under Rosetta with an x86_64 Python because `datatable==1.1.0` only ships x86_64 macOS wheels: `uv run --no-project --python cpython-3.11-macos-x86_64-none --with "datatable==1.1.0" --with numpy python format_kaggle_files.py <100k-row slice>`. It produced a 100,001-line `formatted_transactions.csv` (header + 100,000 rows). The localized currency columns are constant (IDR), so Multi-GNN's currency features become a single category.
+
+### HI-Medium (2026-10-16)
+
+`make all DATASET=medium`: all 13 validation checks `PASS`, exit 0.
+
+| Item | Value |
+|---|---|
+| Transactions | 31,898,238 |
+| Laundering rows | 35,230 |
+| Accounts / entities / banks | 2,087,786 / 668,138 / 122,333 |
+| Days | 28 (2025-09-04 to 2025-10-01) |
+| Typology | 2,756 attempts, 22,743 pattern rows matched and 0 unmatched, laundering coverage 0.6456 |
+| Risk source | `none` |
+| Node merge check | 2,077,023 text keys = 2,077,023 integer keys |
+| Wall time | 85.6 s for `localize`; 827 s for the whole `make all`, including the ~3.2 GB download |
+| Peak RSS | 4.62 GB (4,620,582,912 bytes) |
+
+## Known data characteristics (inherited from IBM)
+
+- **Laundering is concentrated in one channel.** BI-FAST (IBM's ACH) carries about 0.8% laundering rows against 0.04% or less elsewhere, so the channel is a strong label proxy.
+- **Extreme outliers are preserved by design (no capping).** The largest single amount on HI-Medium is about Rp 14.5 quadrillion, an IBM Bitcoin transfer multiplied by the BTC rate. Dashboards should treat raw maxima with care.
