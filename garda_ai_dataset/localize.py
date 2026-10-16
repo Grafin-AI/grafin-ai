@@ -21,6 +21,7 @@ from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
 from garda_ai_dataset.transforms.entities import (
     build_accounts,
     build_entities,
+    check_entity_prefixes,
     first_seen_by_entity,
     read_legacy_accounts,
 )
@@ -83,6 +84,7 @@ def run_localize(
     raw_accounts = read_raw_accounts(paths.raw_accounts)
     attempts = parse_patterns(paths.raw_patterns)
     check_vocabulary(raw, maps)
+    check_entity_prefixes(raw_accounts, maps)
 
     paths.out_dir.mkdir(parents=True, exist_ok=True)
     needed = MIN_FREE_BYTES if min_free_bytes is None else min_free_bytes
@@ -91,6 +93,7 @@ def run_localize(
         raise DiskSpaceError(
             f"{paths.out_dir} has {free / 1024**3:.1f} GiB free; need {needed / 1024**3:.1f} GiB"
         )
+    paths.manifest.unlink(missing_ok=True)  # a partial run must not leave a valid manifest
     shutil.rmtree(paths.tmp_dir, ignore_errors=True)
     paths.tmp_dir.mkdir()
 

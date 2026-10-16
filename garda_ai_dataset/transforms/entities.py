@@ -87,17 +87,23 @@ def first_seen_by_entity(trans: pl.LazyFrame, raw_accounts: pl.DataFrame) -> dic
     )
 
 
+def check_entity_prefixes(raw_accounts: pl.DataFrame, maps: Mappings) -> None:
+    """Fail early, naming every IBM entity prefix the mapping table doesn't cover."""
+    names = raw_accounts.group_by("Entity ID").agg(pl.col("Entity Name").min())["Entity Name"]
+    prefixes = {entity_prefix(name) for name in names.to_list()}
+    unknown = sorted(prefixes - maps.entity_types.keys())
+    if unknown:
+        raise MappingError(f"entity prefixes missing from mappings/entity_types.csv: {unknown}")
+
+
 def build_entities(
     raw_accounts: pl.DataFrame,
     first_seen: dict[str, date],
     fallback_day: date,
     maps: Mappings,
 ) -> pl.DataFrame:
+    check_entity_prefixes(raw_accounts, maps)
     entities = raw_accounts.group_by("Entity ID").agg(pl.col("Entity Name").min()).sort("Entity ID")
-    prefixes = {entity_prefix(name) for name in entities["Entity Name"].to_list()}
-    unknown = sorted(prefixes - maps.entity_types.keys())
-    if unknown:
-        raise MappingError(f"entity prefixes missing from mappings/entity_types.csv: {unknown}")
     fake = Faker("id_ID")
     rows: list[tuple[str, ...]] = []
     for entity_id, ibm_name in entities.iter_rows():

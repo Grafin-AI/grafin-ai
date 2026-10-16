@@ -124,3 +124,19 @@ def test_disk_space_guard(raw_paths: DatasetPaths, maps: Mappings) -> None:
 def test_missing_raw_input(tmp_path: Path, maps: Mappings) -> None:
     with pytest.raises(RawInputError):
         run_localize(dataset_paths(tmp_path, "small"), maps, None, min_free_bytes=0)
+
+
+def test_unknown_entity_prefix_fails_before_touching_outputs(
+    raw_paths: DatasetPaths, maps: Mappings
+) -> None:
+    from garda_ai_dataset.errors import MappingError
+
+    _run(raw_paths, maps)
+    before = raw_paths.out_trans.read_bytes()
+    raw_paths.raw_accounts.write_text(
+        raw_paths.raw_accounts.read_text().replace("Corporation #2", "Trust #1")
+    )
+    with pytest.raises(MappingError, match="Trust"):
+        _run(raw_paths, maps)
+    assert raw_paths.out_trans.read_bytes() == before
+    assert not raw_paths.tmp_dir.exists()
