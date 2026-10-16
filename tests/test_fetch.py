@@ -164,3 +164,46 @@ def test_credentials_not_forwarded_across_redirect(
             server.server_close()
     assert seen["authorization"] is None
     assert target.read_bytes() == b"redirected body"
+
+
+def _leftovers(raw_dir: Path) -> list[Path]:
+    return [p for p in raw_dir.iterdir() if p.suffix in {".part", ".unzip"}]
+
+
+def test_corrupt_zip_member_is_a_fetch_error(tmp_path: Path) -> None:
+    paths = dataset_paths(tmp_path, "small")
+
+    def opener(request: urllib.request.Request) -> io.BytesIO:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:  # stored, so the payload is plain bytes
+            zf.writestr(_file_name(request), "zipped payload that will be damaged")
+        data = bytearray(buffer.getvalue())
+        data[data.index(b"zipped") + 1] ^= 0xFF
+        return io.BytesIO(bytes(data))
+
+    with pytest.raises(FetchError, match="HI-Small_Trans.csv"):
+        run_fetch(paths, _creds(tmp_path), opener=opener)
+    assert not paths.raw_trans.exists()
+    assert _leftovers(paths.raw_dir) == []
+
+
+def test_connection_reset_mid_download_is_a_fetch_error(tmp_path: Path) -> None:
+    paths = dataset_paths(tmp_path, "small")
+
+    class Resetting:
+        def __enter__(self) -> "Resetting":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def read(self, size: int = -1) -> bytes:
+            raise ConnectionResetError("peer reset")
+
+    def opener(request: urllib.request.Request) -> Resetting:
+        return Resetting()
+
+    with pytest.raises(FetchError, match="ConnectionResetError"):
+        run_fetch(paths, _creds(tmp_path), opener=opener)
+    assert not paths.raw_trans.exists()
+    assert _leftovers(paths.raw_dir) == []

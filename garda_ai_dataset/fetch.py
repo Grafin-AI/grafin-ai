@@ -5,6 +5,7 @@ They are never logged, written, or included in error messages.
 """
 
 import base64
+import http.client
 import json
 import shutil
 import urllib.error
@@ -90,28 +91,32 @@ def _download(target: Path, authorization: str, opener: Opener) -> None:
         url, headers={"Authorization": authorization, "User-Agent": "garda-ai-dataset"}
     )
     part = target.with_name(target.name + ".part")
+    unzipped = target.with_name(target.name + ".unzip")
     try:
         with opener(request) as response, part.open("wb") as fh:
             shutil.copyfileobj(response, fh, 1 << 20)
+        with part.open("rb") as fh:
+            is_zip = fh.read(4) == ZIP_MAGIC
+        if not is_zip:
+            part.replace(target)
+            return
+        with zipfile.ZipFile(part) as archive:
+            member = next((n for n in archive.namelist() if Path(n).name == target.name), None)
+            if member is None:
+                raise FetchError(f"the zip Kaggle returned has no {target.name}")
+            with archive.open(member) as src, unzipped.open("wb") as dst:
+                shutil.copyfileobj(src, dst, 1 << 20)
+        unzipped.replace(target)
+        part.unlink()
     except urllib.error.HTTPError as exc:
-        part.unlink(missing_ok=True)
         raise FetchError(f"Kaggle returned HTTP {exc.code} for {target.name}") from None
     except urllib.error.URLError as exc:
-        part.unlink(missing_ok=True)
         raise FetchError(f"could not reach Kaggle for {target.name}: {exc.reason}") from None
-    with part.open("rb") as fh:
-        is_zip = fh.read(4) == ZIP_MAGIC
-    if not is_zip:
-        part.replace(target)
-        return
-    with zipfile.ZipFile(part) as archive:
-        member = next((n for n in archive.namelist() if Path(n).name == target.name), None)
-        if member is None:
-            part.unlink()
-            raise FetchError(f"the zip Kaggle returned has no {target.name}")
-        with archive.open(member) as src, target.open("wb") as dst:
-            shutil.copyfileobj(src, dst, 1 << 20)
-    part.unlink()
+    except (OSError, http.client.HTTPException, zipfile.BadZipFile) as exc:
+        raise FetchError(f"download of {target.name} failed: {type(exc).__name__}") from None
+    finally:
+        part.unlink(missing_ok=True)
+        unzipped.unlink(missing_ok=True)
 
 
 def run_fetch(
