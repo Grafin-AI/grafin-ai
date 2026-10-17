@@ -9,8 +9,9 @@ import polars as pl
 import pytest
 
 from garda_training.cli import main
-from garda_training.train.export import GNN_TYPOLOGY, rescale
+from garda_training.train.export import rescale
 from garda_training.train.score import Thresholds, statuses
+from garda_training.train.typology import TYPOLOGIES
 
 PAPER = str(Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml")
 
@@ -66,9 +67,9 @@ def test_cli_export_scores_end_to_end(fixture_paths: tuple[Path, Path], tmp_path
         *("--device", "cpu", "--run-id", "e", "--no-mlflow", *common),
     ]
     assert main(train) == 0
-    assert main(["export-scores", "--run", "e", "--runs-dir", runs]) == 3  # not scored yet
+    assert main(["export-scores", "--run", "e", *common]) == 3  # not scored yet
     assert main(["score", "--run", "e", "--device", "cpu", *common]) == 0
-    assert main(["export-scores", "--run", "e", "--runs-dir", runs]) == 0
+    assert main(["export-scores", "--run", "e", *common]) == 0
 
     out = tmp_path / "runs" / "e" / "scores"
     parquet = pl.read_parquet(out / "scores.parquet").sort("transaction_id")
@@ -85,7 +86,7 @@ def test_cli_export_scores_end_to_end(fixture_paths: tuple[Path, Path], tmp_path
     assert [r[3] for r in rows] == parquet["status"].to_list()
     for r in rows:
         assert 0.0 <= float(r[1]) <= 1.0
-        assert r[4] == ("" if r[3] == "approved" else GNN_TYPOLOGY)
+        assert (r[4] == "") if r[3] == "approved" else (r[4] in TYPOLOGIES)
     probs = np.array([float(r[2]) for r in rows])
     assert np.allclose(probs, parquet["prob"].to_numpy(), atol=1e-6)
 
@@ -96,8 +97,9 @@ def test_cli_export_scores_end_to_end(fixture_paths: tuple[Path, Path], tmp_path
     assert meta["dataset_sha256"] == config["data"]["sha256"]
     assert meta["thresholds"]["selected_on"] == "val"
     assert [b["fraud_score"] for b in meta["rescale_breakpoints"]] == [0.0, 0.4, 0.7, 1.0]
+    assert sum(meta["typology_counts"].values()) == sum(1 for r in rows if r[3] != "approved")
 
-    assert main(["export-scores", "--run", "e", "--runs-dir", runs, "--splits", "test"]) == 0
+    assert main(["export-scores", "--run", "e", *common, "--splits", "test"]) == 0
     with (out / "scores.csv").open(newline="") as fh:
         n_test = sum(1 for _ in fh) - 1
     assert n_test == data["counts"]["test"] == parquet.filter(pl.col("split") == "test").height

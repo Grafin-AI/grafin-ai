@@ -79,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex = sub.add_parser("export-scores", help="write scores/scores.csv for the scoring service")
     ex.add_argument("--run", required=True, metavar="RUN_ID")
     ex.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    ex.add_argument("--cache-dir", type=Path, default=Path("cache"))
     ex.add_argument("--splits", nargs="+", choices=SPLITS, default=["test", "val"])
     ex.set_defaults(func=cmd_export_scores)
 
@@ -230,7 +231,13 @@ def cmd_score(args: argparse.Namespace) -> int:
 def cmd_export_scores(args: argparse.Namespace) -> int:
     if not (args.runs_dir / args.run / "config.json").is_file():
         raise ConfigError(f"no run at {args.runs_dir / args.run}")
-    meta = export_scores(RunDir.open(args.runs_dir, args.run), list(args.splits))
+    run = RunDir.open(args.runs_dir, args.run)
+    saved = run.read_json("config.json")
+    data_path, source = Path(saved["data"]["path"]), as_source(saved["data"]["source"])
+    prepared = prepare_dataset(data_path, source, args.cache_dir)
+    if prepared.meta["sha256"] != saved["data"]["sha256"]:
+        raise DatasetError("dataset changed since the run was trained; refusing to export")
+    meta = export_scores(run, list(args.splits), prepared)
     log.info("export-scores: %d rows (%s)", meta["n_rows"], ", ".join(meta["splits"]))
     print(args.runs_dir / args.run / "scores" / "scores.csv")
     return 0

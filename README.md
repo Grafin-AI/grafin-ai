@@ -53,8 +53,13 @@ splits only (default both), sorted by `transaction_id`. `prob` is the raw probab
 `fraud_score` rescales it piecewise-linearly so the dashboard bands match the thresholds
 (`[0, flagged)` → `[0, 0.4)`, `[flagged, blocked)` → `[0.4, 0.7)`, `[blocked, 1]` → `[0.7, 1]`).
 Statuses are unchanged (checked against `thresholds.json`, exit 4 on mismatch); `typology` is
-empty for approved rows and `Anomali Jaringan (GNN)` otherwise. `scores/export_meta.json`
-records the run, splits, row count, thresholds, breakpoints and dataset sha256.
+empty for approved rows; for flagged/blocked rows it names the network pattern around the
+transaction from the graph alone (never the labels), causally over the preceding 24 h (cycles:
+72 h): Siklus Dana (Cycle), Penampung-Penyebar (Gather-Scatter), Pengumpulan Dana (Fan-in),
+Penyebaran Dana (Fan-out), Velositas Tinggi, else `Anomali Jaringan (GNN)` — rules in
+`garda_training/train/typology.py`, thresholds shared with the backend's risk factors.
+It needs the prepared dataset (`--cache-dir`, built on first use). `scores/export_meta.json`
+records the run, splits, row count, thresholds, breakpoints, typology counts and dataset sha256.
 
 Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versions, device),
 `data.json` (split days, counts, normalization stats), `metrics.json`, `log.txt` and

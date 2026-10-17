@@ -1,6 +1,9 @@
 """Export a run's scores as the CSV the platform's scoring service reads (stdlib csv, no
 pyarrow): `transaction_id,fraud_score,prob,status,typology`.
 
+`typology` is empty for approved rows; for flagged/blocked rows it names the network pattern
+around the transaction (train/typology.py: graph structure only, never the labels).
+
 `fraud_score` is a monotone piecewise-linear rescale of `prob` that puts the model's thresholds
 on the dashboard's fixed colour bands: [0, flagged) -> [0, 0.4), [flagged, blocked) ->
 [0.4, 0.7), [blocked, 1] -> [0.7, 1]. Bands follow the statuses, so colour and status agree."""
@@ -13,13 +16,14 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
+from garda_training.data.prepare import PreparedData
 from garda_training.errors import ConfigError, ExportCheckError
 from garda_training.tracking import RunDir
 from garda_training.train.score import APPROVED, BLOCKED, FLAGGED, Thresholds, statuses
+from garda_training.train.typology import TYPOLOGIES, typologies
 
 SPLITS = ("val", "test")
 CSV_COLUMNS = ["transaction_id", "fraud_score", "prob", "status", "typology"]
-GNN_TYPOLOGY = "Anomali Jaringan (GNN)"  # placeholder for flagged/blocked rows
 FLAG_SCORE, BLOCK_SCORE = 0.4, 0.7
 # Rounded scores stay inside their band (e.g. 0.69999 must not print as 0.7000).
 _BAND_MAX = {APPROVED: 0.3999, FLAGGED: 0.6999, BLOCKED: 1.0}
@@ -63,7 +67,20 @@ def breakpoints(th: Thresholds) -> list[dict[str, float]]:
     ]
 
 
-def export_scores(run: RunDir, splits: list[str]) -> dict[str, Any]:
+def row_typologies(
+    prepared: PreparedData, transaction_id: npt.NDArray[np.int64], status: npt.NDArray[np.str_]
+) -> npt.NDArray[np.str_]:
+    """Typology per row ("" when approved); transaction_id is the 1-based input-file row."""
+    edge_of_row = np.empty(prepared.row.shape[0], dtype=np.int64)
+    edge_of_row[prepared.row] = np.arange(prepared.row.shape[0], dtype=np.int64)
+    out = np.full(transaction_id.shape[0], "", dtype=object)
+    hit = np.flatnonzero(status != APPROVED)
+    edges = edge_of_row[transaction_id[hit] - 1]
+    out[hit] = typologies(prepared.src, prepared.dst, prepared.ts, edges)
+    return out.astype(np.str_)
+
+
+def export_scores(run: RunDir, splits: list[str], prepared: PreparedData) -> dict[str, Any]:
     """Write scores/scores.csv and scores/export_meta.json; returns the meta."""
     bad = sorted(set(splits) - set(SPLITS))
     if bad or not splits:
@@ -87,13 +104,14 @@ def export_scores(run: RunDir, splits: list[str]) -> dict[str, Any]:
         n = int((derived != status).sum())
         raise ExportCheckError(f"{n} statuses differ from thresholds.json; re-run score")
     score = rescale(prob, th)
+    typology = row_typologies(prepared, frame["transaction_id"].to_numpy(), status)
     csv = pl.DataFrame(
         {
             "transaction_id": frame["transaction_id"],
             "fraud_score": np.char.mod("%.4f", score),
             "prob": np.char.mod("%.6f", prob.astype(np.float64)),
             "status": status,
-            "typology": np.where(status == APPROVED, "", GNN_TYPOLOGY),
+            "typology": typology,
         }
     )
     tmp = out / ".scores.csv.tmp"
@@ -107,6 +125,7 @@ def export_scores(run: RunDir, splits: list[str]) -> dict[str, Any]:
         "status_counts": {s: int((status == s).sum()) for s in (APPROVED, FLAGGED, BLOCKED)},
         "thresholds": raw,
         "rescale_breakpoints": breakpoints(th),
+        "typology_counts": {t: int((typology == t).sum()) for t in TYPOLOGIES},
         "dataset_sha256": run.read_json("config.json")["data"]["sha256"],
         "columns": CSV_COLUMNS,
     }
