@@ -30,7 +30,7 @@ Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda
 ## Commands
 
 ```bash
-garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>/)
+garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>-v2/)
 garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
 garda-train gnn --resume RUN_ID                          # continue an interrupted run
 garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
