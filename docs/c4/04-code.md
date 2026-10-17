@@ -69,12 +69,13 @@
 | `GeoResponse` | `provinces: ProvinceFraud[]` | `/geo/provinces` |
 | `LiveItem` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time` | REST `/transactions/live` |
 | `LiveResponse` | `items: LiveItem[]` | `/transactions/live` |
-| `TransactionDetail` | `id`, `bank`, `amount`, `currency`, `type`, `fraud_score`, `typology`, `status`, `is_laundering`, `event_time` | `/transactions/:id` |
+| `TransactionDetail` | `id`, `bank`, `amount`, `currency`, `type`, `fraud_score`, `typology`, `status`, `event_time`, `from_bank`/`to_bank`, `from_bank_name`/`to_bank_name`, `from_account`/`to_account`, `from_entity_id`/`to_entity_id`, `from_entity_name`/`to_entity_name` | `/transactions/:id` |
+| `TransactionExplanation` | `transaction_id`, `source` (`llm`\|`rules`), `model`, `pattern_matching`, `behavior_analysis`, `network_analysis`, `recommendation`, `risk_factors: RiskFactor[]` (`code`, `label`, `detail`), `evidence`, `generated_at` | `/transactions/:id/explanation` |
 | `RiskProfile` | `entity_id`, `name`, `province`, `risk_level`, `risk_score`, `total_transactions`, `flagged_transactions`, `total_amount` | `/users/:id/profile` |
 | `UserRiskResponse` | `profiles: RiskProfile[]` | `/users/risk` |
 | `AlertItem` | `id`, `event_seq`, `severity`, `typology`, `created_at`, `acknowledged` | — |
 | `AlertsResponse` | `alerts: AlertItem[]` | `/alerts` |
-| `SystemHealth` | `db_ok`, `redis_ok`, `events_surfaced`, `model_accuracy_simulated` | `/system/health` |
+| `SystemHealth` | `db_ok`, `redis_ok`, `events_surfaced`, `model_accuracy_simulated`, `model_name?` | `/system/health` |
 | `LiveEvent` | `seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time` | WebSocket `/api/v1/ws/live` |
 
 **Note**: `LiveEvent` (WebSocket push) has nullable `bank`, `type`, `amount` fields (worker may omit them) whereas `LiveItem` (REST response) has non-nullable equivalents — `useLiveTransactions` maps between the two.
