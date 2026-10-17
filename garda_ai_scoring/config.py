@@ -1,4 +1,6 @@
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,7 +12,9 @@ class Settings(BaseSettings):
     # Required — the app must never expose /v1/score without a token (fail fast at startup).
     scoring_token: str = Field(min_length=1)
 
-    scorer: str = "label_replay"
+    scorer: Literal["label_replay", "precomputed", "ml"] = "label_replay"
+    # precomputed: scores.csv from `garda-train export-scores` (env GARDA_SCORES_PATH)
+    scores_path: Path | None = None
     seed: str = "garda"
     fn_rate: float = 0.05
     fp_rate: float = 0.04
