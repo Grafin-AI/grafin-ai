@@ -34,6 +34,7 @@ garda-train prepare --data FILE --source raw|id          # verify + cache (cache
 garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
 garda-train gnn --resume RUN_ID                          # continue an interrupted run
 garda-train score --run RUN_ID [--device cuda] [--batch-size N] [--flag-recall 0.9]
+garda-train export-scores --run RUN_ID [--splits test val]  # scores.csv for garda-ai-scoring
 garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
 ```
 
@@ -44,6 +45,15 @@ are chosen on validation days only: `blocked` maximizes F1, and `flagged` is the
 threshold with recall >= `--flag-recall`. Output goes to `runs/<run-id>/scores/`:
 `scores.parquet` (`transaction_id` = 1-based CSV row, `day`, `split`, `ts`, `prob`,
 `status` approved|flagged|blocked, `is_laundering`), `thresholds.json` and `score_metrics.json`.
+
+`export-scores` turns that into `scores/scores.csv` for the platform's precomputed scorer
+(`GARDA_SCORER=precomputed`): header `transaction_id,fraud_score,prob,status,typology`, chosen
+splits only (default both), sorted by `transaction_id`. `prob` is the raw probability;
+`fraud_score` rescales it piecewise-linearly so the dashboard bands match the thresholds
+(`[0, flagged)` → `[0, 0.4)`, `[flagged, blocked)` → `[0.4, 0.7)`, `[blocked, 1]` → `[0.7, 1]`).
+Statuses are unchanged (checked against `thresholds.json`, exit 4 on mismatch); `typology` is
+empty for approved rows and `Anomali Jaringan (GNN)` otherwise. `scores/export_meta.json`
+records the run, splits, row count, thresholds, breakpoints and dataset sha256.
 
 Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versions, device),
 `data.json` (split days, counts, normalization stats), `metrics.json`, `log.txt` and

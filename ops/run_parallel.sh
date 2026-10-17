@@ -5,6 +5,7 @@
 #   usage: ops/run_parallel.sh ops/jobs/wave1_parity.jobs
 source "$(dirname "$0")/_env.sh"
 JOBS_FILE="${1:?usage: $0 JOBS_FILE}"
+umask 077  # runs/, logs/, cache/ owner-only
 EXTRA="${GARDA_EXTRA:-cu124}"
 N_GPUS="${N_GPUS:-$(nvidia-smi -L | wc -l)}"
 JOBS=()
