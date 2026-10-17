@@ -1,4 +1,4 @@
-"""`garda-train` command line: prepare | gnn | score | compare."""
+"""`garda-train` command line: prepare | gnn | score | export-scores | compare."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from garda_training.tracking import (
     environment_info,
     make_run_id,
 )
+from garda_training.train.export import SPLITS, export_scores
 from garda_training.train.gnn import load_checkpoint, set_seed, train_gnn
 from garda_training.train.paper import paper_arrays, paper_inputs, split_graphs
 from garda_training.train.score import causal_day_scores, restore_model, score_outputs
@@ -70,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--batch-size", type=int, help="default: the run's training batch size")
     sc.add_argument("--flag-recall", type=float, default=0.9, help="recall target for 'flagged'")
     sc.set_defaults(func=cmd_score)
+
+    ex = sub.add_parser("export-scores", help="write scores/scores.csv for the scoring service")
+    ex.add_argument("--run", required=True, metavar="RUN_ID")
+    ex.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    ex.add_argument("--splits", nargs="+", choices=SPLITS, default=["test", "val"])
+    ex.set_defaults(func=cmd_export_scores)
 
     cmp = sub.add_parser("compare", help="markdown table of finished runs")
     cmp.add_argument("--runs-dir", type=Path, default=Path("runs"))
@@ -208,6 +215,15 @@ def cmd_score(args: argparse.Namespace) -> int:
         metrics["test"]["f1"],
     )
     print(out)
+    return 0
+
+
+def cmd_export_scores(args: argparse.Namespace) -> int:
+    if not (args.runs_dir / args.run / "config.json").is_file():
+        raise ConfigError(f"no run at {args.runs_dir / args.run}")
+    meta = export_scores(RunDir.open(args.runs_dir, args.run), list(args.splits))
+    log.info("export-scores: %d rows (%s)", meta["n_rows"], ", ".join(meta["splits"]))
+    print(args.runs_dir / args.run / "scores" / "scores.csv")
     return 0
 
 
