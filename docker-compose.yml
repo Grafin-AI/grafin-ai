@@ -29,6 +29,12 @@ services:
     build: { context: ../garda-ai-scoring }
     environment:
       GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      # label_replay (default) | precomputed (model scores from garda-train export-scores)
+      GARDA_SCORER: ${GARDA_SCORER:-label_replay}
+      GARDA_SCORES_PATH: /scores/scores.csv
+    volumes:
+      # Only read when GARDA_SCORER=precomputed; a missing host dir is created empty.
+      - ${GARDA_SCORES_HOST_DIR:-../garda-ai-training/runs/current/scores}:/scores:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
       interval: 5s
@@ -46,6 +52,14 @@ services:
       GARDA_SCORING_URL: http://scoring:8000
       GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
       GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      # LLM explanations: none | anthropic | gemini | ollama
+      GARDA_LLM_PROVIDER: ${GARDA_LLM_PROVIDER:-none}
+      GARDA_LLM_API_KEY: ${GARDA_LLM_API_KEY:-}
+      GARDA_LLM_MODEL: ${GARDA_LLM_MODEL:-}
+      GARDA_LLM_BASE_URL: ${GARDA_LLM_BASE_URL:-}
+      GARDA_LLM_TIMEOUT_S: ${GARDA_LLM_TIMEOUT_S:-20}
+      # Model card: set when real model scores are served (empty = "Simulated (Phase 1)")
+      GARDA_MODEL_NAME: ${GARDA_MODEL_NAME:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -65,7 +79,7 @@ services:
       GARDA_DATABASE_URL: *db_url
       GARDA_DATA_DIR: /data
     volumes:
-      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small-ID}:/data:ro
     depends_on:
       backend: { condition: service_healthy }   # backend entrypoint ran alembic upgrade -> schema exists
     restart: "no"
@@ -93,7 +107,7 @@ services:
       GARDA_SPEED: ${GARDA_SPEED:-60}
       GARDA_MAX_GAP_S: ${GARDA_MAX_GAP_S:-2.0}
     volumes:
-      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small-ID}:/data:ro
     depends_on:
       backend: { condition: service_healthy }
       scoring: { condition: service_started }
