@@ -42,16 +42,25 @@ def set_seed(seed: int) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def build_model(sample_batch: Data | HeteroData, cfg: GnnConfig) -> torch.nn.Module:
-    """Upstream training.get_model for PNA: degree histogram from the first training batch."""
-    hetero = isinstance(sample_batch, HeteroData)
-    n_feats = (sample_batch["node"].x if hetero else sample_batch.x).shape[1]
-    e_dim = (sample_batch[EDGE].edge_attr if hetero else sample_batch.edge_attr).shape[1]
-    if hetero:
+def degree_histogram(sample_batch: Data | HeteroData) -> torch.Tensor:
+    """Upstream training.get_model: in-degree histogram of the first training batch (PNA `deg`;
+    not part of the state_dict, so checkpoints store it under "deg")."""
+    if isinstance(sample_batch, HeteroData):
         index = torch.cat((sample_batch[EDGE].edge_index[1], sample_batch[REV].edge_index[1]), 0)
     else:
         index = sample_batch.edge_index[1]
-    deg = torch.bincount(degree(index, dtype=torch.long), minlength=1)
+    return torch.bincount(degree(index, dtype=torch.long), minlength=1)
+
+
+def build_model(
+    sample_batch: Data | HeteroData, cfg: GnnConfig, deg: torch.Tensor | None = None
+) -> torch.nn.Module:
+    """Upstream training.get_model for PNA. `deg` defaults to the sample batch's histogram."""
+    hetero = isinstance(sample_batch, HeteroData)
+    n_feats = (sample_batch["node"].x if hetero else sample_batch.x).shape[1]
+    e_dim = (sample_batch[EDGE].edge_attr if hetero else sample_batch.edge_attr).shape[1]
+    if deg is None:
+        deg = degree_histogram(sample_batch)
     model: torch.nn.Module = PNA(
         num_features=n_feats,
         num_gnn_layers=cfg.model.n_gnn_layers,
@@ -222,7 +231,9 @@ def train_gnn(
         shuffle=True,
         ego=cfg.flags.ego,
     )
-    model = build_model(next(iter(tr_loader)), cfg).to(device)
+    sample = next(iter(tr_loader))
+    deg = degree_histogram(sample)
+    model = build_model(sample, cfg, deg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train.lr)
     use_amp = cfg.train.amp and device.type == "cuda"
     scaler = GradScaler("cuda", enabled=use_amp)
@@ -313,12 +324,14 @@ def train_gnn(
         if improved:
             state.best_epoch, state.best_val_f1 = epoch, val.f1
             save_checkpoint(
-                best_path, {"model": model.state_dict(), "epoch": epoch, "val_f1": val.f1}
+                best_path,
+                {"model": model.state_dict(), "epoch": epoch, "val_f1": val.f1, "deg": deg},
             )
         save_checkpoint(
             last_path,
             {
                 "model": model.state_dict(),
+                "deg": deg,
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(),
                 "epoch": epoch,
