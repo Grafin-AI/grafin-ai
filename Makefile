@@ -9,6 +9,10 @@ SMOKE_DIR ?= .smoke
 .PHONY: install lint typecheck test check smoke smoke-small compare clean-smoke
 
 install:
+# Apple silicon: this Mac also has an x86_64 (Rosetta) Python 3.11, which uv would otherwise pick.
+ifeq ($(shell uname -s)-$(shell uname -m),Darwin-arm64)
+	@test -x .venv/bin/python || uv venv --python cpython-3.11-macos-aarch64-none
+endif
 	uv sync $(SYNC_FLAGS)
 
 lint:
