@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_JWT_SECRET = "change-me-in-prod"
@@ -27,6 +28,13 @@ class Settings(BaseSettings):
     # Name of the trained model behind the scoring service (e.g. "GraphSAGE-GNN v1").
     # Empty = Phase 1 label-replay, so accuracy figures are simulated.
     model_name: str = ""
+
+    # --- Transaction explanations (LLM narrative; "none" = deterministic rules only) ---
+    llm_provider: Literal["none", "anthropic", "gemini", "ollama"] = "none"
+    llm_api_key: SecretStr = SecretStr("")
+    llm_model: str = ""  # empty = provider default (see services/explain/llm.py)
+    llm_base_url: str = ""  # empty = provider default
+    llm_timeout_s: float = 20.0
 
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_dev(self) -> "Settings":
