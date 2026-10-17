@@ -30,11 +30,20 @@ Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda
 ## Commands
 
 ```bash
-garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>/)
+garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>-v2/)
 garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
 garda-train gnn --resume RUN_ID                          # continue an interrupted run
+garda-train score --run RUN_ID [--device cuda] [--batch-size N] [--flag-recall 0.9]
 garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
 ```
+
+`score` scores every validation and test transaction with the run's `best.pt`, causally: day *d*
+is scored on the graph of all edges up to and including day *d*, and every transaction gets
+exactly one score. Seed edges the sampler left out are added back into their batch. Thresholds
+are chosen on validation days only: `blocked` maximizes F1, and `flagged` is the largest
+threshold with recall >= `--flag-recall`. Output goes to `runs/<run-id>/scores/`:
+`scores.parquet` (`transaction_id` = 1-based CSV row, `day`, `split`, `ts`, `prob`,
+`status` approved|flagged|blocked, `is_laundering`), `thresholds.json` and `score_metrics.json`.
 
 Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versions, device),
 `data.json` (split days, counts, normalization stats), `metrics.json`, `log.txt` and

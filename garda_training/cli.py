@@ -1,4 +1,4 @@
-"""`garda-train` command line: prepare | gnn | compare."""
+"""`garda-train` command line: prepare | gnn | score | compare."""
 
 from __future__ import annotations
 
@@ -22,8 +22,9 @@ from garda_training.tracking import (
     environment_info,
     make_run_id,
 )
-from garda_training.train.gnn import set_seed, train_gnn
-from garda_training.train.paper import paper_inputs
+from garda_training.train.gnn import load_checkpoint, set_seed, train_gnn
+from garda_training.train.paper import paper_arrays, paper_inputs, split_graphs
+from garda_training.train.score import causal_day_scores, restore_model, score_outputs
 
 log = logging.getLogger("garda_training")
 
@@ -60,6 +61,15 @@ def build_parser() -> argparse.ArgumentParser:
     gnn.add_argument("--mlflow-uri", default=DEFAULT_MLFLOW_URI)
     gnn.add_argument("--no-mlflow", action="store_true")
     gnn.set_defaults(func=cmd_gnn)
+
+    sc = sub.add_parser("score", help="causal per-day scores of a run's val + test days")
+    sc.add_argument("--run", required=True, metavar="RUN_ID")
+    sc.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    sc.add_argument("--cache-dir", type=Path, default=Path("cache"))
+    sc.add_argument("--device", choices=DEVICE_CHOICES, default="auto")
+    sc.add_argument("--batch-size", type=int, help="default: the run's training batch size")
+    sc.add_argument("--flag-recall", type=float, default=0.9, help="recall target for 'flagged'")
+    sc.set_defaults(func=cmd_score)
 
     cmp = sub.add_parser("compare", help="markdown table of finished runs")
     cmp.add_argument("--runs-dir", type=Path, default=Path("runs"))
@@ -144,6 +154,60 @@ def cmd_gnn(args: argparse.Namespace) -> int:
     )
     tracker.finish("FINISHED")
     print(run.path)
+    return 0
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    device = resolve_device(args.device)
+    if args.batch_size is not None and args.batch_size < 1:
+        raise ConfigError("--batch-size must be >= 1")
+    if not (args.runs_dir / args.run / "config.json").is_file():
+        raise ConfigError(f"no run at {args.runs_dir / args.run}")
+    run = RunDir.open(args.runs_dir, args.run)
+    best_path = run.checkpoints / "best.pt"
+    if not best_path.is_file():
+        raise ConfigError(f"no best checkpoint at {best_path}")
+    saved = run.read_json("config.json")
+    cfg = parse_gnn_config(saved["gnn"])
+    data_path, source = Path(saved["data"]["path"]), as_source(saved["data"]["source"])
+    prepared = prepare_dataset(data_path, source, args.cache_dir)
+    if prepared.meta["sha256"] != saved["data"]["sha256"]:
+        raise DatasetError("dataset changed since the run was trained; refusing to score")
+    arrays = paper_arrays(prepared, cfg)
+    train_graph = split_graphs(prepared, arrays, cfg)["train"]
+    best = load_checkpoint(best_path)
+    model = restore_model(train_graph, cfg, saved["seed"], best).to(device)
+    del train_graph
+    days = [*arrays.split.val_days, *arrays.split.test_days]
+    day_scores = causal_day_scores(
+        model,
+        prepared,
+        arrays,
+        cfg,
+        days,
+        batch_size=args.batch_size or cfg.train.batch_size,
+        device=device,
+        seed=saved["seed"],
+    )
+    frame, thresholds, metrics = score_outputs(prepared, arrays, day_scores, args.flag_recall)
+    out = run.path / "scores"
+    out.mkdir(exist_ok=True)
+    tmp = out / ".scores.parquet.tmp"
+    frame.write_parquet(tmp)
+    tmp.replace(out / "scores.parquet")
+    scores_dir = RunDir(out)
+    metrics["checkpoint"] = {"epoch": best["epoch"], "val_f1": best["val_f1"]}
+    metrics["deg_source"] = "checkpoint" if "deg" in best else "seeded_sample"
+    scores_dir.write_json("thresholds.json", thresholds.to_dict())
+    scores_dir.write_json("score_metrics.json", metrics)
+    log.info(
+        "score: blocked >= %.4f flagged >= %.4f; val f1 %.4f, test f1 %.4f",
+        thresholds.blocked,
+        thresholds.flagged,
+        metrics["val"]["f1"],
+        metrics["test"]["f1"],
+    )
+    print(out)
     return 0
 
 
