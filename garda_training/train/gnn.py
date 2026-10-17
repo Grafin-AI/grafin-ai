@@ -43,8 +43,8 @@ def set_seed(seed: int) -> None:
 
 
 def degree_histogram(sample_batch: Data | HeteroData) -> torch.Tensor:
-    """Upstream training.get_model: in-degree histogram of the first training batch (PNA `deg`;
-    not part of the state_dict, so checkpoints store it under "deg")."""
+    """Upstream training.get_model: in-degree histogram of the first training batch (PNA `deg`).
+    Checkpoints store it under "deg"; PyG 2.6 also keeps the derived averages as buffers."""
     if isinstance(sample_batch, HeteroData):
         index = torch.cat((sample_batch[EDGE].edge_index[1], sample_batch[REV].edge_index[1]), 0)
     else:
