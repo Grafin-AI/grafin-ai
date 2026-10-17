@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   AlertsResponse, FraudAnalytics, GeoResponse, HeatmapResponse, LiveResponse,
-  MetricsOverview, RiskProfile, SystemHealth, TransactionDetail,
+  MetricsOverview, RiskProfile, SystemHealth, TransactionDetail, TransactionExplanation,
   UserRiskResponse, VolumeResponse,
 } from './types';
 
@@ -54,6 +54,16 @@ export const useTransactionDetail = (id: number | null) =>
     queryKey: ['transaction', id],
     queryFn: () => get<TransactionDetail>(`/transactions/${id}`),
     enabled: id != null,
+  });
+
+// The explanation is generated once per transaction (LLM or rules) and does not
+// change, so no polling and a long staleTime.
+export const useTransactionExplanation = (id: number | null, enabled = true) =>
+  useQuery({
+    queryKey: ['transaction', id, 'explanation'],
+    queryFn: () => get<TransactionExplanation>(`/transactions/${id}/explanation`),
+    enabled: enabled && id != null,
+    staleTime: 30 * 60 * 1000,
   });
 
 export const useLiveRecent = (limit = 50) =>

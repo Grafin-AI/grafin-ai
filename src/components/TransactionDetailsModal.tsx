@@ -19,7 +19,8 @@ import {
   Flag,
   ArrowRight
 } from 'lucide-react';
-import { useTransactionDetail } from '../api/queries';
+import { useTransactionDetail, useTransactionExplanation } from '../api/queries';
+import type { TransactionDetail } from '../api/types';
 
 interface TransactionDetailsModalProps {
   transactionId: number | null;
@@ -28,63 +29,63 @@ interface TransactionDetailsModalProps {
   onOpenUserProfile?: (entityId: string) => void;
 }
 
-// Typology-keyed analysis text (bilingual narrative — these are explanatory templates, not fabricated data)
-const typologyAnalysis: Record<string, {
-  patternMatching: string;
-  behaviorAnalysis: string;
-  networkAnalysis: string;
-  recommendation: string;
-}> = {
-  'Bridge CEX Withdrawal': {
-    patternMatching: 'Terdeteksi pola pig-butchering: fan-in dari 18 dompet/e-wallet berbeda ke akun sumber dalam 72 jam, diikuti instruksi transfer bernilai besar pertama kali ke penerima baru.',
-    behaviorAnalysis: 'Jarak (shortest-path) ke klaster watchlist = 2 hop melalui dompet 0x93aa..ee12; rasio transaksi tengah malam 31% (naik signifikan dari baseline <5%); perangkat dan IP yang sama terhubung ke 3 akun lain berstatus REVIEW/BLOCK.',
-    networkAnalysis: 'Analisis jaringan menunjukkan koneksi dengan akun-akun yang terkait dengan aktivitas cryptocurrency exchange withdrawal yang mencurigakan. Terdapat indikasi money laundering melalui multiple small deposits.',
-    recommendation: 'BLOKIR transaksi, bekukan sementara saldo terkait, dan lakukan verifikasi identitas serta kronologi komunikasi korban; kirim STR ke PPATK'
-  },
-  'Smurfing': {
-    patternMatching: 'Terdeteksi pola smurfing: 12 transaksi berturut-turut dengan nilai di bawah threshold pelaporan (Rp 20 juta) dalam 6 jam terakhir.',
-    behaviorAnalysis: 'Perilaku transaksi tidak konsisten dengan profil nasabah - frekuensi transaksi meningkat 800% dari rata-rata bulanan. Waktu transaksi menunjukkan pola robotik setiap 30 menit.',
-    networkAnalysis: 'Jejak digital menunjukkan koordinasi dengan 8 akun lain yang melakukan transaksi serupa dalam rentang waktu yang sama. Shared device fingerprint dengan akun terdaftar di watchlist AML.',
-    recommendation: 'TUNDA semua transaksi terkait akun ini, lakukan enhanced due diligence, dan koordinasi dengan unit AML untuk investigasi lebih lanjut'
-  },
-  'Mule Account': {
-    patternMatching: 'Pola mule account teridentifikasi: menerima dana dari 15+ akun berbeda dalam 24 jam, kemudian segera mentransfer 95% dana ke 3 akun tujuan utama.',
-    behaviorAnalysis: 'Akun menunjukkan aktivitas yang tidak wajar - tidak ada riwayat transaksi signifikan sebelum periode ini. Geographic mismatch antara lokasi registrasi dan aktivitas transaksi.',
-    networkAnalysis: 'Terkoneksi dengan jaringan akun yang dikenal sebagai money mule. Pattern matching dengan kasus sebelumnya menunjukkan kesamaan 87% dengan skema money laundering yang telah teridentifikasi.',
-    recommendation: 'BLOKIR segera dan freeze semua dana terkait. Laporkan ke otoritas terkait dan lakukan investigasi mendalam terhadap pemilik akun'
-  },
-  'Card Testing': {
-    patternMatching: 'Aktivitas card testing terdeteksi: 45 percobaan transaksi kecil (Rp 1.000 - Rp 5.000) dalam 10 menit menggunakan variasi data kartu yang berbeda.',
-    behaviorAnalysis: 'Pattern menunjukkan automated testing untuk validasi nomor kartu kredit yang dicuri. Tingkat failure rate 78% konsisten dengan card testing attacks.',
-    networkAnalysis: 'IP address terkait dengan proxy networks dan VPN. Device fingerprinting menunjukkan penggunaan automated tools untuk rapid-fire transactions.',
-    recommendation: 'BLOKIR segera kartu terkait, implementasi CAPTCHA enhanced, dan blacklist IP ranges yang terlibat'
-  },
-  'Layering': {
-    patternMatching: 'Skema layering teridentifikasi: dana dipindahkan melalui 8 akun berbeda dalam rantai transaksi kompleks untuk mengaburkan jejak sumber dana.',
-    behaviorAnalysis: 'Analisis temporal menunjukkan koordinasi yang ketat antar akun - window transaksi rata-rata 3 menit antar hop. Volume total Rp 2.3 miliar dalam 5 hari.',
-    networkAnalysis: 'Graph analysis mengungkap struktur layering dengan 3 tingkat pemisahan dari sumber dana awal. Beberapa akun perantara menunjukkan aktivitas dormant yang mendadak aktif.',
-    recommendation: 'FREEZE semua akun dalam rantai transaksi, koordinasi dengan bank lain untuk block akun terkait, dan segera laporkan ke PPATK'
-  },
-  'Trade-Based Money Laundering': {
-    patternMatching: 'TBML scheme detected: over-invoicing senilai 340% dari harga pasar wajar untuk import elektronik, disertai transfer dana ke multiple offshore accounts.',
-    behaviorAnalysis: 'Discrepancy analysis menunjukkan markup tidak wajar pada transaksi trade finance. Frequency dan timing bertepatan dengan laporan customs yang mencurigakan.',
-    networkAnalysis: 'Connected dengan jaringan perusahaan shell companies di 3 jurisdiksi berbeda. Beneficial ownership analysis menunjukkan ultimate controller yang sama.',
-    recommendation: 'SUSPEND trade facility, lakukan enhanced due diligence pada semua trade documents, dan koordinasi dengan Bea Cukai serta otoritas internasional'
-  },
-  'Fan-Out': {
-    patternMatching: 'Pola fan-out terdeteksi: satu akun sumber melakukan distribusi ke banyak akun penerima dalam waktu singkat untuk mengaburkan asal dana.',
-    behaviorAnalysis: 'Distribusi dana dalam jumlah merata ke banyak akun penerima tidak konsisten dengan pola transaksi normal.',
-    networkAnalysis: 'Analisis jaringan menunjukkan pola distribusi yang terkoordinasi, kemungkinan otomatis.',
-    recommendation: 'REVIEW semua akun penerima dan lacak pergerakan dana selanjutnya; pertimbangkan pelaporan ke PPATK'
-  }
-};
+type Side = 'from' | 'to';
 
-const defaultAnalysis = {
-  patternMatching: 'Transaksi dalam batas normal. Tidak terdeteksi pola mencurigakan berdasarkan algoritma machine learning terkini.',
-  behaviorAnalysis: 'Perilaku transaksi konsisten dengan profil historis nasabah. Tidak ada indikasi aktivitas yang anomali.',
-  networkAnalysis: 'Analisis jaringan tidak menunjukkan koneksi dengan entitas yang masuk dalam watchlist atau daftar sanksi.',
-  recommendation: 'PROSES transaksi sesuai prosedur standar. Tidak diperlukan tindakan khusus.'
-};
+function PartyBlock({ txn, side, onOpenUserProfile }: {
+  txn: TransactionDetail;
+  side: Side;
+  onOpenUserProfile?: (entityId: string) => void;
+}) {
+  const isFrom = side === 'from';
+  const bankCode = isFrom ? txn.from_bank : txn.to_bank;
+  const bankName = isFrom ? txn.from_bank_name : txn.to_bank_name;
+  const account = isFrom ? txn.from_account : txn.to_account;
+  const entityId = isFrom ? txn.from_entity_id : txn.to_entity_id;
+  const entityName = isFrom ? txn.from_entity_name : txn.to_entity_name;
+  const label = isFrom ? 'Pengirim' : 'Penerima';
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <div className={`w-2 h-2 rounded-full ${isFrom ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+        <h4 className="font-medium text-gray-900">{label}</h4>
+      </div>
+      <div className={`grid grid-cols-2 gap-4 p-4 rounded-lg border ${
+        isFrom ? 'bg-blue-50/50 border-blue-100' : 'bg-purple-50/50 border-purple-100'
+      }`}>
+        <div>
+          <p className="text-sm text-gray-500 mb-1">Bank</p>
+          <div className="flex items-center gap-2">
+            <Building className="w-4 h-4 text-gray-400" />
+            <p className="font-medium">{bankName || bankCode || '—'}</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500 mb-1">Rekening</p>
+          <p className="font-medium font-mono">{account || '—'}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-sm text-gray-500 mb-1">Nama Entitas</p>
+          <p className="font-medium">{entityName || '—'}</p>
+        </div>
+        {onOpenUserProfile && (
+          <div className="col-span-2">
+            <p className="text-sm text-gray-500 mb-1">Entity ID</p>
+            <button
+              type="button"
+              aria-label={`Buka profil ${label.toLowerCase()}`}
+              disabled={!entityId}
+              onClick={() => entityId && onOpenUserProfile(entityId)}
+              className="font-medium font-mono text-[#139EF6] hover:text-[#0f7ec4] disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-2 group transition-colors text-sm"
+            >
+              {entityId ?? 'Tidak tersedia'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpenUserProfile }: TransactionDetailsModalProps) {
   const { data: txn, isLoading, isError } = useTransactionDetail(transactionId);
@@ -116,17 +117,11 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
     }).format(amount);
   };
 
-  const analysis = txn?.typology
-    ? (typologyAnalysis[txn.typology] ?? defaultAnalysis)
-    : defaultAnalysis;
-
-  const riskFactors = txn
-    ? txn.fraud_score > 0.7
-      ? ['High Fraud Score', txn.typology ?? 'Suspicious Pattern', txn.is_laundering ? 'Laundering Indicator' : 'Elevated Risk']
-      : txn.fraud_score > 0.4
-      ? ['Moderate Fraud Score', 'Review Recommended']
-      : ['Low Risk Profile']
-    : [];
+  const {
+    data: explanation,
+    isLoading: explanationLoading,
+    isError: explanationError,
+  } = useTransactionExplanation(transactionId, isOpen);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -203,12 +198,6 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                         <p className="font-medium">{new Date(txn.event_time).toLocaleString('id-ID')}</p>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Indikasi Pencucian</p>
-                      <p className={`font-medium ${txn.is_laundering ? 'text-red-600' : 'text-green-600'}`}>
-                        {txn.is_laundering ? 'Ya (Terdeteksi)' : 'Tidak'}
-                      </p>
-                    </div>
                   </CardContent>
                 </Card>
 
@@ -262,57 +251,37 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                     <div>
                       <p className="text-sm text-gray-500 mb-2">Faktor Risiko</p>
                       <div className="flex flex-wrap gap-2">
-                        {riskFactors.map((factor, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {factor}
-                          </Badge>
-                        ))}
+                        {explanationLoading ? (
+                          <Skeleton className="h-5 w-40" />
+                        ) : explanationError ? (
+                          <span className="text-xs text-gray-500">Faktor risiko tidak tersedia</span>
+                        ) : explanation && explanation.risk_factors.length > 0 ? (
+                          explanation.risk_factors.map((factor) => (
+                            <Badge key={factor.code} variant="secondary" className="text-xs" title={factor.detail}>
+                              {factor.label}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-500">Tidak ada faktor risiko menonjol</span>
+                        )}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Source Bank */}
+              {/* Sender / Receiver */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <ArrowRight className="w-5 h-5 text-[#139EF6]" />
-                    Detail Bank Transaksi
+                    Detail Pengirim &amp; Penerima
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div>
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <h4 className="font-medium text-gray-900">Bank Pengirim</h4>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-                        <div>
-                          <p className="text-sm text-gray-500 mb-1">Bank</p>
-                          <div className="flex items-center gap-2">
-                            <Building className="w-4 h-4 text-gray-400" />
-                            <p className="font-medium">{txn.bank}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500 mb-1">Jenis</p>
-                          <p className="font-medium">{txn.type}</p>
-                        </div>
-                        {onOpenUserProfile && (
-                          <div className="col-span-2">
-                            <p className="text-sm text-gray-500 mb-1">Entity ID</p>
-                            <button
-                              onClick={() => onOpenUserProfile(String(txn.id))}
-                              className="font-medium font-mono text-[#139EF6] hover:text-[#0f7ec4] flex items-center gap-2 group transition-colors text-sm"
-                            >
-                              TXN-{txn.id}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <PartyBlock txn={txn} side="from" onOpenUserProfile={onOpenUserProfile} />
+                    <PartyBlock txn={txn} side="to" onOpenUserProfile={onOpenUserProfile} />
                   </div>
                 </CardContent>
               </Card>
@@ -324,7 +293,26 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                     <TrendingUp className="w-5 h-5 text-blue-600" />
                     Analisis Fraud Detail
                   </CardTitle>
+                  {explanation && (
+                    <p className="text-xs text-gray-500">
+                      {explanation.source === 'llm'
+                        ? `Dihasilkan oleh ${explanation.model ?? 'LLM'}`
+                        : 'Ringkasan berbasis aturan'}
+                      {explanation.generated_at && ` · ${new Date(explanation.generated_at).toLocaleString('id-ID')}`}
+                    </p>
+                  )}
                 </CardHeader>
+                {explanationLoading ? (
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-gray-500">Menganalisis transaksi…</p>
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </CardContent>
+                ) : explanationError || !explanation ? (
+                  <CardContent>
+                    <p className="text-sm text-gray-500">Analisis belum tersedia untuk transaksi ini.</p>
+                  </CardContent>
+                ) : (
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
@@ -332,7 +320,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                       Pattern Matching
                     </h4>
                     <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {analysis.patternMatching}
+                      {explanation.pattern_matching}
                     </p>
                   </div>
 
@@ -342,7 +330,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                       Analisis Perilaku
                     </h4>
                     <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {analysis.behaviorAnalysis}
+                      {explanation.behavior_analysis}
                     </p>
                   </div>
 
@@ -352,7 +340,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                       Analisis Jaringan
                     </h4>
                     <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {analysis.networkAnalysis}
+                      {explanation.network_analysis}
                     </p>
                   </div>
 
@@ -369,11 +357,12 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
                         : 'bg-green-50 border-green-500'
                     }`}>
                       <p className="text-sm text-gray-700 font-medium leading-relaxed">
-                        {analysis.recommendation}
+                        {explanation.recommendation}
                       </p>
                     </div>
                   </div>
                 </CardContent>
+                )}
               </Card>
 
               {/* Action Buttons */}

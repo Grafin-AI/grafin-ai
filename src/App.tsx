@@ -12,7 +12,7 @@ import { UserRiskProfiling } from './components/UserRiskProfiling';
 import { useSystemHealth } from './api/queries';
 import { Skeleton } from './components/ui/skeleton';
 
-function SystemHealthCards() {
+export function SystemHealthCards() {
   const { data, isLoading } = useSystemHealth();
 
   if (isLoading) {
@@ -46,7 +46,9 @@ function SystemHealthCards() {
       <div className="p-4 bg-white rounded-lg border">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Model Accuracy</span>
-          {data?.model_accuracy_simulated ? (
+          {data?.model_name ? (
+            <span className="text-sm text-green-600">Model: {data.model_name}</span>
+          ) : data?.model_accuracy_simulated ? (
             <span className="text-sm text-yellow-600">Simulated (Phase 1)</span>
           ) : (
             <span className="text-sm text-gray-500">—</span>
@@ -54,12 +56,14 @@ function SystemHealthCards() {
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
           <div
-            className="bg-yellow-400 h-2 rounded-full"
-            style={{ width: data?.model_accuracy_simulated ? '60%' : '0%' }}
+            className={`h-2 rounded-full ${data?.model_name ? 'bg-green-500' : 'bg-yellow-400'}`}
+            style={{ width: data?.model_name ? '100%' : data?.model_accuracy_simulated ? '60%' : '0%' }}
           ></div>
         </div>
         <p className="text-xs text-gray-500 mt-1">
-          {data?.model_accuracy_simulated
+          {data?.model_name
+            ? 'Model scoring active'
+            : data?.model_accuracy_simulated
             ? 'Label-replay simulation active — accuracy not yet measured'
             : 'No model accuracy data'}
         </p>

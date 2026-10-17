@@ -57,8 +57,36 @@ export interface TransactionDetail {
   fraud_score: number;
   typology: string | null;
   status: Status;
-  is_laundering: boolean;
   event_time: string;
+  from_bank: string;
+  from_bank_name: string | null;
+  from_account: string;
+  from_entity_id: string | null;
+  from_entity_name: string | null;
+  to_bank: string;
+  to_bank_name: string | null;
+  to_account: string;
+  to_entity_id: string | null;
+  to_entity_name: string | null;
+}
+
+export interface RiskFactor {
+  code: string;
+  label: string;
+  detail: string;
+}
+
+export interface TransactionExplanation {
+  transaction_id: number;
+  source: 'llm' | 'rules';
+  model: string | null;
+  pattern_matching: string;
+  behavior_analysis: string;
+  network_analysis: string;
+  recommendation: string;
+  risk_factors: RiskFactor[];
+  evidence: Record<string, number | string | boolean | null>;
+  generated_at: string;
 }
 
 export interface RiskProfile {
@@ -89,6 +117,7 @@ export interface SystemHealth {
   redis_ok: boolean;
   events_surfaced: number;
   model_accuracy_simulated: boolean;
+  model_name?: string | null;
 }
 
 // WebSocket live event (worker → backend relay → client)
