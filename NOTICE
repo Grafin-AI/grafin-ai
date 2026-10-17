@@ -1,0 +1,15 @@
+garda-ai-training
+Copyright 2026 Meaningful Intelligence (Garda AI)
+
+This product includes software developed by IBM as part of Multi-GNN
+(https://github.com/IBM/Multi-GNN, commit 252b0252afca109d1d216c411c59ff70753b25fc),
+licensed under the Apache License, Version 2.0:
+
+- garda_training/models/multignn.py is a verbatim copy of upstream models.py.
+- tests/upstream_ref.py contains verbatim copies of upstream data_util.py functions and the
+  split block of data_loading.py, used only as a test oracle.
+- garda_training/graph/ and garda_training/train/gnn.py are adapted from upstream
+  data_util.py, train_util.py and training.py.
+
+Reference: Egressy et al., "Provably Powerful Graph Neural Networks for Directed Multigraphs",
+AAAI 2024 (arXiv:2306.11586).

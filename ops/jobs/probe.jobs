@@ -1,0 +1,2 @@
+# One short job to measure seconds/batch and GPU memory before committing to a wave.
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda --epochs 1 --max-batches 20 --run-id probe-small-id --no-mlflow
