@@ -23,6 +23,8 @@ epochs = 100                   # upstream --n_epochs default
 batch_size = 8192
 num_neighs = [100, 100]
 amp = false                    # CUDA only; off for parity
+patience = 0                   # early stopping, epochs without val improvement; 0 = off (paper)
+max_hours = 0.0                # wall-clock budget per run; 0 = off
 
 [split]
 fractions = [0.6, 0.2, 0.2]

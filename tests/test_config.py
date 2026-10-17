@@ -25,6 +25,7 @@ def test_paper_config_matches_upstream() -> None:
     assert cfg.train.lr == 0.0006116418195373612
     assert (cfg.train.w_ce1, cfg.train.w_ce2) == (1.0003967674742307, 7.077633468006714)
     assert (cfg.train.epochs, cfg.train.batch_size, cfg.train.num_neighs) == (100, 8192, (100, 100))
+    assert (cfg.train.patience, cfg.train.max_hours) == (0, 0.0)
     assert cfg.split.fractions == (0.6, 0.2, 0.2)
 
 

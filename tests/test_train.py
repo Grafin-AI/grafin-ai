@@ -100,3 +100,18 @@ def test_test_split_scored_only_when_validation_improves(
         best = max(best, record.val_f1)
     best_record = next(r for r in result.history if r.epoch == result.best_epoch)
     assert result.test_f1_at_best == best_record.test_f1
+
+
+def test_patience_and_time_budget_stop_early(
+    fixture_paths: tuple[Path, Path], tmp_path: Path
+) -> None:
+    graphs, _ = _setup(fixture_paths, tmp_path, epochs=1)
+    small = {"train.batch_size": 32, "train.num_neighs": [10, 10]}
+    patient = load_gnn_config(PAPER, {**small, "train.epochs": 50, "train.patience": 1})
+    result = _train(graphs, patient, RunDir.create(tmp_path / "runs", "patience"))
+    assert result.stop_reason == "patience" and len(result.history) < 50
+    assert result.history[-1].epoch - result.best_epoch == 1
+    budget = load_gnn_config(PAPER, {**small, "train.epochs": 50, "train.max_hours": 1e-9})
+    result = _train(graphs, budget, RunDir.create(tmp_path / "runs", "budget"))
+    assert result.stop_reason == "time_budget" and len(result.history) == 1
+    assert result.peak_host_rss_mb > 0

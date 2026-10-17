@@ -48,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     gnn.add_argument("--epochs", type=int)
     gnn.add_argument("--batch-size", type=int)
     gnn.add_argument("--num-neighs", type=int, nargs="+")
+    gnn.add_argument("--patience", type=int, help="early stopping (epochs); 0 = off")
+    gnn.add_argument("--max-hours", type=float, help="wall-clock budget for this run; 0 = off")
     gnn.add_argument("--max-batches", type=int, help="cap batches per loader (smoke tests)")
     gnn.add_argument("--runs-dir", type=Path, default=Path("runs"))
     gnn.add_argument("--cache-dir", type=Path, default=Path("cache"))
@@ -89,6 +91,10 @@ def cmd_gnn(args: argparse.Namespace) -> int:
             overrides["train.batch_size"] = args.batch_size
         if args.num_neighs is not None:
             overrides["train.num_neighs"] = list(args.num_neighs)
+        if args.patience is not None:
+            overrides["train.patience"] = args.patience
+        if args.max_hours is not None:
+            overrides["train.max_hours"] = args.max_hours
         cfg = load_gnn_config(args.config, overrides)
         seed, max_batches = args.seed, args.max_batches
         data_path, source = args.data, as_source(args.source)

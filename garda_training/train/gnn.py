@@ -6,6 +6,8 @@ from __future__ import annotations
 import logging
 import os
 import random
+import resource
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -149,6 +151,8 @@ class TrainResult:
     test_f1_at_best: float
     history: list[EpochRecord]
     peak_gpu_mem_mb: float | None
+    peak_host_rss_mb: float
+    stop_reason: str  # "epochs" | "patience" | "time_budget"
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
@@ -181,6 +185,11 @@ def _restore_rng(state: dict[str, Any]) -> None:
         torch.cuda.set_rng_state_all(state["cuda"])
     np.random.set_state(state["numpy"])
     random.setstate(state["python"])
+
+
+def peak_host_rss_mb() -> float:
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return rss / 2**20 if sys.platform == "darwin" else rss / 2**10  # bytes on macOS, KiB on Linux
 
 
 def save_checkpoint(path: Any, payload: dict[str, Any]) -> None:
@@ -239,6 +248,8 @@ def train_gnn(
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
+    started = time.perf_counter()
+    stop_reason = "epochs"
     for epoch in range(state.next_epoch, cfg.train.epochs):
         start = time.perf_counter()
         model.train()
@@ -317,6 +328,15 @@ def train_gnn(
                 "rng": _rng_state(),
             },
         )
+        if cfg.train.patience and epoch - state.best_epoch >= cfg.train.patience:
+            stop_reason = "patience"
+            log.info("early stop: no validation improvement for %d epochs", cfg.train.patience)
+            break
+        elapsed = time.perf_counter() - started
+        if cfg.train.max_hours and elapsed + record.seconds > cfg.train.max_hours * 3600:
+            stop_reason = "time_budget"
+            log.info("stopping: next epoch would exceed the %.2f h budget", cfg.train.max_hours)
+            break
 
     best = next((r for r in state.history if r.epoch == state.best_epoch), None)
     peak = torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else None
@@ -326,4 +346,6 @@ def train_gnn(
         test_f1_at_best=best.test_f1 if best and best.test_f1 is not None else float("nan"),
         history=state.history,
         peak_gpu_mem_mb=peak,
+        peak_host_rss_mb=peak_host_rss_mb(),
+        stop_reason=stop_reason,
     )

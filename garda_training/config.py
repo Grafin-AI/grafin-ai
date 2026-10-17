@@ -29,6 +29,8 @@ _SECTIONS: dict[str, dict[str, type]] = {
         "batch_size": int,
         "num_neighs": list,
         "amp": bool,
+        "patience": int,
+        "max_hours": float,
     },
     "split": {"fractions": list},
 }
@@ -61,6 +63,8 @@ class TrainConfig:
     batch_size: int
     num_neighs: tuple[int, ...]
     amp: bool
+    patience: int  # stop after this many epochs without a validation improvement; 0 = off
+    max_hours: float  # stop before an epoch would exceed this wall-clock budget; 0 = off
 
 
 @dataclass(frozen=True)
@@ -127,6 +131,8 @@ def parse_gnn_config(raw: dict[str, Any]) -> GnnConfig:
         raise ConfigError("[train].num_neighs needs exactly one entry per GNN layer")
     if t["lr"] <= 0 or t["w_ce1"] <= 0 or t["w_ce2"] <= 0:
         raise ConfigError("[train] lr and class weights must be > 0")
+    if t["patience"] < 0 or t["max_hours"] < 0:
+        raise ConfigError("[train] patience and max_hours must be >= 0 (0 = off)")
     if t["epochs"] < 1 or t["batch_size"] < 1:
         raise ConfigError("[train] epochs and batch_size must be >= 1")
     fr = s["fractions"]
@@ -150,6 +156,8 @@ def parse_gnn_config(raw: dict[str, Any]) -> GnnConfig:
             batch_size=t["batch_size"],
             num_neighs=tuple(neighs),
             amp=t["amp"],
+            patience=t["patience"],
+            max_hours=float(t["max_hours"]),
         ),
         split=SplitConfig(fractions=(float(fr[0]), float(fr[1]), float(fr[2]))),
     )
