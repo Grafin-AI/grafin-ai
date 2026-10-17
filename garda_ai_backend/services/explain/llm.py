@@ -39,6 +39,8 @@ SYSTEM_PROMPT = (
     "Skor berasal dari model graph neural network (GNN) yang menilai transaksi dalam "
     "graf rekening; jelaskan sinyal pola dan jaringan dengan istilah tersebut "
     "(keterhubungan rekening, fan-in, fan-out, velositas). "
+    "Jangan menjadikan jam transaksi sebagai indikator risiko (data ini tidak memiliki "
+    "pola harian yang bermakna). "
     "Setiap bidang terdiri dari 2-4 kalimat. "
     "Balas HANYA dengan satu objek JSON valid tanpa teks lain, dengan tepat empat kunci "
     "string: \"pattern_matching\", \"behavior_analysis\", \"network_analysis\", "

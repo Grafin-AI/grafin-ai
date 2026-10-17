@@ -68,11 +68,8 @@ def risk_factors(ev: Evidence) -> list[dict[str, str]]:
             "high_velocity", "Velositas Tinggi",
             f"{out_n} transaksi keluar pengirim dan {in_n} transaksi masuk penerima dalam 24 jam",
         ))
-    if ev["is_night"]:
-        f.append(_factor(
-            "unusual_hour", "Waktu Tidak Wajar",
-            f"Transaksi terjadi pukul {ev['hour_of_day']:02d}:00 (rentang 00.00-05.59)",
-        ))
+    # No time-of-day factor: the IBM AML data has a flat hourly profile (night-time laundering
+    # rate == daytime rate), so "unusual hour" would fire on ~30% of transactions with no signal.
     ratio = ev.get("amount_vs_sender_median")
     if ratio is not None and ratio >= AMOUNT_RATIO_THRESHOLD:
         f.append(_factor(
@@ -143,8 +140,7 @@ def rules_narrative(ev: Evidence, factors: list[dict[str, Any]]) -> dict[str, st
     money = fmt_money(ev["amount"], ev.get("currency"))
     ba = [
         f"Transaksi senilai {money} melalui kanal {ev['channel']} terjadi pukul "
-        f"{ev['hour_of_day']:02d}:00"
-        + (", di luar jam operasional wajar." if ev["is_night"] else ".")
+        f"{ev['hour_of_day']:02d}:00."
     ]
     ba.append(
         f"Dalam 24 jam hingga transaksi ini, rekening pengirim melakukan "

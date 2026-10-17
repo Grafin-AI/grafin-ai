@@ -193,9 +193,10 @@ async def test_rules_when_provider_none(make_client):
         assert body[k].strip()
     codes = {f["code"] for f in body["risk_factors"]}
     assert {
-        "high_model_score", "high_fan_in", "high_fan_out", "unusual_hour",
+        "high_model_score", "high_fan_in", "high_fan_out",
         "unusual_amount", "cross_bank", "flagged_counterparty", "high_risk_profile",
     } <= codes
+    assert "unusual_hour" not in codes  # flat hourly profile in IBM data: never a factor
     assert "high_velocity" not in codes  # 5 out / 6 in < 10
     assert body["evidence"]["receiver_distinct_senders_24h"] == 6
     assert body["generated_at"].endswith("Z")
