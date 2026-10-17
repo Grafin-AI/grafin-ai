@@ -232,7 +232,7 @@ export function UserProfileDetailsModal({ entityId, isOpen, onClose }: UserProfi
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Total Transaksi</p>
-                        <p className="text-xl font-bold">{profile.total_transactions.toLocaleString('en-US')}</p>
+                        <p className="text-xl font-bold">{profile.total_transactions.toLocaleString('id-ID')}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Transaksi Flagged</p>

@@ -307,7 +307,7 @@ export function UserRiskProfiling() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {profile.total_transactions.toLocaleString('en-US')}
+                      {profile.total_transactions.toLocaleString('id-ID')}
                     </TableCell>
                     <TableCell>
                       <span className={profile.flagged_transactions > 0 ? 'text-red-600 font-medium' : ''}>

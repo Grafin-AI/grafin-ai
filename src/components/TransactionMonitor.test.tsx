@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Hoisted so the vi.mock factory below (which is itself hoisted) can reference it.
 const { item } = vi.hoisted(() => ({
   item: {
-    seq: 1, transaction_id: 1, bank: 'BRI', type: 'ACH', amount: 1000000,
+    seq: 1, transaction_id: 1, bank: 'BRI', type: 'BI-FAST', amount: 1000000,
     fraud_score: 0.9, typology: 'Fan-Out', status: 'flagged' as const,
     surfaced_at: '2026-08-12T09:15:00Z',  // ingestion time — "today", must NOT be shown
     event_time: '2025-09-03T14:22:00Z',   // dataset time — this is what the analyst needs
