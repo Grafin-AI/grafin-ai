@@ -980,7 +980,8 @@ Pydantic response models for all view endpoints. Every class is a pure `BaseMode
 |---|---|---|
 | `LiveItem` | `seq: int`, `transaction_id: int`, `bank: str`, `type: str`, `amount: float`, `fraud_score: float`, `typology: str \| None`, `status: str`, `surfaced_at: str`, `event_time: str` | element of `LiveResponse.items`; carries both times so the client can show business time and derive detection lag |
 | `LiveResponse` | `items: list[LiveItem]` | `GET /api/v1/transactions/live` |
-| `TransactionDetail` | `id: int`, `bank: str`, `amount: float`, `currency: str`, `type: str`, `fraud_score: float`, `typology: str \| None`, `status: str`, `is_laundering: bool`, `event_time: str` | `GET /api/v1/transactions/{transaction_id}` |
+| `TransactionDetail` | `id: int`, `bank: str`, `amount: float`, `currency: str`, `type: str`, `fraud_score: float`, `typology: str \| None`, `status: str`, `event_time: str`, `from_bank: str`, `from_bank_name: str \| None`, `from_account: str`, `from_entity_id: str \| None`, `from_entity_name: str \| None`, `to_bank: str`, `to_bank_name: str \| None`, `to_account: str`, `to_entity_id: str \| None`, `to_entity_name: str \| None` (no `is_laundering`) | `GET /api/v1/transactions/{transaction_id}` |
+| `TransactionExplanation` | `transaction_id: int`, `source: "llm" \| "rules"`, `model: str \| None`, `pattern_matching: str`, `behavior_analysis: str`, `network_analysis: str`, `recommendation: str`, `risk_factors: list[RiskFactor{code,label,detail}]`, `evidence: dict[str, bool\|int\|float\|str\|None]`, `generated_at: str` | `GET /api/v1/transactions/{transaction_id}/explanation` |
 
 ### User-risk models
 
@@ -1000,7 +1001,7 @@ Pydantic response models for all view endpoints. Every class is a pure `BaseMode
 
 | Class | Fields | Used by |
 |---|---|---|
-| `SystemHealthResponse` | `db_ok: bool`, `redis_ok: bool`, `events_surfaced: int`, `model_accuracy_simulated: bool` | `GET /api/v1/system/health` |
+| `SystemHealthResponse` | `db_ok: bool`, `redis_ok: bool`, `events_surfaced: int`, `model_accuracy_simulated: bool`, `model_name: str \| None` | `GET /api/v1/system/health` |
 
 ---
 
@@ -1424,10 +1425,17 @@ async def live(
 
 ```python
 @router.get("/{transaction_id}", response_model=TransactionDetail)
-async def detail(transaction_id: int, session: SessionDep, _: CurrentUserDep) -> TransactionDetail
+async def detail(
+    transaction_id: int, session: SessionDep, user: CurrentUserDep, unmasked: bool = False
+) -> TransactionDetail
 ```
 
-- **Description**: Returns full detail for a single transaction. Raises HTTP 404 if not found.
+- **Description**: Returns full detail for a single transaction, including sender/receiver bank, account and entity. Entity names use the Users-view masking rule (raw only for `admin` with `?unmasked=true`). The ground-truth `is_laundering` label is never returned. Raises HTTP 404 if not found.
+- **Role gate**: any authenticated user
+
+### Route: `GET /api/v1/transactions/{transaction_id}/explanation`
+
+- **Description**: `services.explain.explain_transaction`: Redis `expl:{id}` (24h; 5 min when an LLM failure fell back to rules; Redis errors → compute) → `evidence.compute_evidence` (24h window ending at the transaction's `event_time`, inclusive; never reads `is_laundering`; uses the `(from_account, event_time)` / `(to_account, event_time)` indexes) → `rules.risk_factors` → LLM narrative (`GARDA_LLM_PROVIDER`; anthropic/gemini/ollama via httpx) or `rules.rules_narrative`. Raises HTTP 404 if not found.
 - **Role gate**: any authenticated user
 
 ---
@@ -1556,7 +1564,7 @@ router = APIRouter(prefix="/api/v1/system", tags=["system"])
 async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> SystemHealthResponse
 ```
 
-- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts **all** `TransactionEvent` rows as `events_surfaced` — `select(func.count()).select_from(TransactionEvent)` with no time filter, because this is an operational "how much is in the database" probe rather than a windowed view. Sets `model_accuracy_simulated=True` unconditionally because Phase 1 uses label-replay rather than a trained model. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
+- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts **all** `TransactionEvent` rows as `events_surfaced` — `select(func.count()).select_from(TransactionEvent)` with no time filter, because this is an operational "how much is in the database" probe rather than a windowed view. Sets `model_accuracy_simulated=True` unless `GARDA_MODEL_NAME` is set, in which case it is `False` and `model_name` is returned. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
 - **Role gate**: any authenticated user
 
 ---

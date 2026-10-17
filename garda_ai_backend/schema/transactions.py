@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from garda_ai_backend.schema.base import Base
@@ -9,6 +9,12 @@ from garda_ai_backend.schema.base import Base
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    # Per-account 24h windows (transaction explanations): equality on the account,
+    # range on event_time.
+    __table_args__ = (
+        Index("ix_transactions_from_account_event_time", "from_account", "event_time"),
+        Index("ix_transactions_to_account_event_time", "to_account", "event_time"),
+    )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     from_bank_id: Mapped[str] = mapped_column(ForeignKey("banks.id"))

@@ -35,3 +35,17 @@ async def test_system_health(client):
     assert body["redis_ok"] is True
     assert body["model_accuracy_simulated"] is True
     assert body["events_surfaced"] == 4
+    assert body["model_name"] is None
+
+
+async def test_system_health_reports_real_model(client):
+    from garda_ai_backend.config import get_settings
+    from garda_ai_backend.main import app
+
+    settings = get_settings().model_copy(update={"model_name": "GraphSAGE-GNN v1"})
+    app.dependency_overrides[deps.get_settings_dep] = lambda: settings
+    r = await client.get("/api/v1/system/health", headers=_auth())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model_accuracy_simulated"] is False
+    assert body["model_name"] == "GraphSAGE-GNN v1"

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -77,8 +79,36 @@ class TransactionDetail(BaseModel):
     fraud_score: float
     typology: str | None
     status: str
-    is_laundering: bool
     event_time: str
+    from_bank: str
+    from_bank_name: str | None
+    from_account: str
+    from_entity_id: str | None
+    from_entity_name: str | None  # masked unless admin + ?unmasked=true
+    to_bank: str
+    to_bank_name: str | None
+    to_account: str
+    to_entity_id: str | None
+    to_entity_name: str | None  # masked unless admin + ?unmasked=true
+
+
+class RiskFactor(BaseModel):
+    code: str
+    label: str
+    detail: str
+
+
+class TransactionExplanation(BaseModel):
+    transaction_id: int
+    source: Literal["llm", "rules"]
+    model: str | None
+    pattern_matching: str
+    behavior_analysis: str
+    network_analysis: str
+    recommendation: str
+    risk_factors: list[RiskFactor]
+    evidence: dict[str, bool | int | float | str | None]
+    generated_at: str
 
 
 class RiskProfile(BaseModel):
@@ -115,3 +145,4 @@ class SystemHealthResponse(BaseModel):
     redis_ok: bool
     events_surfaced: int
     model_accuracy_simulated: bool
+    model_name: str | None = None

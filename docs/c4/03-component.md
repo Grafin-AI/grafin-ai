@@ -88,6 +88,12 @@ The only public symbol. Returns the singleton `Settings` instance.
 | `jwt_algorithm` | `str` | `"HS256"` | `GARDA_JWT_ALGORITHM` |
 | `jwt_access_ttl_min` | `int` | `15` | `GARDA_JWT_ACCESS_TTL_MIN` |
 | `jwt_refresh_ttl_days` | `int` | `7` | `GARDA_JWT_REFRESH_TTL_DAYS` |
+| `model_name` | `str` | `""` | `GARDA_MODEL_NAME` — set → system health reports `model_accuracy_simulated=false` + `model_name` |
+| `llm_provider` | `none\|anthropic\|gemini\|ollama` | `none` | `GARDA_LLM_PROVIDER` — explanation narrative source (`none` = rules only) |
+| `llm_api_key` | `SecretStr` | `""` | `GARDA_LLM_API_KEY` (never logged) |
+| `llm_model` | `str` | provider default | `GARDA_LLM_MODEL` (`claude-sonnet-5-5` / `gemini-2.5-flash` / `llama3.1:8b`) |
+| `llm_base_url` | `str` | provider default | `GARDA_LLM_BASE_URL` |
+| `llm_timeout_s` | `float` | `20` | `GARDA_LLM_TIMEOUT_S` |
 
 ### Dependencies
 
@@ -446,7 +452,7 @@ The component is composed of seven FastAPI routers and six query repositories. R
 | `/api/v1/metrics` | `api/metrics.py` | `GET /overview`, `GET /volume`, `GET /heatmap` | Yes (TTL 5 s) |
 | `/api/v1/analytics` | `api/analytics.py` | `GET /fraud` | Yes (TTL 5 s) |
 | `/api/v1/geo` | `api/geo.py` | `GET /provinces` | Yes (TTL 10 s) |
-| `/api/v1/transactions` | `api/transactions.py` | `GET /live`, `GET /{transaction_id}` | No |
+| `/api/v1/transactions` | `api/transactions.py` | `GET /live`, `GET /{transaction_id}`, `GET /{transaction_id}/explanation` | Explanation only (`expl:{id}`, 24h) |
 | `/api/v1/users` | `api/users_view.py` | `GET /risk`, `GET /{entity_id}/profile` | No |
 | `/api/v1/alerts` | `api/alerts.py` | `GET /` (list), `POST /{alert_id}/ack` | No |
 | `/api/v1/system` | `api/system.py` | `GET /health` | No |
@@ -499,7 +505,8 @@ The component is composed of seven FastAPI routers and six query repositories. R
 | `GET` | `/api/v1/analytics/fraud` | Any authenticated | Typology distribution + detection metrics (precision/recall/F1) | `200 FraudAnalyticsResponse` |
 | `GET` | `/api/v1/geo/provinces` | Any authenticated | Province-level fraud counts with risk levels | `200 GeoResponse` |
 | `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) — also the backfill endpoint for WebSocket clients after a reconnect | `200 LiveResponse` |
-| `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail | `200 TransactionDetail` or `404` |
+| `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail with both parties (entity names masked unless admin + `?unmasked=true`); never includes `is_laundering` | `200 TransactionDetail` or `404` |
+| `GET` | `/api/v1/transactions/{id}/explanation` | Any authenticated | Evidence (24h point-in-time window), rule-based risk factors and an Indonesian narrative (LLM or deterministic rules fallback); cached in Redis `expl:{id}` | `200 TransactionExplanation` or `404` |
 | `GET` | `/api/v1/users/risk` | Any authenticated | Entity risk list (`risk`, `unmasked`, `limit`) | `200 UserRiskResponse` |
 | `GET` | `/api/v1/users/{entity_id}/profile` | Any authenticated | Single entity risk profile | `200 RiskProfile` or `404` |
 | `GET` | `/api/v1/alerts` | Any authenticated | Alert list (`status=all\|active`) | `200 AlertsResponse` |

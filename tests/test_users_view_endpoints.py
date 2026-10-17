@@ -57,3 +57,42 @@ async def test_user_profile_detail(client):
     assert body["name"] == "A**** S****"
     assert body["total_transactions"] >= 1
     assert body["province"] == "DKI Jakarta"
+
+
+async def test_user_profile_found_beyond_top_1000(client, session):
+    # 1001 riskier entities push E_LOW out of any top-1000 page; the profile must
+    # still resolve because it is looked up by id, not scanned from the list.
+    from decimal import Decimal
+
+    from sqlalchemy import insert
+
+    from garda_ai_backend.schema import Account, Entity
+
+    await session.execute(
+        insert(Entity),
+        [{"id": f"EX{i}", "name": f"Orang {i}", "province": "Bali"} for i in range(1001)]
+        + [{"id": "E_LOW", "name": "Citra Lestari", "province": "Aceh"}],
+    )
+    await session.execute(
+        insert(Account),
+        [
+            {"id": f"AX{i}", "bank_id": "10", "entity_id": f"EX{i}",
+             "risk_score": Decimal("99"), "risk_category": "High"}
+            for i in range(1001)
+        ]
+        + [{"id": "A_LOW", "bank_id": "10", "entity_id": "E_LOW",
+            "risk_score": Decimal("1"), "risk_category": "Low"}],
+    )
+    await session.commit()
+
+    r = await client.get("/api/v1/users/E_LOW/profile", headers=_auth("analyst"))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["entity_id"] == "E_LOW"
+    assert body["name"] == "C**** L****"
+    assert body["province"] == "Aceh"
+
+
+async def test_user_profile_404(client):
+    r = await client.get("/api/v1/users/NOPE/profile", headers=_auth("analyst"))
+    assert r.status_code == 404

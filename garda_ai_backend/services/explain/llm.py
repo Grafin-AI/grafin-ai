@@ -1,0 +1,187 @@
+"""LLM narrative over the evidence, via plain httpx REST (no SDKs).
+
+Providers: anthropic (Messages API), gemini (generateContent), ollama (/api/chat).
+Any failure (transport, timeout, non-2xx, unparsable/invalid JSON) returns None and
+the caller falls back to the rules narrative. The API key is never logged: failures
+are logged by exception type only, because httpx error messages can embed the URL
+(Gemini carries the key as a query parameter).
+"""
+
+import json
+from typing import Any
+
+import httpx
+import structlog
+
+from garda_ai_backend.config import Settings
+from garda_ai_backend.services.explain.rules import ACTION_VERBS, NARRATIVE_FIELDS
+
+log = structlog.get_logger()
+
+DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-5-5",
+    "gemini": "gemini-2.5-flash",
+    "ollama": "llama3.1:8b",
+}
+DEFAULT_BASE_URLS = {
+    "anthropic": "https://api.anthropic.com",
+    "gemini": "https://generativelanguage.googleapis.com",
+    "ollama": "http://host.docker.internal:11434",
+}
+
+SYSTEM_PROMPT = (
+    "Anda adalah analis Anti Pencucian Uang (APU) senior yang menyusun penjelasan "
+    "transaksi untuk konteks regulator Indonesia (OJK, Bank Indonesia, PPATK). "
+    "Tulis dalam Bahasa Indonesia baku dan formal. "
+    "Gunakan HANYA data pada JSON bukti (evidence) dan daftar faktor risiko yang "
+    "diberikan. Jangan pernah mengarang perangkat, alamat IP, lokasi, nama, nominal, "
+    "atau fakta lain yang tidak tercantum. "
+    "Skor berasal dari model graph neural network (GNN) yang menilai transaksi dalam "
+    "graf rekening; jelaskan sinyal pola dan jaringan dengan istilah tersebut "
+    "(keterhubungan rekening, fan-in, fan-out, velositas). "
+    "Jangan menjadikan jam transaksi sebagai indikator risiko (data ini tidak memiliki "
+    "pola harian yang bermakna). "
+    "Setiap bidang terdiri dari 2-4 kalimat. "
+    "Balas HANYA dengan satu objek JSON valid tanpa teks lain, dengan tepat empat kunci "
+    "string: \"pattern_matching\", \"behavior_analysis\", \"network_analysis\", "
+    "\"recommendation\". Bidang \"recommendation\" WAJIB diawali kata kerja tindakan "
+    "dalam huruf kapital yang diberikan (PROSES, TINJAU, TUNDA, atau BLOKIR)."
+)
+
+
+def build_user_prompt(evidence: dict[str, Any], factors: list[dict], action: str) -> str:
+    payload = {"evidence": evidence, "risk_factors": factors}
+    return (
+        "Data transaksi (JSON):\n"
+        f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
+        f"Tindakan sistem berdasarkan status: {action}. Awali \"recommendation\" dengan "
+        f"kata \"{action}\".\n"
+        "Kembalikan objek JSON dengan kunci pattern_matching, behavior_analysis, "
+        "network_analysis, recommendation."
+    )
+
+
+def resolve_model(settings: Settings) -> str:
+    return settings.llm_model or DEFAULT_MODELS.get(settings.llm_provider, "")
+
+
+def _base_url(settings: Settings) -> str:
+    return (settings.llm_base_url or DEFAULT_BASE_URLS[settings.llm_provider]).rstrip("/")
+
+
+async def _anthropic(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
+    resp = await client.post(
+        f"{_base_url(s)}/v1/messages",
+        headers={
+            "x-api-key": s.llm_api_key.get_secret_value(),
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": resolve_model(s),
+            "max_tokens": 1500,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        },
+        timeout=s.llm_timeout_s,
+    )
+    resp.raise_for_status()
+    blocks = resp.json().get("content") or []
+    return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+
+
+async def _gemini(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
+    resp = await client.post(
+        f"{_base_url(s)}/v1beta/models/{resolve_model(s)}:generateContent",
+        params={"key": s.llm_api_key.get_secret_value()},
+        json={
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
+        },
+        timeout=s.llm_timeout_s,
+    )
+    resp.raise_for_status()
+    parts = resp.json()["candidates"][0]["content"]["parts"]
+    return "".join(p.get("text", "") for p in parts)
+
+
+async def _ollama(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
+    resp = await client.post(
+        f"{_base_url(s)}/api/chat",
+        json={
+            "model": resolve_model(s),
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.2},
+        },
+        timeout=s.llm_timeout_s,
+    )
+    resp.raise_for_status()
+    return resp.json()["message"]["content"]
+
+
+_PROVIDERS = {"anthropic": _anthropic, "gemini": _gemini, "ollama": _ollama}
+
+
+def parse_narrative(text: str, action: str) -> dict[str, str] | None:
+    """Strict-ish parse: one JSON object with the 4 non-empty string fields."""
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        t = t[4:] if t.lower().startswith("json") else t
+    try:
+        obj = json.loads(t)
+    except ValueError:
+        start, end = t.find("{"), t.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            obj = json.loads(t[start:end + 1])
+        except ValueError:
+            return None
+    if not isinstance(obj, dict):
+        return None
+    out: dict[str, str] = {}
+    for key in NARRATIVE_FIELDS:
+        value = obj.get(key)
+        if not isinstance(value, str) or not value.strip():
+            return None
+        out[key] = value.strip()
+    first = out["recommendation"].split(maxsplit=1)[0].strip(".,:;-")
+    if first not in ACTION_VERBS:
+        out["recommendation"] = f"{action}: {out['recommendation']}"
+    return out
+
+
+async def llm_narrative(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    evidence: dict[str, Any],
+    factors: list[dict],
+    action: str,
+) -> dict[str, str] | None:
+    provider = _PROVIDERS.get(settings.llm_provider)
+    if provider is None:
+        return None
+    try:
+        text = await provider(
+            client, settings, SYSTEM_PROMPT, build_user_prompt(evidence, factors, action)
+        )
+    except Exception as exc:  # noqa: BLE001 — any provider failure means rules fallback
+        log.warning(
+            "explain.llm_failed", provider=settings.llm_provider,
+            model=resolve_model(settings), error=type(exc).__name__,
+        )
+        return None
+    parsed = parse_narrative(text, action)
+    if parsed is None:
+        log.warning(
+            "explain.llm_invalid_output", provider=settings.llm_provider,
+            model=resolve_model(settings),
+        )
+    return parsed

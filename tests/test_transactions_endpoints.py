@@ -6,8 +6,9 @@ from garda_ai_backend.redis_client import build_redis
 from garda_ai_backend.security.tokens import create_access_token
 
 
-def _auth() -> dict:
-    return {"Authorization": f"Bearer {create_access_token(subject='1', role='analyst', secret='test-secret', ttl_min=15)}"}
+def _auth(role: str = "analyst") -> dict:
+    token = create_access_token(subject="1", role=role, secret="test-secret", ttl_min=15)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -58,6 +59,36 @@ async def test_transaction_detail(client):
     assert body["typology"] == "Fan-Out"
     assert body["status"] == "blocked"
     assert body["amount"] == 15000000.0
+    # Ground truth must never reach the UI.
+    assert "is_laundering" not in body
+    assert body["bank"] == "Bank Rakyat Indonesia (BRI)"
+    assert body["from_bank"] == "10"
+    assert body["from_bank_name"] == "Bank Rakyat Indonesia (BRI)"
+    assert body["from_account"] == "ACC1"
+    assert body["from_entity_id"] == "E1"
+    assert body["from_entity_name"] == "A**** S****"
+    assert body["to_bank"] == "20"
+    assert body["to_bank_name"] == "Bank Mandiri"
+    assert body["to_account"] == "ACC2"
+    assert body["to_entity_id"] == "E2"
+    assert body["to_entity_name"] == "B**** S****"
+
+
+async def test_transaction_detail_unmasked_only_for_admin(client):
+    r = await client.get("/api/v1/transactions/1?unmasked=true", headers=_auth("admin"))
+    body = r.json()
+    assert body["from_entity_name"] == "Ahmad Setiawan"
+    assert body["to_entity_name"] == "Budi Santoso"
+    # Admin without the opt-in, and analyst with it, both stay masked (Users view rule).
+    r = await client.get("/api/v1/transactions/1", headers=_auth("admin"))
+    assert r.json()["from_entity_name"] == "A**** S****"
+    r = await client.get("/api/v1/transactions/1?unmasked=true", headers=_auth("analyst"))
+    assert r.json()["from_entity_name"] == "A**** S****"
+
+
+async def test_transaction_detail_requires_auth(client):
+    r = await client.get("/api/v1/transactions/1")
+    assert r.status_code in (401, 403)
 
 
 async def test_transaction_detail_404(client):
