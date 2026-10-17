@@ -77,8 +77,17 @@ class TransactionDetail(BaseModel):
     fraud_score: float
     typology: str | None
     status: str
-    is_laundering: bool
     event_time: str
+    from_bank: str
+    from_bank_name: str | None
+    from_account: str
+    from_entity_id: str | None
+    from_entity_name: str | None  # masked unless admin + ?unmasked=true
+    to_bank: str
+    to_bank_name: str | None
+    to_account: str
+    to_entity_id: str | None
+    to_entity_name: str | None  # masked unless admin + ?unmasked=true
 
 
 class RiskProfile(BaseModel):

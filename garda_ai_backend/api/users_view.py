@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, NowDep, SessionDep
+from garda_ai_backend.api.deps import CurrentUser, CurrentUserDep, NowDep, SessionDep
 from garda_ai_backend.api.masking import mask_name
 from garda_ai_backend.api.view_schemas import RiskProfile, UserRiskResponse
 from garda_ai_backend.repositories.users_view import UserRiskRepository
@@ -8,9 +8,13 @@ from garda_ai_backend.repositories.users_view import UserRiskRepository
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
-def _shape(row: dict, user, unmasked: bool) -> RiskProfile:
-    allow_unmasked = unmasked and user.role == "admin"
-    name = row["name"] if allow_unmasked else mask_name(row["name"])
+def can_unmask(user: CurrentUser, unmasked: bool) -> bool:
+    """Names are shown raw only to an admin who explicitly asks (?unmasked=true)."""
+    return unmasked and user.role == "admin"
+
+
+def _shape(row: dict, user: CurrentUser, unmasked: bool) -> RiskProfile:
+    name = row["name"] if can_unmask(user, unmasked) else mask_name(row["name"])
     return RiskProfile(**{**row, "name": name})
 
 
