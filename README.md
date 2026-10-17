@@ -13,7 +13,14 @@ This repo contains:
 ### Prerequisites
 
 - Docker + Docker Compose
-- The dataset at `../garda-ai-data/HI-Small/` (or set `GARDA_DATA_HOST_DIR` to another path)
+- The dataset at `../garda-ai-data/HI-Small-ID/` (or set `GARDA_DATA_HOST_DIR` to another path).
+  Switching datasets needs `make reset` (`docker compose down -v`): old rows live in the
+  Postgres volume.
+- Optional, for model scores (`GARDA_SCORER=precomputed`): `scores.csv` from
+  `garda-train export-scores --run <run-id>`, with `GARDA_SCORES_HOST_DIR` pointing at
+  `../garda-ai-training/runs/<run-id>/scores`.
+- Demo replay: `make demo-history` (validation days 2025-09-09..11, unpaced), then
+  `make demo-test` (test period from 2025-09-12, speed 60).
 - `.env` file with required secrets (see `.env.example`)
 
 ### Quick Start
