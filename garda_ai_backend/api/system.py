@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import func, select, text
 
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep, SettingsDep
 from garda_ai_backend.api.view_schemas import SystemHealthResponse
 from garda_ai_backend.schema import TransactionEvent
 
@@ -9,7 +9,9 @@ router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
 
 @router.get("/health", response_model=SystemHealthResponse)
-async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> SystemHealthResponse:
+async def health(
+    session: SessionDep, redis: RedisDep, settings: SettingsDep, _: CurrentUserDep
+) -> SystemHealthResponse:
     db_ok = True
     try:
         await session.execute(text("SELECT 1"))
@@ -29,5 +31,7 @@ async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> Sys
         db_ok=db_ok,
         redis_ok=redis_ok,
         events_surfaced=int(surfaced),
-        model_accuracy_simulated=True,  # Phase 1 label-replay — not a trained-model metric
+        # Simulated unless a real trained model is configured behind the scoring service.
+        model_accuracy_simulated=not settings.model_name,
+        model_name=settings.model_name or None,
     )

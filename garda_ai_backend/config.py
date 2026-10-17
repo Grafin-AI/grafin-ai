@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     ingest_token: str = Field(min_length=16)
     scoring_timeout_s: float = 5.0
     scoring_retries: int = 2
+    # Name of the trained model behind the scoring service (e.g. "GraphSAGE-GNN v1").
+    # Empty = Phase 1 label-replay, so accuracy figures are simulated.
+    model_name: str = ""
 
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_dev(self) -> "Settings":

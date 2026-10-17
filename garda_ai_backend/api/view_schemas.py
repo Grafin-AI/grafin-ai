@@ -115,3 +115,4 @@ class SystemHealthResponse(BaseModel):
     redis_ok: bool
     events_surfaced: int
     model_accuracy_simulated: bool
+    model_name: str | None = None
