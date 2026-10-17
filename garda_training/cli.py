@@ -58,7 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
     gnn.add_argument(
         "--run-id", help="name for a new run (default: timestamp-dataset-protocol-seed)"
     )
-    gnn.add_argument("--resume", metavar="RUN_ID", help="continue an interrupted run")
+    gnn.add_argument(
+        "--resume",
+        metavar="RUN_ID",
+        help="continue a run; --epochs/--patience/--max-hours may extend its budget",
+    )
     gnn.add_argument("--mlflow-uri", default=DEFAULT_MLFLOW_URI)
     gnn.add_argument("--no-mlflow", action="store_true")
     gnn.set_defaults(func=cmd_gnn)
@@ -95,6 +99,11 @@ def cmd_gnn(args: argparse.Namespace) -> int:
     if args.resume:
         run = RunDir.open(args.runs_dir, args.resume)
         saved = run.read_json("config.json")
+        if args.batch_size is not None or args.num_neighs is not None:
+            raise ConfigError("--batch-size and --num-neighs cannot change on --resume")
+        # the training budget may be extended, e.g. to continue a run that stopped early
+        budget = {"epochs": args.epochs, "patience": args.patience, "max_hours": args.max_hours}
+        saved["gnn"]["train"].update({k: v for k, v in budget.items() if v is not None})
         cfg = parse_gnn_config(saved["gnn"])
         seed, max_batches = saved["seed"], saved["max_batches"]
         data_path, source = Path(saved["data"]["path"]), as_source(saved["data"]["source"])
@@ -131,7 +140,7 @@ def cmd_gnn(args: argparse.Namespace) -> int:
     if not args.resume:
         run_id = args.run_id or make_run_id(prepared.meta["dataset"], args.protocol, seed)
         run = RunDir.create(args.runs_dir, run_id)
-        run.write_json("config.json", config)
+    run.write_json("config.json", config)
     run.write_json("env.json", environment_info(device))
     run.write_json("data.json", data_info)
     handler = logging.FileHandler(run.path / "log.txt")

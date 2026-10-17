@@ -171,3 +171,26 @@ def test_cli_score_writes_every_val_and_test_row_once(
     assert metrics["val"]["n"] + metrics["test"]["n"] == frame.height
     assert sum(metrics["val"]["status_counts"].values()) == metrics["val"]["n"]
     assert [d["day"] for d in metrics["per_day"]] == sorted(frame["day"].unique().to_list())
+
+
+def test_cli_resume_can_extend_the_budget(fixture_paths: tuple[Path, Path], tmp_path: Path) -> None:
+    common = [
+        "--runs-dir",
+        str(tmp_path / "runs"),
+        "--cache-dir",
+        str(tmp_path / "cache"),
+        "--no-mlflow",
+        "--device",
+        "cpu",
+    ]
+    first = ["gnn", "--data", str(fixture_paths[0]), "--source", "raw", "--config", PAPER]
+    first += ["--epochs", "1", "--batch-size", "32", "--num-neighs", "10", "10"]
+    first += ["--patience", "1", "--run-id", "r", *common]
+    assert main(first) == 0
+    # the training budget may change on resume; the model and loaders may not
+    assert main(["gnn", "--resume", "r", "--batch-size", "64", *common]) == 3
+    assert main(["gnn", "--resume", "r", "--epochs", "2", "--patience", "0", *common]) == 0
+    run = tmp_path / "runs" / "r"
+    train = json.loads((run / "config.json").read_text())["gnn"]["train"]
+    assert train["epochs"] == 2 and train["patience"] == 0
+    assert len(json.loads((run / "metrics.json").read_text())["history"]) == 2

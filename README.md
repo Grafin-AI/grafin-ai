@@ -33,6 +33,7 @@ Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda
 garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>-v2/)
 garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
 garda-train gnn --resume RUN_ID                          # continue an interrupted run
+garda-train gnn --resume RUN_ID --patience 0 --max-hours 4  # ...or extend its budget
 garda-train score --run RUN_ID [--device cuda] [--batch-size N] [--flag-recall 0.9]
 garda-train export-scores --run RUN_ID [--splits test val]  # scores.csv for garda-ai-scoring
 garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
