@@ -10,7 +10,9 @@ class UserRiskRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def risk_list(self, now: datetime, risk: str | None, limit: int) -> list[dict]:
+    async def risk_list(
+        self, now: datetime, risk: str | None, limit: int, entity_id: str | None = None
+    ) -> list[dict]:
         flagged = func.count().filter(TransactionEvent.status.in_(("flagged", "blocked")))
         stmt = (
             select(
@@ -36,6 +38,8 @@ class UserRiskRepository:
         )
         if risk:
             stmt = stmt.where(Account.risk_category == risk)
+        if entity_id is not None:
+            stmt = stmt.where(Entity.id == entity_id)
         stmt = stmt.order_by(Account.risk_score.desc().nulls_last()).limit(limit)
         rows = (await self._session.execute(stmt)).all()
         return [
@@ -49,8 +53,8 @@ class UserRiskRepository:
         ]
 
     async def profile(self, now: datetime, entity_id: str) -> dict | None:
-        rows = await self.risk_list(now, risk=None, limit=1000)
-        for r in rows:
-            if r["entity_id"] == entity_id:
-                return r
-        return None
+        # Filter by id in SQL (PK lookup) rather than scanning a top-N page, so every
+        # entity resolves. Same ordering as the list, so a multi-account entity yields
+        # the row the list would have shown first.
+        rows = await self.risk_list(now, risk=None, limit=1, entity_id=entity_id)
+        return rows[0] if rows else None
