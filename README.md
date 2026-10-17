@@ -17,6 +17,12 @@ uv run ruff check .
 uv run mypy garda_ai_scoring
 ```
 
-Config (env, `GARDA_` prefix): `SCORING_TOKEN` (required), `SCORER` (`label_replay`|`ml`),
-`SEED`, `FN_RATE`, `FP_RATE`, `LOG_LEVEL`. Ops: `/healthz`, `/readyz`, `/metrics`.
+Config (env, `GARDA_` prefix): `SCORING_TOKEN` (required), `SCORER`
+(`label_replay` default | `precomputed` | `ml`), `SCORES_PATH`, `SEED`, `FN_RATE`, `FP_RATE`,
+`LOG_LEVEL`.
+
+`SCORER=precomputed` serves model scores exported by `garda-train export-scores`
+(`scores.csv`: `transaction_id,fraud_score,prob,status,typology`) from `SCORES_PATH`. The file is
+loaded once at startup (missing file = startup error); `is_laundering` is not used, and unknown
+ids score `0.0` / `approved` (counted and logged every 1000 misses, never an error). Ops: `/healthz`, `/readyz`, `/metrics`.
 Contract + design: `docs/superpowers/specs/2026-06-25-scoring-service-design.md`.
