@@ -48,7 +48,7 @@ def risk_factors(ev: Evidence) -> list[dict[str, str]]:
     if ev.get("typology"):
         f.append(_factor(
             "typology_detected", "Pola Tipologi Terdeteksi",
-            f"Model mengklasifikasikan pola sebagai {ev['typology']}",
+            f"Pola jaringan di sekitar transaksi: {ev['typology']}",
         ))
     if ev["receiver_distinct_senders_24h"] >= FAN_THRESHOLD:
         f.append(_factor(
