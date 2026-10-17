@@ -1,0 +1,28 @@
+# Multi-PNA+EU exactly as IBM/Multi-GNN@252b025 (model_settings.json "pna" + main.py defaults).
+# Paper: Egressy et al., AAAI 2024, Table 2 — Small HI 68.16 ± 2.65, Medium HI 66.48 ± 1.63.
+
+[model]
+name = "pna"
+n_hidden = 20
+n_gnn_layers = 2
+dropout = 0.08340440094051481
+final_dropout = 0.28812979737686323
+edge_updates = true            # upstream --emlps
+
+[flags]
+reverse_mp = true              # upstream --reverse_mp
+ports = true                   # upstream --ports
+ego = true                     # upstream --ego
+tds = false                    # upstream --tds (not part of "Multi-")
+
+[train]
+lr = 0.0006116418195373612
+w_ce1 = 1.0003967674742307
+w_ce2 = 7.077633468006714
+epochs = 100                   # upstream --n_epochs default
+batch_size = 8192
+num_neighs = [100, 100]
+amp = false                    # CUDA only; off for parity
+
+[split]
+fractions = [0.6, 0.2, 0.2]
