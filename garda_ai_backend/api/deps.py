@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Callable
 
-from fastapi import Depends, HTTPException, status
+import httpx
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy import func, select
@@ -38,7 +39,13 @@ def get_settings_dep() -> Settings:
     return get_settings()
 
 
+def get_http_client(request: Request) -> httpx.AsyncClient | None:
+    """The app-wide pooled client (None when lifespan didn't run, e.g. bare ASGI tests)."""
+    return getattr(request.app.state, "http_client", None)
+
+
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+HttpClientDep = Annotated[httpx.AsyncClient | None, Depends(get_http_client)]
 RedisDep = Annotated[Redis, Depends(get_redis_dep)]
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 

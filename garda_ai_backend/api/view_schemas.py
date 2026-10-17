@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -88,6 +90,25 @@ class TransactionDetail(BaseModel):
     to_account: str
     to_entity_id: str | None
     to_entity_name: str | None  # masked unless admin + ?unmasked=true
+
+
+class RiskFactor(BaseModel):
+    code: str
+    label: str
+    detail: str
+
+
+class TransactionExplanation(BaseModel):
+    transaction_id: int
+    source: Literal["llm", "rules"]
+    model: str | None
+    pattern_matching: str
+    behavior_analysis: str
+    network_analysis: str
+    recommendation: str
+    risk_factors: list[RiskFactor]
+    evidence: dict[str, bool | int | float | str | None]
+    generated_at: str
 
 
 class RiskProfile(BaseModel):
