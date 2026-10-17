@@ -58,6 +58,8 @@ services:
       GARDA_LLM_MODEL: ${GARDA_LLM_MODEL:-}
       GARDA_LLM_BASE_URL: ${GARDA_LLM_BASE_URL:-}
       GARDA_LLM_TIMEOUT_S: ${GARDA_LLM_TIMEOUT_S:-20}
+      # Model card: set when real model scores are served (empty = "Simulated (Phase 1)")
+      GARDA_MODEL_NAME: ${GARDA_MODEL_NAME:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
