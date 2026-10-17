@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from './client';
-import { useMetricsOverview, useAlerts } from './queries';
+import { useMetricsOverview, useAlerts, useTransactionExplanation } from './queries';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -25,5 +25,19 @@ describe('view query hooks', () => {
     const { result } = renderHook(() => useAlerts('active'), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(spy).toHaveBeenCalledWith('/alerts', { params: { status: 'active' } });
+  });
+
+  it('useTransactionExplanation fetches /transactions/:id/explanation', async () => {
+    const spy = vi.spyOn(api, 'get').mockResolvedValue({ data: { transaction_id: 7, source: 'rules' } } as any);
+    const { result } = renderHook(() => useTransactionExplanation(7), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith('/transactions/7/explanation', undefined);
+  });
+
+  it('useTransactionExplanation stays idle without an id or when disabled', () => {
+    const spy = vi.spyOn(api, 'get').mockClear();
+    renderHook(() => useTransactionExplanation(null), { wrapper });
+    renderHook(() => useTransactionExplanation(7, false), { wrapper });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
