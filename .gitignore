@@ -5,11 +5,13 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .DS_Store
-cache/
-runs/
-mlruns/
-bundles/
-data/
-.smoke/
+# top-level working dirs only (anchored: must not match package dirs like garda_training/data/)
+/cache/
+/runs/
+/mlruns/
+/bundles/
+/data/
+/logs/
+/.smoke/
+/garda-bundle.tar.gz
 ops/*.env
-garda-bundle.tar.gz
