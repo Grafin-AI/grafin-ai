@@ -1,0 +1,4 @@
+transaction_id,fraud_score,prob,status,typology
+7,0.0123,0.001000,approved,
+42,0.8512,0.950000,blocked,Anomali Jaringan (GNN)
+99,0.5000,0.300000,flagged,Anomali Jaringan (GNN)

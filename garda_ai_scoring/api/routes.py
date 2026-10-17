@@ -18,11 +18,13 @@ from garda_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnI
 router = APIRouter(prefix="/v1", tags=["scoring"])
 
 
-# Intentional process-global singleton: the scorer is stateless, so one instance is shared.
+# Intentional process-global singleton: one shared instance (precomputed loads its CSV once).
 @lru_cache(maxsize=1)
 def _provider() -> ScoringProvider:
     s = get_settings()
-    return get_scorer(s.scorer, seed=s.seed, fn_rate=s.fn_rate, fp_rate=s.fp_rate)
+    return get_scorer(
+        s.scorer, seed=s.seed, fn_rate=s.fn_rate, fp_rate=s.fp_rate, scores_path=s.scores_path
+    )
 
 
 @router.post("/score", response_model=ScoreResponse, dependencies=[Depends(require_token)])
