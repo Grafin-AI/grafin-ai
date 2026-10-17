@@ -8,7 +8,7 @@ WHAT="${1:-all}"
 DATA_DIR="$(cd "$REPO_DIR/.." && pwd)/garda-ai-data"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-VM=(--project "$GARDA_GCP_PROJECT" --zone "$GARDA_GCP_ZONE")
+VM=(--project "$GARDA_GCP_PROJECT" --zone "$GARDA_GCP_ZONE" ${GCLOUD_FLAGS[@]+"${GCLOUD_FLAGS[@]}"})
 gcloud compute ssh "$GARDA_VM_NAME" "${VM[@]}" --command "mkdir -p ~/garda/garda-ai-training ~/garda/garda-ai-data/raw"
 if [[ "$WHAT" == code || "$WHAT" == all ]]; then
   git -C "$REPO_DIR" archive --format=tar.gz -o "$TMP/code.tar.gz" HEAD

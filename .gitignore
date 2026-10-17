@@ -12,3 +12,4 @@ bundles/
 data/
 .smoke/
 ops/*.env
+garda-bundle.tar.gz
