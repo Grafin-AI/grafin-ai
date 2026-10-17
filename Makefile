@@ -1,4 +1,5 @@
-.PHONY: up down logs seed-secret config sim obs dataset-sort demo-seed demo-live tunnel admin-password
+.PHONY: up down reset logs seed-secret config sim obs dataset-sort demo-history demo-test demo-seed \
+	demo-live tunnel admin-password
 
 DATA_DIR ?= ../garda-ai-data/HI-Small
 
@@ -31,6 +32,7 @@ seed-secret:
 # backwards), which breaks gap-based pacing and the backend's max(event_time) clock.
 # Timestamps are `YYYY/MM/DD HH:MM`, zero-padded and leading, so a lexicographic
 # sort is chronological. Takes ~20s, writes ~433MB. Safe to re-run (idempotent).
+# Raw HI-Small only: ../garda-ai-data/HI-Small-ID already ships HI-Small_Trans_sorted.csv.
 dataset-sort:
 	@test -f "$(DATA_DIR)/HI-Small_Trans_part1.csv" || \
 		(echo "ERROR: $(DATA_DIR)/HI-Small_Trans_part1.csv not found (override with DATA_DIR=...)" && exit 1)
@@ -40,30 +42,36 @@ dataset-sort:
 	@echo "wrote $(DATA_DIR)/HI-Small_Trans_sorted.csv ($$(( $$(wc -l < "$(DATA_DIR)/HI-Small_Trans_sorted.csv") - 1 )) rows)"
 
 # --- Demo replay -------------------------------------------------------------
-# The first ~1.87M rows are IBM's account-initialization block (73% self-transfers,
-# near-zero laundering) plus the dense Sep 1-2 ramp — poor demo material. History
-# starts at 2025-09-03 and covers six days (Wed..Mon), which fills 6 of the 7
-# heatmap rows and gives the 24h volume chart a full 24/24 hourly buckets. The
-# 7th row (Tue) fills in live, because demo-live streams 2025-09-09.
-DEMO_SEED_SKIP  ?= 1869370
-DEMO_SEED_LIMIT ?= 2345075
-DEMO_LIVE_SKIP  ?= 4214445
-DEMO_LIVE_SPEED ?= 60
+# HI-Small-ID spans 2025-09-04..09-21 (5,078,345 rows; sim ordinal = 1-based CSV row).
+# The model's split: validation days 2025-09-09..09-11 (ordinals 2,766,833..4,214,445),
+# test days from 2025-09-12 (ordinal 4,214,446). Precomputed scores cover val + test.
+DEMO_HISTORY_SKIP  ?= 2766832
+DEMO_HISTORY_LIMIT ?= 1447613
+DEMO_TEST_SKIP     ?= 4214445
+DEMO_TEST_SPEED    ?= 60
 
-# 1) Pre-populate six days of history, unpaced (MAX_GAP_S=0). ~16 min at the
+# 1) Seed the validation days as history, unpaced (MAX_GAP_S=0), ~10 min at the
 #    ~2,400 txn/s the stack sustains with BATCH_SIZE=1000.
-demo-seed:
+demo-history:
 	docker compose --profile sim run --rm --build \
-	  -e GARDA_SKIP=$(DEMO_SEED_SKIP) -e GARDA_LIMIT=$(DEMO_SEED_LIMIT) \
+	  -e GARDA_SKIP=$(DEMO_HISTORY_SKIP) -e GARDA_LIMIT=$(DEMO_HISTORY_LIMIT) \
 	  -e GARDA_MAX_GAP_S=0 -e GARDA_BATCH_SIZE=1000 sim
 
-# 2) Stream live from exactly where the seed stopped (2025-09-09): 1 dataset-hour
-#    per wall-minute,
-#    so a new bucket appears on the chart every minute. Ctrl-C to stop.
-demo-live:
+# 2) Replay the test period live from 2025-09-12, right where demo-history stopped:
+#    1 dataset-hour per wall-minute at speed 60. Ctrl-C to stop.
+demo-test:
 	docker compose --profile sim run --rm --build \
-	  -e GARDA_SKIP=$(DEMO_LIVE_SKIP) -e GARDA_SPEED=$(DEMO_LIVE_SPEED) \
+	  -e GARDA_SKIP=$(DEMO_TEST_SKIP) -e GARDA_SPEED=$(DEMO_TEST_SPEED) \
 	  -e GARDA_BATCH_SIZE=100 sim
+
+# Old names, kept for muscle memory.
+demo-seed: demo-history
+demo-live: demo-test
+
+# Wipe the stack INCLUDING the Postgres volume. Required when switching datasets
+# (GARDA_DATA_HOST_DIR) or scorers: ingest/sim rows from the old one stay otherwise.
+reset:
+	docker compose --profile sim --profile observability down -v
 
 # --- Public access -----------------------------------------------------------
 # Change a dashboard password (default admin@garda.local). Do this BEFORE sharing a
