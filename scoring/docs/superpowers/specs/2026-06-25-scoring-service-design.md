@@ -1,11 +1,11 @@
-# garda-ai-scoring — Service Design (Phase 1)
+# grafin-ai-scoring — Service Design (Phase 1)
 
 **Date:** 2026-06-25
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-scoring` (new, standalone)
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
+**Repo:** `grafin-ai-scoring` (new, standalone)
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
 
-Phase 1 of the platform re-architecture. Extract the scoring engine from `garda-ai-pipeline`
+Phase 1 of the platform re-architecture. Extract the scoring engine from `grafin-ai-pipeline`
 into a standalone, stateless HTTP service. **Purely additive** — the pipeline keeps its own
 copy of the scorer running until it is retired (Phase 5), so nothing else changes yet.
 
@@ -18,7 +18,7 @@ Redis, no state.
 
 ## Scope
 
-- New repo `garda-ai-scoring`: uv project, FastAPI, mirroring `garda-ai-backend`'s conventions
+- New repo `grafin-ai-scoring`: uv project, FastAPI, mirroring `grafin-ai-backend`'s conventions
   (pydantic-settings, structlog, Prometheus `/metrics`, `/healthz` + `/readyz`, ruff, pytest,
   own-context Dockerfile).
 - A faithful, behavior-identical port of the pipeline's scoring package.
@@ -30,7 +30,7 @@ Redis, no state.
 
 ## Faithful port (behavior-identical)
 
-Copy from `garda-ai-pipeline/garda_ai_pipeline/scoring/` into `garda_ai_scoring/scoring/`,
+Copy from `grafin-ai-pipeline/grafin_ai_pipeline/scoring/` into `grafin_ai_scoring/scoring/`,
 changing only the package name in imports. Determinism MUST be preserved exactly (same seed,
 same key construction, same thresholds) so a given transaction scores identically to today.
 
@@ -50,15 +50,15 @@ same key construction, same thresholds) so a given transaction scores identicall
 
 ## HTTP API
 
-FastAPI app (`garda_ai_scoring/api/`). Pydantic v2 request/response models. The API layer
-(transport) is kept separate from `garda_ai_scoring/scoring/` (pure domain) — the domain has no
+FastAPI app (`grafin_ai_scoring/api/`). Pydantic v2 request/response models. The API layer
+(transport) is kept separate from `grafin_ai_scoring/scoring/` (pure domain) — the domain has no
 FastAPI/HTTP imports (separation of concerns; the scorer is testable without the web layer).
 
 **Versioned from day one** (api-design-principles): the score endpoint is mounted under `/v1`
 so a future breaking change can ship as `/v2` without disturbing callers. Ops endpoints
 (`/healthz`, `/readyz`, `/metrics`) are unversioned by convention.
 
-### `POST /v1/score`  (bearer `GARDA_SCORING_TOKEN`)
+### `POST /v1/score`  (bearer `GRAFIN_SCORING_TOKEN`)
 
 Request:
 ```json
@@ -101,9 +101,9 @@ provider preserves determinism (a batch scores identically to N single calls). E
 - `GET /metrics` — Prometheus exposition (see Observability below).
 
 ### Auth & errors
-- A dependency validates `Authorization: Bearer <GARDA_SCORING_TOKEN>`; missing/mismatched → 401.
+- A dependency validates `Authorization: Bearer <GRAFIN_SCORING_TOKEN>`; missing/mismatched → 401.
 - Applies to `/v1/score` only. `/healthz`, `/readyz`, `/metrics` are open (for probes/scrapers).
-- If `GARDA_SCORING_TOKEN` is unset in config, the app fails fast at startup (no unauthenticated
+- If `GRAFIN_SCORING_TOKEN` is unset in config, the app fails fast at startup (no unauthenticated
   score endpoint by accident).
 - **HTTP status semantics** (api-design-principles): 200 success; 401 auth failure; 422 request
   validation (FastAPI/pydantic default); 500 only for genuine server faults. Errors return a
@@ -111,11 +111,11 @@ provider preserves determinism (a batch scores identically to N single calls). E
   handler). Auth/validation failures are expected client errors and are logged at INFO/WARNING,
   never ERROR (python-observability).
 
-## Configuration (pydantic-settings, `GARDA_` env prefix)
+## Configuration (pydantic-settings, `GRAFIN_` env prefix)
 
 - `scorer: str = "label_replay"` — selects the provider via `get_scorer`.
 - `scoring_token: str` (required) — the bearer token.
-- `seed: str = "garda"`, `fn_rate: float = 0.05`, `fp_rate: float = 0.04` — passed to
+- `seed: str = "grafin"`, `fn_rate: float = 0.05`, `fp_rate: float = 0.04` — passed to
   `LabelReplayScorer`.
 - `log_level: str = "INFO"`.
 - Thresholds stay as the `deterministic.py` module constants (0.8 / 0.5) for Phase 1 — not
@@ -134,10 +134,10 @@ header. This lets a `/ingest`→`/v1/score` call chain (Phase 2) be traced end-t
 id.
 
 **Metrics — the RED signals, bounded cardinality** (metric names `prefix_name_unit`, base units):
-- `garda_scoring_requests_total{endpoint,method,status_code}` — counter (traffic + errors).
-- `garda_scoring_request_duration_seconds{endpoint,method}` — histogram (latency); buckets tuned
+- `grafin_scoring_requests_total{endpoint,method,status_code}` — counter (traffic + errors).
+- `grafin_scoring_request_duration_seconds{endpoint,method}` — histogram (latency); buckets tuned
   for a fast scorer (e.g. 1ms…250ms), informed by the SLO below.
-- `garda_scoring_transactions_scored_total{status}` — counter over the **bounded** result status
+- `grafin_scoring_transactions_scored_total{status}` — counter over the **bounded** result status
   (`approved|flagged|blocked`, 3 values) — useful signal on how much traffic is being flagged.
 
 Labels are strictly bounded: only the path **template** (not raw paths), method, status_code, and
@@ -156,7 +156,7 @@ batch. Recorded as a note here; full SLO/alerting rules land with the deploy/obs
   `pyright`) — the domain is fully typed and type-checking runs in CI (python-type-safety).
 - Own-context `Dockerfile` (two-phase `uv sync --frozen --no-dev` — same shape as the backend /
   the decoupled pipeline), tracked `.dockerignore`, `.env.example`.
-- Console entry / `CMD`: `uvicorn garda_ai_scoring.api.app:app --host 0.0.0.0 --port 8000`.
+- Console entry / `CMD`: `uvicorn grafin_ai_scoring.api.app:app --host 0.0.0.0 --port 8000`.
 - Minimal CI: a GitHub Actions workflow running `ruff check` + type-check + `pytest` on push/PR.
   The build-and-deploy pipeline is Phase 6.
 
@@ -174,7 +174,7 @@ plugin practices. Concretely, for this service:
   function set (no I/O, no logging), so it is trivially unit-testable and the ML swap is isolated.
 - **Python** (python-development): uv project + locked deps (uv-package-manager); ruff
   format/lint (python-code-style); full type hints + CI type-check (python-type-safety);
-  pydantic-settings with `GARDA_` prefix and fail-fast validation (python-configuration);
+  pydantic-settings with `GRAFIN_` prefix and fail-fast validation (python-configuration);
   validation-first error handling with pydantic, no swallowed exceptions (python-error-handling);
   async endpoints, and if the scorer ever becomes CPU-heavy it moves to a threadpool executor to
   avoid blocking the event loop (async-python-patterns — noted, not needed for the sha256 scorer);
@@ -211,5 +211,5 @@ logging/metrics/correlation-id instrumentation meets the standards.
 ## C4 documentation (deliverable)
 
 After implementation, generate C4 Component + Code docs for this repo via the c4-architecture
-plugin into `garda-ai-scoring/docs/c4/` (consistent with the other repos). The system-level
-Context/Container in `garda-ai-deploy` is updated when Phase 2 wires the backend to this service.
+plugin into `grafin-ai-scoring/docs/c4/` (consistent with the other repos). The system-level
+Context/Container in `grafin-ai-deploy` is updated when Phase 2 wires the backend to this service.

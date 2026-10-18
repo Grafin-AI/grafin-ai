@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from garda_ai_scoring.scoring import ScoringProvider
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.precomputed import PrecomputedScorer
-from garda_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
+from grafin_ai_scoring.scoring import ScoringProvider
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.precomputed import PrecomputedScorer
+from grafin_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
 
 SCORES = Path(__file__).parent / "data" / "scores.csv"
 GNN = "Anomali Jaringan (GNN)"
@@ -78,23 +78,23 @@ def test_bad_files_raise(tmp_path: Path) -> None:
 def test_factory_selects_precomputed(tmp_path: Path) -> None:
     s = get_scorer("precomputed", scores_path=SCORES)
     assert isinstance(s, PrecomputedScorer) and isinstance(s, ScoringProvider)
-    with pytest.raises(ValueError, match="GARDA_SCORES_PATH"):
+    with pytest.raises(ValueError, match="GRAFIN_SCORES_PATH"):
         get_scorer("precomputed")
-    with pytest.raises(ValueError, match="GARDA_SCORES_PATH"):
+    with pytest.raises(ValueError, match="GRAFIN_SCORES_PATH"):
         get_scorer("precomputed", scores_path=tmp_path / "missing.csv")
 
 
 @pytest.fixture
 def precomputed_client(token, monkeypatch):
-    from garda_ai_scoring.api.routes import _provider
-    from garda_ai_scoring.config import get_settings
+    from grafin_ai_scoring.api.routes import _provider
+    from grafin_ai_scoring.config import get_settings
 
-    monkeypatch.setenv("GARDA_SCORING_TOKEN", token)
-    monkeypatch.setenv("GARDA_SCORER", "precomputed")
-    monkeypatch.setenv("GARDA_SCORES_PATH", str(SCORES))
+    monkeypatch.setenv("GRAFIN_SCORING_TOKEN", token)
+    monkeypatch.setenv("GRAFIN_SCORER", "precomputed")
+    monkeypatch.setenv("GRAFIN_SCORES_PATH", str(SCORES))
     get_settings.cache_clear()
     _provider.cache_clear()
-    from garda_ai_scoring.api.app import app
+    from grafin_ai_scoring.api.app import app
 
     with TestClient(app) as c:  # runs the lifespan: scorer built at startup
         yield c

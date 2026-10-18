@@ -16,8 +16,8 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_scoring
+        run: uv run mypy grafin_ai_scoring
       - name: Test
         env:
-          GARDA_SCORING_TOKEN: ci-token
+          GRAFIN_SCORING_TOKEN: ci-token
         run: uv run pytest -q

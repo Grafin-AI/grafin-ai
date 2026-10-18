@@ -3,8 +3,8 @@ from decimal import Decimal
 
 import pytest
 
-from garda_ai_scoring.scoring.label_replay import LabelReplayScorer
-from garda_ai_scoring.scoring.types import ScoringContext, TxnInput
+from grafin_ai_scoring.scoring.label_replay import LabelReplayScorer
+from grafin_ai_scoring.scoring.types import ScoringContext, TxnInput
 
 
 def _txn(tid: int, laundering: bool) -> TxnInput:

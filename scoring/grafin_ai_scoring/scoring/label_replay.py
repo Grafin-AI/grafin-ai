@@ -1,5 +1,5 @@
-from garda_ai_scoring.scoring.deterministic import status_for, typology_for, unit_hash
-from garda_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
+from grafin_ai_scoring.scoring.deterministic import status_for, typology_for, unit_hash
+from grafin_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
 
 
 class LabelReplayScorer:
@@ -9,7 +9,7 @@ class LabelReplayScorer:
 
     def __init__(
         self,
-        seed: str = "garda",
+        seed: str = "grafin",
         fn_rate: float = 0.05,
         fp_rate: float = 0.04,
     ) -> None:

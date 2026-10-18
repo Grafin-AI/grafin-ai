@@ -6,20 +6,20 @@ from prometheus_client import CollectorRegistry, Counter, Histogram
 REGISTRY = CollectorRegistry()
 
 REQUEST_COUNT = Counter(
-    "garda_scoring_requests_total",
+    "grafin_scoring_requests_total",
     "Total HTTP requests",
     ["endpoint", "method", "status_code"],
     registry=REGISTRY,
 )
 REQUEST_DURATION = Histogram(
-    "garda_scoring_request_duration_seconds",
+    "grafin_scoring_request_duration_seconds",
     "HTTP request duration in seconds",
     ["endpoint", "method"],
     buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25),
     registry=REGISTRY,
 )
 TRANSACTIONS_SCORED = Counter(
-    "garda_scoring_transactions_scored_total",
+    "grafin_scoring_transactions_scored_total",
     "Transactions scored, by result status",
     ["status"],  # bounded: approved | flagged | blocked
     registry=REGISTRY,

@@ -1,5 +1,5 @@
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.types import ScoringContext, TxnInput
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.types import ScoringContext, TxnInput
 
 _TXN = {
     "transaction_id": 123,

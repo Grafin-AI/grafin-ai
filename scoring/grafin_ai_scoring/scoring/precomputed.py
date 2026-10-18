@@ -4,7 +4,7 @@ from array import array
 from bisect import bisect_left
 from pathlib import Path
 
-from garda_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
+from grafin_ai_scoring.scoring.types import ScoringContext, ScoringResult, TxnInput
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ _MISS = ScoringResult(fraud_score=0.0, typology=None, status="approved")
 
 
 class PrecomputedScorer:
-    """Serves model scores exported offline (`garda-train export-scores`): a lookup by
+    """Serves model scores exported offline (`grafin-train export-scores`): a lookup by
     transaction_id in ``scores.csv``. Never reads ``is_laundering``. Unknown ids are approved
     with score 0.0 (never raises: one error would fail the backend's whole batch).
 

@@ -1,8 +1,8 @@
 import pytest
 
-from garda_ai_scoring.scoring import ScoringProvider
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.label_replay import LabelReplayScorer
+from grafin_ai_scoring.scoring import ScoringProvider
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.label_replay import LabelReplayScorer
 
 
 def test_get_label_replay():

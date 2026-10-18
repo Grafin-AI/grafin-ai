@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from garda_ai_scoring.scoring.types import (
+from grafin_ai_scoring.scoring.types import (
     ScoringContext,
     ScoringProvider,
     ScoringResult,

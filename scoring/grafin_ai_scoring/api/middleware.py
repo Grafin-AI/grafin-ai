@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from garda_ai_scoring.observability import REQUEST_COUNT, REQUEST_DURATION
+from grafin_ai_scoring.observability import REQUEST_COUNT, REQUEST_DURATION
 
 _logger = structlog.get_logger()
 

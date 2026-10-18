@@ -2,7 +2,7 @@ import hmac
 
 from fastapi import Header, HTTPException, status
 
-from garda_ai_scoring.config import get_settings
+from grafin_ai_scoring.config import get_settings
 
 
 def _verify(authorization: str | None, token: str) -> None:

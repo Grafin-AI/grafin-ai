@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from garda_ai_scoring.scoring.label_replay import LabelReplayScorer
-from garda_ai_scoring.scoring.precomputed import PrecomputedScorer
-from garda_ai_scoring.scoring.types import ScoringProvider
+from grafin_ai_scoring.scoring.label_replay import LabelReplayScorer
+from grafin_ai_scoring.scoring.precomputed import PrecomputedScorer
+from grafin_ai_scoring.scoring.types import ScoringProvider
 
 
 def get_scorer(
     name: str,
     *,
-    seed: str = "garda",
+    seed: str = "grafin",
     fn_rate: float = 0.05,
     fp_rate: float = 0.04,
     scores_path: Path | None = None,
@@ -19,8 +19,8 @@ def get_scorer(
     if name == "precomputed":
         if scores_path is None or not scores_path.is_file():
             raise ValueError(
-                "scorer 'precomputed' needs GARDA_SCORES_PATH set to an existing scores.csv "
-                f"(from `garda-train export-scores`); got {scores_path}"
+                "scorer 'precomputed' needs GRAFIN_SCORES_PATH set to an existing scores.csv "
+                f"(from `grafin-train export-scores`); got {scores_path}"
             )
         return PrecomputedScorer(scores_path)
     if name == "ml":

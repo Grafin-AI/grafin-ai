@@ -9,11 +9,11 @@
 # Then:   make deploy
 -include deploy.env
 
-SERVICE    := garda-scoring
+SERVICE    := grafin-scoring
 IMAGE_NAME := scoring
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy

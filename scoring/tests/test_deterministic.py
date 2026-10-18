@@ -1,4 +1,4 @@
-from garda_ai_scoring.scoring.deterministic import TYPOLOGIES, status_for, unit_hash
+from grafin_ai_scoring.scoring.deterministic import TYPOLOGIES, status_for, unit_hash
 
 
 def test_unit_hash_in_range_and_stable():

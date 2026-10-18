@@ -12,14 +12,14 @@ def test_metrics_exposes_red_series(client, auth):
         "amount": "1.00", "payment_format": "ACH", "is_laundering": False,
         "event_time": "2026-06-25T09:00:00Z"}]}, headers=auth)
     body = client.get("/metrics").text
-    assert "garda_scoring_requests_total" in body
-    assert "garda_scoring_request_duration_seconds" in body
-    assert "garda_scoring_transactions_scored_total" in body
+    assert "grafin_scoring_requests_total" in body
+    assert "grafin_scoring_request_duration_seconds" in body
+    assert "grafin_scoring_transactions_scored_total" in body
 
     # Assert a real observed sample value, not just the metric name.
     # prometheus_client emits labels in declared order: endpoint, method, status_code.
     req_pattern = re.compile(
-        r'^garda_scoring_requests_total\{[^}]*'
+        r'^grafin_scoring_requests_total\{[^}]*'
         r'endpoint="/v1/score"[^}]*method="POST"[^}]*status_code="200"[^}]*\}\s+'
         r'([0-9.eE+]+)$',
         re.MULTILINE,
@@ -29,7 +29,7 @@ def test_metrics_exposes_red_series(client, auth):
     assert float(match.group(1)) >= 1.0
 
     scored_pattern = re.compile(
-        r'^garda_scoring_transactions_scored_total\{status="[^"]+"\}\s+([0-9.eE+]+)$',
+        r'^grafin_scoring_transactions_scored_total\{status="[^"]+"\}\s+([0-9.eE+]+)$',
         re.MULTILINE,
     )
     scored = scored_pattern.search(body)
@@ -51,8 +51,8 @@ def test_error_path_still_records_metrics():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from garda_ai_scoring.api.middleware import ObservabilityMiddleware
-    from garda_ai_scoring.observability import REQUEST_COUNT
+    from grafin_ai_scoring.api.middleware import ObservabilityMiddleware
+    from grafin_ai_scoring.observability import REQUEST_COUNT
 
     app = FastAPI()
     app.add_middleware(ObservabilityMiddleware)

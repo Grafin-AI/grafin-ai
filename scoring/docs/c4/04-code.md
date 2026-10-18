@@ -1,12 +1,12 @@
-# C4 Code Level: garda_ai_scoring
+# C4 Code Level: grafin_ai_scoring
 
 ## Overview
 
-- **Name**: Garda AI Scoring — Python Package
+- **Name**: Grafin AI Scoring — Python Package
 - **Description**: Stateless, transaction-scoring microservice that receives fraud transaction batches via HMAC-authenticated HTTP, scores them using a pluggable `ScoringProvider`, and returns fraud scores, typologies, and dispositions. Implements Phase-1 label-replay scoring deterministically from ground-truth labels; Phase-2 ML-model scoring (via HTTP to an external service) is a planned expansion. Exports RED metrics (request count, duration, transactions scored) and structured JSON logs with correlation IDs.
-- **Location**: [`garda_ai_scoring/`](../../garda_ai_scoring/)
+- **Location**: [`grafin_ai_scoring/`](../../grafin_ai_scoring/)
 - **Language**: Python 3.12+
-- **Purpose**: Accept transaction batch-scoring requests over HTTPS, score transactions deterministically using pluggable scorers, and return results with fraud metrics for the label-replay phase of the Garda AI AML platform.
+- **Purpose**: Accept transaction batch-scoring requests over HTTPS, score transactions deterministically using pluggable scorers, and return results with fraud metrics for the label-replay phase of the Grafin AI AML platform.
 - **Version**: `0.1.0` (declared in `pyproject.toml`)
 
 ---
@@ -32,7 +32,7 @@
 
 ## Module: `config`
 
-- **File**: [`garda_ai_scoring/config.py`](../../garda_ai_scoring/config.py)
+- **File**: [`grafin_ai_scoring/config.py`](../../grafin_ai_scoring/config.py)
 - **External dependencies**: `pydantic-settings`, `pydantic.Field`, `functools.lru_cache`
 
 ### Class: `Settings`
@@ -43,14 +43,14 @@ class Settings(BaseSettings)
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
-| `scoring_token` | `str` | required (min_length=1) | Bearer token for `/v1/score` authentication; read from `GARDA_SCORING_TOKEN` env var. Validates non-empty at startup (fail-closed). |
+| `scoring_token` | `str` | required (min_length=1) | Bearer token for `/v1/score` authentication; read from `GRAFIN_SCORING_TOKEN` env var. Validates non-empty at startup (fail-closed). |
 | `scorer` | `str` | `"label_replay"` | Scorer provider name; passed to `get_scorer()`. Accepted: `"label_replay"` (Phase 1); `"ml"` raises `ValueError`. |
-| `seed` | `str` | `"garda"` | Scorer seed for deterministic hash-based randomness; injected into every hash key. Change to produce statistically independent but equally deterministic scoring runs. |
+| `seed` | `str` | `"grafin"` | Scorer seed for deterministic hash-based randomness; injected into every hash key. Change to produce statistically independent but equally deterministic scoring runs. |
 | `fn_rate` | `float` | `0.05` | Fraction of truly laundering transactions scored low (false negatives). Passed to `LabelReplayScorer`. |
 | `fp_rate` | `float` | `0.04` | Fraction of clean transactions scored high (false positives). Passed to `LabelReplayScorer`. |
 | `log_level` | `str` | `"INFO"` | Python logging level string; passed to `configure_logging`. |
 
-**Configuration**: reads environment variables with prefix `GARDA_`; optionally from `.env`. Extra variables are silently ignored (`extra="ignore"`). Requires `GARDA_SCORING_TOKEN` to be set at startup (non-empty string).
+**Configuration**: reads environment variables with prefix `GRAFIN_`; optionally from `.env`. Extra variables are silently ignored (`extra="ignore"`). Requires `GRAFIN_SCORING_TOKEN` to be set at startup (non-empty string).
 
 **Inherits from**: `pydantic_settings.BaseSettings`
 
@@ -69,7 +69,7 @@ def get_settings() -> Settings
 
 ## Module: `observability`
 
-- **File**: [`garda_ai_scoring/observability.py`](../../garda_ai_scoring/observability.py)
+- **File**: [`grafin_ai_scoring/observability.py`](../../grafin_ai_scoring/observability.py)
 - **External dependencies**: `prometheus_client` (CollectorRegistry, Counter, Histogram), `structlog`, `logging`
 
 ### Module-level objects
@@ -77,9 +77,9 @@ def get_settings() -> Settings
 | Name | Type | Description |
 |---|---|---|
 | `REGISTRY` | `prometheus_client.CollectorRegistry` | Isolated Prometheus registry; avoids polluting the global default registry |
-| `REQUEST_COUNT` | `prometheus_client.Counter` | Counter `garda_scoring_requests_total` with labels `endpoint`, `method`, `status_code`. Incremented by `ObservabilityMiddleware`. |
-| `REQUEST_DURATION` | `prometheus_client.Histogram` | Histogram `garda_scoring_request_duration_seconds` with labels `endpoint`, `method`; buckets: (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25) seconds. Observed by `ObservabilityMiddleware`. |
-| `TRANSACTIONS_SCORED` | `prometheus_client.Counter` | Counter `garda_scoring_transactions_scored_total` with label `status` (bounded: `"approved"` \| `"flagged"` \| `"blocked"`). Incremented by `/v1/score` route handler per transaction result. |
+| `REQUEST_COUNT` | `prometheus_client.Counter` | Counter `grafin_scoring_requests_total` with labels `endpoint`, `method`, `status_code`. Incremented by `ObservabilityMiddleware`. |
+| `REQUEST_DURATION` | `prometheus_client.Histogram` | Histogram `grafin_scoring_request_duration_seconds` with labels `endpoint`, `method`; buckets: (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25) seconds. Observed by `ObservabilityMiddleware`. |
+| `TRANSACTIONS_SCORED` | `prometheus_client.Counter` | Counter `grafin_scoring_transactions_scored_total` with label `status` (bounded: `"approved"` \| `"flagged"` \| `"blocked"`). Incremented by `/v1/score` route handler per transaction result. |
 
 ### Function: `configure_logging`
 
@@ -95,7 +95,7 @@ def configure_logging(level: str = "INFO") -> None
 
 ## Module: `scoring.types`
 
-- **File**: [`garda_ai_scoring/scoring/types.py`](../../garda_ai_scoring/scoring/types.py)
+- **File**: [`grafin_ai_scoring/scoring/types.py`](../../grafin_ai_scoring/scoring/types.py)
 - **External dependencies**: `dataclasses`, `typing.Protocol`, `typing.runtime_checkable`
 
 The types module defines the shared data contracts for the scoring subsystem. Every scorer — present and future — consumes `TxnInput` + `ScoringContext` and produces `ScoringResult`. `ScoringProvider` is the `Protocol` that any scorer implementation must satisfy, enabling transport-agnostic seam between in-process (Phase 1) and remote (Phase 2) scorers.
@@ -156,7 +156,7 @@ class ScoringProvider(Protocol)
 
 ## Module: `scoring.deterministic`
 
-- **File**: [`garda_ai_scoring/scoring/deterministic.py`](../../garda_ai_scoring/scoring/deterministic.py)
+- **File**: [`grafin_ai_scoring/scoring/deterministic.py`](../../grafin_ai_scoring/scoring/deterministic.py)
 - **External dependencies**: `hashlib`
 
 The deterministic module provides pure, stateless utility functions that the label-replay scorer (and any future scorers) rely on for reproducible, hash-derived randomness. Nothing here is probabilistic or time-dependent; identical inputs always produce identical outputs.
@@ -208,7 +208,7 @@ def typology_for(key: str) -> str
 
 ## Module: `scoring.label_replay`
 
-- **File**: [`garda_ai_scoring/scoring/label_replay.py`](../../garda_ai_scoring/scoring/label_replay.py)
+- **File**: [`grafin_ai_scoring/scoring/label_replay.py`](../../grafin_ai_scoring/scoring/label_replay.py)
 - **External dependencies**: none (only internal scoring imports)
 - **Internal dependencies**: `scoring.deterministic.{unit_hash, status_for, typology_for}`, `scoring.types.{TxnInput, ScoringContext, ScoringResult}`
 
@@ -226,12 +226,12 @@ class LabelReplayScorer
 
 ```python
 def __init__(
-    self, seed: str = "garda", fn_rate: float = 0.05, fp_rate: float = 0.04
+    self, seed: str = "grafin", fn_rate: float = 0.05, fp_rate: float = 0.04
 ) -> None
 ```
 
 - **Parameters**:
-  - `seed: str` — namespace prefix injected into every hash key. Change to produce statistically independent but equally deterministic scoring. Default: `"garda"`.
+  - `seed: str` — namespace prefix injected into every hash key. Change to produce statistically independent but equally deterministic scoring. Default: `"grafin"`.
   - `fn_rate: float` — fraction of truly laundering transactions scored low (false negatives, score ∈ [0.10, 0.40)). Default: `0.05` (5%).
   - `fp_rate: float` — fraction of clean transactions scored high (false positives, score ∈ [0.55, 0.95)). Default: `0.04` (4%).
 
@@ -263,7 +263,7 @@ async def score(self, txn: TxnInput, ctx: ScoringContext) -> ScoringResult
 
 ## Module: `scoring.factory`
 
-- **File**: [`garda_ai_scoring/scoring/factory.py`](../../garda_ai_scoring/scoring/factory.py)
+- **File**: [`grafin_ai_scoring/scoring/factory.py`](../../grafin_ai_scoring/scoring/factory.py)
 - **External dependencies**: none
 - **Internal dependencies**: `scoring.label_replay.LabelReplayScorer`, `scoring.types.ScoringProvider`
 
@@ -273,7 +273,7 @@ The factory module is the single resolution point where the string name from `Se
 
 ```python
 def get_scorer(
-    name: str, *, seed: str = "garda", fn_rate: float = 0.05, fp_rate: float = 0.04
+    name: str, *, seed: str = "grafin", fn_rate: float = 0.05, fp_rate: float = 0.04
 ) -> ScoringProvider
 ```
 
@@ -296,7 +296,7 @@ def get_scorer(
 
 ## Module: `api.schemas`
 
-- **File**: [`garda_ai_scoring/api/schemas.py`](../../garda_ai_scoring/api/schemas.py)
+- **File**: [`grafin_ai_scoring/api/schemas.py`](../../grafin_ai_scoring/api/schemas.py)
 - **External dependencies**: `pydantic` (BaseModel, Field), `typing` (Literal, Annotated), `datetime`, `decimal`
 
 ### Type Aliases
@@ -360,7 +360,7 @@ class ScoreResponse(BaseModel)
 
 ## Module: `api.auth`
 
-- **File**: [`garda_ai_scoring/api/auth.py`](../../garda_ai_scoring/api/auth.py)
+- **File**: [`grafin_ai_scoring/api/auth.py`](../../grafin_ai_scoring/api/auth.py)
 - **External dependencies**: `hmac`, `fastapi` (Header, HTTPException, status)
 - **Internal dependencies**: `config.get_settings`
 
@@ -393,7 +393,7 @@ def require_token(authorization: str | None = Header(default=None)) -> None
 
 ## Module: `api.middleware`
 
-- **File**: [`garda_ai_scoring/api/middleware.py`](../../garda_ai_scoring/api/middleware.py)
+- **File**: [`grafin_ai_scoring/api/middleware.py`](../../grafin_ai_scoring/api/middleware.py)
 - **External dependencies**: `starlette.middleware.base.BaseHTTPMiddleware`, `starlette.requests.Request`, `starlette.responses.Response`, `starlette.types.ASGIApp`, `time`, `uuid`, `structlog`
 - **Internal dependencies**: `observability.{REQUEST_COUNT, REQUEST_DURATION}`
 
@@ -442,7 +442,7 @@ async def dispatch(
 
 ## Module: `api.routes`
 
-- **File**: [`garda_ai_scoring/api/routes.py`](../../garda_ai_scoring/api/routes.py)
+- **File**: [`grafin_ai_scoring/api/routes.py`](../../grafin_ai_scoring/api/routes.py)
 - **External dependencies**: `fastapi` (APIRouter, Depends), `functools.lru_cache`, `typing.cast`
 - **Internal dependencies**: `api.auth.require_token`, `api.schemas.{ScoreRequest, ScoreResponse, ScoreResultItem, Status}`, `config.get_settings`, `observability.TRANSACTIONS_SCORED`, `scoring.factory.get_scorer`, `scoring.types.{TxnInput, ScoringContext, ScoringProvider}`
 
@@ -490,7 +490,7 @@ async def score(body: ScoreRequest) -> ScoreResponse
 
 ## Module: `api.app`
 
-- **File**: [`garda_ai_scoring/api/app.py`](../../garda_ai_scoring/api/app.py)
+- **File**: [`grafin_ai_scoring/api/app.py`](../../grafin_ai_scoring/api/app.py)
 - **External dependencies**: `fastapi.FastAPI`, `fastapi.Response`, `prometheus_client.{CONTENT_TYPE_LATEST, generate_latest}`
 - **Internal dependencies**: `api.middleware.ObservabilityMiddleware`, `api.routes.router`, `config.get_settings`, `observability.{REGISTRY, configure_logging}`
 
@@ -499,17 +499,17 @@ async def score(body: ScoreRequest) -> ScoreResponse
 **At import time, side effects execute**:
 
 ```python
-settings = get_settings()  # validates config (fails fast if GARDA_SCORING_TOKEN unset)
+settings = get_settings()  # validates config (fails fast if GRAFIN_SCORING_TOKEN unset)
 configure_logging(settings.log_level)
 ```
 
-- `get_settings()` is called once; if `GARDA_SCORING_TOKEN` is missing or empty, `pydantic` raises `ValidationError` and prevents app startup (fail-closed)
+- `get_settings()` is called once; if `GRAFIN_SCORING_TOKEN` is missing or empty, `pydantic` raises `ValidationError` and prevents app startup (fail-closed)
 - `configure_logging()` is called to initialize `structlog` JSON output and Python logging level
 
 ### Object: `app`
 
 ```python
-app = FastAPI(title="Garda AI Scoring", version="0.1.0")
+app = FastAPI(title="Grafin AI Scoring", version="0.1.0")
 app.add_middleware(ObservabilityMiddleware)
 app.include_router(scoring_router)
 ```
@@ -551,7 +551,7 @@ async def metrics() -> Response
 
 ## Dependencies
 
-### Internal Dependencies (within `garda_ai_scoring`)
+### Internal Dependencies (within `grafin_ai_scoring`)
 
 | Importer | Imported From | Symbol |
 |---|---|---|
@@ -684,7 +684,7 @@ flowchart LR
 
 ```mermaid
 ---
-title: Dependency Graph — garda_ai_scoring
+title: Dependency Graph — grafin_ai_scoring
 ---
 flowchart TB
     subgraph App ["App Startup"]
@@ -734,7 +734,7 @@ flowchart TB
     label_replay --> deterministic
     label_replay --> types
     
-    settings -.->|"GARDA_SCORING_TOKEN\nGARDA_SCORER\nGARDA_SEED\netc"| environment["Environment\nVariables"]
+    settings -.->|"GRAFIN_SCORING_TOKEN\nGRAFIN_SCORER\nGRAFIN_SEED\netc"| environment["Environment\nVariables"]
 ```
 
 ---

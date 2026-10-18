@@ -3,17 +3,17 @@ from typing import cast
 
 from fastapi import APIRouter, Depends
 
-from garda_ai_scoring.api.auth import require_token
-from garda_ai_scoring.api.schemas import (
+from grafin_ai_scoring.api.auth import require_token
+from grafin_ai_scoring.api.schemas import (
     ScoreRequest,
     ScoreResponse,
     ScoreResultItem,
     Status,
 )
-from garda_ai_scoring.config import get_settings
-from garda_ai_scoring.observability import TRANSACTIONS_SCORED
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnInput
+from grafin_ai_scoring.config import get_settings
+from grafin_ai_scoring.observability import TRANSACTIONS_SCORED
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnInput
 
 router = APIRouter(prefix="/v1", tags=["scoring"])
 

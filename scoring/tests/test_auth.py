@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_scoring.api.auth import _verify
+from grafin_ai_scoring.api.auth import _verify
 
 
 def test_verify_accepts_matching():

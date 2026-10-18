@@ -1,29 +1,29 @@
-# garda-ai-scoring Service Implementation Plan
+# grafin-ai-scoring Service Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extract the pipeline's scorer into a standalone, stateless `garda-ai-scoring` FastAPI service exposing a versioned, token-gated batch `POST /v1/score`, instrumented per the backend/python/observability plugin standards.
+**Goal:** Extract the pipeline's scorer into a standalone, stateless `grafin-ai-scoring` FastAPI service exposing a versioned, token-gated batch `POST /v1/score`, instrumented per the backend/python/observability plugin standards.
 
 **Architecture:** Pure domain (`scoring/`, a faithful behavior-identical port) kept separate from the transport layer (`api/`). RED metrics + structured logs + correlation IDs. No DB, no Redis — the response is a pure function of the request.
 
-**Tech Stack:** Python 3.12, uv, FastAPI, uvicorn, pydantic v2 + pydantic-settings, structlog, prometheus-client, pytest + httpx, ruff + mypy. Mirrors `garda-ai-backend` conventions.
+**Tech Stack:** Python 3.12, uv, FastAPI, uvicorn, pydantic v2 + pydantic-settings, structlog, prometheus-client, pytest + httpx, ruff + mypy. Mirrors `grafin-ai-backend` conventions.
 
-**Spec:** `docs/superpowers/specs/2026-06-25-scoring-service-design.md`. **Anchor:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`.
+**Spec:** `docs/superpowers/specs/2026-06-25-scoring-service-design.md`. **Anchor:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`.
 
 ---
 
 ## File structure
 
 ```
-garda-ai-scoring/
+grafin-ai-scoring/
 ├── pyproject.toml                      # uv project + deps + ruff/mypy/pytest config
 ├── .python-version                     # 3.12
-├── .env.example                        # GARDA_SCORING_TOKEN=...
+├── .env.example                        # GRAFIN_SCORING_TOKEN=...
 ├── .dockerignore
 ├── Dockerfile                          # own-context, two-phase uv sync
 ├── README.md
 ├── .github/workflows/ci.yml            # ruff + mypy + pytest
-├── garda_ai_scoring/
+├── grafin_ai_scoring/
 │   ├── __init__.py
 │   ├── config.py                       # pydantic-settings (fail-fast token)
 │   ├── observability.py                # registry + RED metrics + structlog config
@@ -57,13 +57,13 @@ garda-ai-scoring/
 ### Task 1: Scaffold the uv project
 
 **Files:**
-- Create: `pyproject.toml`, `.python-version`, `garda_ai_scoring/__init__.py`, `garda_ai_scoring/scoring/__init__.py`, `garda_ai_scoring/api/__init__.py`, `tests/__init__.py`
+- Create: `pyproject.toml`, `.python-version`, `grafin_ai_scoring/__init__.py`, `grafin_ai_scoring/scoring/__init__.py`, `grafin_ai_scoring/api/__init__.py`, `tests/__init__.py`
 
 - [ ] **Step 1: Create `pyproject.toml`**
 
 ```toml
 [project]
-name = "garda-ai-scoring"
+name = "grafin-ai-scoring"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -109,7 +109,7 @@ build-backend = "hatchling.build"
 
 - [ ] **Step 3: Create the empty package markers**
 
-Create empty files: `garda_ai_scoring/__init__.py`, `garda_ai_scoring/scoring/__init__.py`, `garda_ai_scoring/api/__init__.py`, `tests/__init__.py`.
+Create empty files: `grafin_ai_scoring/__init__.py`, `grafin_ai_scoring/scoring/__init__.py`, `grafin_ai_scoring/api/__init__.py`, `tests/__init__.py`.
 
 - [ ] **Step 4: Sync and verify the toolchain**
 
@@ -121,23 +121,23 @@ Expected: `All checks passed!` (no code yet).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pyproject.toml uv.lock .python-version garda_ai_scoring tests
-git commit -m "chore: scaffold garda-ai-scoring uv project"
+git add pyproject.toml uv.lock .python-version grafin_ai_scoring tests
+git commit -m "chore: scaffold grafin-ai-scoring uv project"
 ```
 
 ---
 
 ### Task 2: Port the scoring domain (behavior-identical)
 
-The domain is copied from `../garda-ai-pipeline/garda_ai_pipeline/scoring/`. Determinism MUST be preserved exactly (same seed/keys/thresholds).
+The domain is copied from `../grafin-ai-pipeline/grafin_ai_pipeline/scoring/`. Determinism MUST be preserved exactly (same seed/keys/thresholds).
 
 **Files:**
-- Create: `garda_ai_scoring/scoring/{types,deterministic,label_replay,factory}.py`
+- Create: `grafin_ai_scoring/scoring/{types,deterministic,label_replay,factory}.py`
 - Test: `tests/{test_types,test_deterministic,test_label_replay,test_scoring_factory}.py`
 
 - [ ] **Step 1: Copy the four domain modules**
 
-Copy each file from `../garda-ai-pipeline/garda_ai_pipeline/scoring/` to `garda_ai_scoring/scoring/` **unchanged except the internal import package**: replace every `garda_ai_pipeline.scoring` with `garda_ai_scoring.scoring`.
+Copy each file from `../grafin-ai-pipeline/grafin_ai_pipeline/scoring/` to `grafin_ai_scoring/scoring/` **unchanged except the internal import package**: replace every `grafin_ai_pipeline.scoring` with `grafin_ai_scoring.scoring`.
 
 Files to copy verbatim (only that import rename): `types.py`, `deterministic.py`, `label_replay.py`.
 
@@ -146,12 +146,12 @@ Files to copy verbatim (only that import rename): `types.py`, `deterministic.py`
 Copy `factory.py`, rename the import, and widen `get_scorer` so the service can inject config (defaults are identical to today, so behavior is unchanged):
 
 ```python
-from garda_ai_scoring.scoring.label_replay import LabelReplayScorer
-from garda_ai_scoring.scoring.types import ScoringProvider
+from grafin_ai_scoring.scoring.label_replay import LabelReplayScorer
+from grafin_ai_scoring.scoring.types import ScoringProvider
 
 
 def get_scorer(
-    name: str, *, seed: str = "garda", fn_rate: float = 0.05, fp_rate: float = 0.04
+    name: str, *, seed: str = "grafin", fn_rate: float = 0.05, fp_rate: float = 0.04
 ) -> ScoringProvider:
     """Select the scoring provider by config name."""
     if name == "label_replay":
@@ -163,7 +163,7 @@ def get_scorer(
 
 - [ ] **Step 3: Port the four domain test files**
 
-Copy from `../garda-ai-pipeline/tests/`: `test_scoring_types.py` → `tests/test_types.py`, `test_deterministic.py`, `test_label_replay.py`, `test_scoring_factory.py`. In each, replace `garda_ai_pipeline.scoring` with `garda_ai_scoring.scoring`. Do not change assertions — they lock the ported behavior.
+Copy from `../grafin-ai-pipeline/tests/`: `test_scoring_types.py` → `tests/test_types.py`, `test_deterministic.py`, `test_label_replay.py`, `test_scoring_factory.py`. In each, replace `grafin_ai_pipeline.scoring` with `grafin_ai_scoring.scoring`. Do not change assertions — they lock the ported behavior.
 
 - [ ] **Step 4: Run the ported tests**
 
@@ -172,11 +172,11 @@ Expected: all pass (the port is behavior-identical). If the factory test constru
 
 - [ ] **Step 5: Type-check + commit**
 
-Run: `uv run mypy garda_ai_scoring/scoring`
+Run: `uv run mypy grafin_ai_scoring/scoring`
 Expected: clean.
 
 ```bash
-git add garda_ai_scoring/scoring tests/test_types.py tests/test_deterministic.py tests/test_label_replay.py tests/test_scoring_factory.py
+git add grafin_ai_scoring/scoring tests/test_types.py tests/test_deterministic.py tests/test_label_replay.py tests/test_scoring_factory.py
 git commit -m "feat: port scoring domain from pipeline (behavior-identical)"
 ```
 
@@ -185,7 +185,7 @@ git commit -m "feat: port scoring domain from pipeline (behavior-identical)"
 ### Task 3: Configuration (fail-fast token)
 
 **Files:**
-- Create: `garda_ai_scoring/config.py`
+- Create: `grafin_ai_scoring/config.py`
 - Test: `tests/test_config.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -195,21 +195,21 @@ git commit -m "feat: port scoring domain from pipeline (behavior-identical)"
 import pytest
 from pydantic import ValidationError
 
-from garda_ai_scoring.config import Settings
+from grafin_ai_scoring.config import Settings
 
 
 def test_settings_require_token(monkeypatch):
-    monkeypatch.delenv("GARDA_SCORING_TOKEN", raising=False)
+    monkeypatch.delenv("GRAFIN_SCORING_TOKEN", raising=False)
     with pytest.raises(ValidationError):
         Settings()
 
 
 def test_settings_defaults(monkeypatch):
-    monkeypatch.setenv("GARDA_SCORING_TOKEN", "s3cret")
+    monkeypatch.setenv("GRAFIN_SCORING_TOKEN", "s3cret")
     s = Settings()
     assert s.scoring_token == "s3cret"
     assert s.scorer == "label_replay"
-    assert s.seed == "garda"
+    assert s.seed == "grafin"
     assert s.fn_rate == 0.05
     assert s.fp_rate == 0.04
 ```
@@ -217,9 +217,9 @@ def test_settings_defaults(monkeypatch):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/test_config.py -q`
-Expected: FAIL (`ModuleNotFoundError: garda_ai_scoring.config`).
+Expected: FAIL (`ModuleNotFoundError: grafin_ai_scoring.config`).
 
-- [ ] **Step 3: Implement `garda_ai_scoring/config.py`**
+- [ ] **Step 3: Implement `grafin_ai_scoring/config.py`**
 
 ```python
 from functools import lru_cache
@@ -228,13 +228,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GRAFIN_", env_file=".env", extra="ignore")
 
     # Required — the app must never expose /v1/score without a token (fail fast at startup).
     scoring_token: str
 
     scorer: str = "label_replay"
-    seed: str = "garda"
+    seed: str = "grafin"
     fn_rate: float = 0.05
     fp_rate: float = 0.04
     log_level: str = "INFO"
@@ -248,12 +248,12 @@ def get_settings() -> Settings:
 - [ ] **Step 4: Run to verify it passes + type-check**
 
 Run: `uv run pytest tests/test_config.py -q` → PASS.
-Run: `uv run mypy garda_ai_scoring/config.py` → clean.
+Run: `uv run mypy grafin_ai_scoring/config.py` → clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_scoring/config.py tests/test_config.py
+git add grafin_ai_scoring/config.py tests/test_config.py
 git commit -m "feat: pydantic-settings config with fail-fast scoring token"
 ```
 
@@ -262,9 +262,9 @@ git commit -m "feat: pydantic-settings config with fail-fast scoring token"
 ### Task 4: Observability (metrics registry + logging)
 
 **Files:**
-- Create: `garda_ai_scoring/observability.py`
+- Create: `grafin_ai_scoring/observability.py`
 
-- [ ] **Step 1: Implement `garda_ai_scoring/observability.py`**
+- [ ] **Step 1: Implement `grafin_ai_scoring/observability.py`**
 
 RED metrics with bounded labels (path *template*, method, status; result status has 3 values). Base-unit seconds histogram with buckets tuned for a fast scorer.
 
@@ -277,20 +277,20 @@ from prometheus_client import CollectorRegistry, Counter, Histogram
 REGISTRY = CollectorRegistry()
 
 REQUEST_COUNT = Counter(
-    "garda_scoring_requests_total",
+    "grafin_scoring_requests_total",
     "Total HTTP requests",
     ["endpoint", "method", "status_code"],
     registry=REGISTRY,
 )
 REQUEST_DURATION = Histogram(
-    "garda_scoring_request_duration_seconds",
+    "grafin_scoring_request_duration_seconds",
     "HTTP request duration in seconds",
     ["endpoint", "method"],
     buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25),
     registry=REGISTRY,
 )
 TRANSACTIONS_SCORED = Counter(
-    "garda_scoring_transactions_scored_total",
+    "grafin_scoring_transactions_scored_total",
     "Transactions scored, by result status",
     ["status"],  # bounded: approved | flagged | blocked
     registry=REGISTRY,
@@ -313,11 +313,11 @@ def configure_logging(level: str = "INFO") -> None:
 
 - [ ] **Step 2: Type-check + commit**
 
-Run: `uv run mypy garda_ai_scoring/observability.py` → clean.
+Run: `uv run mypy grafin_ai_scoring/observability.py` → clean.
 (Observability is exercised via the API tests in Task 7; no standalone test here.)
 
 ```bash
-git add garda_ai_scoring/observability.py
+git add grafin_ai_scoring/observability.py
 git commit -m "feat: observability — RED metrics registry + structlog config"
 ```
 
@@ -326,7 +326,7 @@ git commit -m "feat: observability — RED metrics registry + structlog config"
 ### Task 5: Bearer-token auth dependency
 
 **Files:**
-- Create: `garda_ai_scoring/api/auth.py`
+- Create: `grafin_ai_scoring/api/auth.py`
 - Test: `tests/test_auth.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -336,7 +336,7 @@ git commit -m "feat: observability — RED metrics registry + structlog config"
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_scoring.api.auth import _verify
+from grafin_ai_scoring.api.auth import _verify
 
 
 def test_verify_accepts_matching():
@@ -355,7 +355,7 @@ def test_verify_rejects(header):
 Run: `uv run pytest tests/test_auth.py -q`
 Expected: FAIL (`ModuleNotFoundError`).
 
-- [ ] **Step 3: Implement `garda_ai_scoring/api/auth.py`**
+- [ ] **Step 3: Implement `grafin_ai_scoring/api/auth.py`**
 
 Auth reads the token only from settings; never expose a request-controllable override (avoids a query-param auth bypass).
 
@@ -364,7 +364,7 @@ import hmac
 
 from fastapi import Header, HTTPException, status
 
-from garda_ai_scoring.config import get_settings
+from grafin_ai_scoring.config import get_settings
 
 
 def _verify(authorization: str | None, token: str) -> None:
@@ -389,12 +389,12 @@ def require_token(authorization: str | None = Header(default=None)) -> None:
 - [ ] **Step 4: Run to verify it passes + type-check**
 
 Run: `uv run pytest tests/test_auth.py -q` → PASS.
-Run: `uv run mypy garda_ai_scoring/api/auth.py` → clean.
+Run: `uv run mypy grafin_ai_scoring/api/auth.py` → clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_scoring/api/auth.py tests/test_auth.py
+git add grafin_ai_scoring/api/auth.py tests/test_auth.py
 git commit -m "feat: bearer-token auth dependency (constant-time compare)"
 ```
 
@@ -403,9 +403,9 @@ git commit -m "feat: bearer-token auth dependency (constant-time compare)"
 ### Task 6: API schemas, middleware, routes, app assembly
 
 **Files:**
-- Create: `garda_ai_scoring/api/schemas.py`, `garda_ai_scoring/api/middleware.py`, `garda_ai_scoring/api/routes.py`, `garda_ai_scoring/api/app.py`
+- Create: `grafin_ai_scoring/api/schemas.py`, `grafin_ai_scoring/api/middleware.py`, `grafin_ai_scoring/api/routes.py`, `grafin_ai_scoring/api/app.py`
 
-- [ ] **Step 1: Implement `garda_ai_scoring/api/schemas.py`**
+- [ ] **Step 1: Implement `grafin_ai_scoring/api/schemas.py`**
 
 ```python
 from datetime import datetime
@@ -444,7 +444,7 @@ class ScoreResponse(BaseModel):
     results: list[ScoreResultItem]
 ```
 
-- [ ] **Step 2: Implement `garda_ai_scoring/api/middleware.py`**
+- [ ] **Step 2: Implement `grafin_ai_scoring/api/middleware.py`**
 
 Correlation-id binding + RED metrics, with a bounded path label (route template, or `"unmatched"`).
 
@@ -458,7 +458,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from garda_ai_scoring.observability import REQUEST_COUNT, REQUEST_DURATION
+from grafin_ai_scoring.observability import REQUEST_COUNT, REQUEST_DURATION
 
 _logger = structlog.get_logger()
 
@@ -496,23 +496,23 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-- [ ] **Step 3: Implement `garda_ai_scoring/api/routes.py`**
+- [ ] **Step 3: Implement `grafin_ai_scoring/api/routes.py`**
 
 ```python
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends
 
-from garda_ai_scoring.api.auth import require_token
-from garda_ai_scoring.api.schemas import (
+from grafin_ai_scoring.api.auth import require_token
+from grafin_ai_scoring.api.schemas import (
     ScoreRequest,
     ScoreResponse,
     ScoreResultItem,
 )
-from garda_ai_scoring.config import get_settings
-from garda_ai_scoring.observability import TRANSACTIONS_SCORED
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnInput
+from grafin_ai_scoring.config import get_settings
+from grafin_ai_scoring.observability import TRANSACTIONS_SCORED
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.types import ScoringContext, ScoringProvider, TxnInput
 
 router = APIRouter(prefix="/v1", tags=["scoring"])
 
@@ -551,21 +551,21 @@ async def score(body: ScoreRequest) -> ScoreResponse:
     return ScoreResponse(results=results)
 ```
 
-- [ ] **Step 4: Implement `garda_ai_scoring/api/app.py`**
+- [ ] **Step 4: Implement `grafin_ai_scoring/api/app.py`**
 
 ```python
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from garda_ai_scoring.api.middleware import ObservabilityMiddleware
-from garda_ai_scoring.api.routes import router as scoring_router
-from garda_ai_scoring.config import get_settings
-from garda_ai_scoring.observability import REGISTRY, configure_logging
+from grafin_ai_scoring.api.middleware import ObservabilityMiddleware
+from grafin_ai_scoring.api.routes import router as scoring_router
+from grafin_ai_scoring.config import get_settings
+from grafin_ai_scoring.observability import REGISTRY, configure_logging
 
-settings = get_settings()  # validates config (fails fast if GARDA_SCORING_TOKEN unset)
+settings = get_settings()  # validates config (fails fast if GRAFIN_SCORING_TOKEN unset)
 configure_logging(settings.log_level)
 
-app = FastAPI(title="Garda AI Scoring", version="0.1.0")
+app = FastAPI(title="Grafin AI Scoring", version="0.1.0")
 app.add_middleware(ObservabilityMiddleware)
 app.include_router(scoring_router)
 
@@ -588,12 +588,12 @@ async def metrics() -> Response:
 
 - [ ] **Step 5: Type-check**
 
-Run: `uv run mypy garda_ai_scoring` → clean. (The single `# type: ignore` on the middleware `call_next` param and the `status` Literal cast are acceptable and documented.)
+Run: `uv run mypy grafin_ai_scoring` → clean. (The single `# type: ignore` on the middleware `call_next` param and the `status` Literal cast are acceptable and documented.)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_scoring/api
+git add grafin_ai_scoring/api
 git commit -m "feat: /v1/score API — schemas, RED middleware, routes, app assembly"
 ```
 
@@ -618,12 +618,12 @@ def token() -> str:
 
 @pytest.fixture
 def client(token, monkeypatch):
-    monkeypatch.setenv("GARDA_SCORING_TOKEN", token)
+    monkeypatch.setenv("GRAFIN_SCORING_TOKEN", token)
     # Import inside the fixture so the app reads the patched env at import time.
-    from garda_ai_scoring.config import get_settings
+    from grafin_ai_scoring.config import get_settings
 
     get_settings.cache_clear()
-    from garda_ai_scoring.api.app import app
+    from grafin_ai_scoring.api.app import app
 
     return TestClient(app)
 
@@ -636,8 +636,8 @@ def auth(token) -> dict[str, str]:
 - [ ] **Step 2: Write `tests/test_score_api.py`**
 
 ```python
-from garda_ai_scoring.scoring.factory import get_scorer
-from garda_ai_scoring.scoring.types import ScoringContext, TxnInput
+from grafin_ai_scoring.scoring.factory import get_scorer
+from grafin_ai_scoring.scoring.types import ScoringContext, TxnInput
 
 _TXN = {
     "transaction_id": 123,
@@ -721,9 +721,9 @@ def test_metrics_exposes_red_series(client, auth):
         "amount": "1.00", "payment_format": "ACH", "is_laundering": False,
         "event_time": "2026-06-25T09:00:00Z"}]}, headers=auth)
     body = client.get("/metrics").text
-    assert "garda_scoring_requests_total" in body
-    assert "garda_scoring_request_duration_seconds" in body
-    assert "garda_scoring_transactions_scored_total" in body
+    assert "grafin_scoring_requests_total" in body
+    assert "grafin_scoring_request_duration_seconds" in body
+    assert "grafin_scoring_transactions_scored_total" in body
 
 
 def test_correlation_id_echoed(client, auth):
@@ -735,7 +735,7 @@ def test_correlation_id_echoed(client, auth):
 
 Run: `uv run pytest -q`
 Expected: all pass (ported domain tests + config/auth + API + observability).
-Run: `uv run ruff check .` → clean. Run: `uv run mypy garda_ai_scoring` → clean.
+Run: `uv run ruff check .` → clean. Run: `uv run mypy grafin_ai_scoring` → clean.
 
 - [ ] **Step 5: Commit**
 
@@ -759,10 +759,10 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
-COPY garda_ai_scoring ./garda_ai_scoring
+COPY grafin_ai_scoring ./grafin_ai_scoring
 RUN uv sync --frozen --no-dev
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "garda_ai_scoring.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "grafin_ai_scoring.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 - [ ] **Step 2: Create `.dockerignore`**
@@ -782,9 +782,9 @@ tests
 - [ ] **Step 3: Create `.env.example`**
 
 ```
-GARDA_SCORING_TOKEN=change-me
-GARDA_SCORER=label_replay
-GARDA_LOG_LEVEL=INFO
+GRAFIN_SCORING_TOKEN=change-me
+GRAFIN_SCORER=label_replay
+GRAFIN_LOG_LEVEL=INFO
 ```
 
 - [ ] **Step 4: Create `.github/workflows/ci.yml`**
@@ -806,45 +806,45 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_scoring
+        run: uv run mypy grafin_ai_scoring
       - name: Test
         env:
-          GARDA_SCORING_TOKEN: ci-token
+          GRAFIN_SCORING_TOKEN: ci-token
         run: uv run pytest -q
 ```
 
 - [ ] **Step 5: Create `README.md`**
 
 ```markdown
-# garda-ai-scoring
+# grafin-ai-scoring
 
-Stateless fraud-scoring service for the Garda AI platform. Exposes a token-gated batch
+Stateless fraud-scoring service for the Grafin AI platform. Exposes a token-gated batch
 `POST /v1/score` that returns `{fraud_score, typology, status}` per transaction. No database,
 no Redis — the response is a pure function of the request.
 
 ## Run
 ```
 uv sync
-GARDA_SCORING_TOKEN=dev uv run uvicorn garda_ai_scoring.api.app:app --reload
+GRAFIN_SCORING_TOKEN=dev uv run uvicorn grafin_ai_scoring.api.app:app --reload
 ```
 
 ## Test / lint / type-check
 ```
-GARDA_SCORING_TOKEN=t uv run pytest -q
+GRAFIN_SCORING_TOKEN=t uv run pytest -q
 uv run ruff check .
-uv run mypy garda_ai_scoring
+uv run mypy grafin_ai_scoring
 ```
 
-Config (env, `GARDA_` prefix): `SCORING_TOKEN` (required), `SCORER` (`label_replay`|`ml`),
+Config (env, `GRAFIN_` prefix): `SCORING_TOKEN` (required), `SCORER` (`label_replay`|`ml`),
 `SEED`, `FN_RATE`, `FP_RATE`, `LOG_LEVEL`. Ops: `/healthz`, `/readyz`, `/metrics`.
 Contract + design: `docs/superpowers/specs/2026-06-25-scoring-service-design.md`.
 ```
 
 - [ ] **Step 6: Verify the image builds**
 
-Run: `docker build -t garda-scoring:test .`
+Run: `docker build -t grafin-scoring:test .`
 Expected: build succeeds (two-phase `uv sync --frozen` with no lockfile-staleness complaint).
-Then: `docker image rm garda-scoring:test || true`.
+Then: `docker image rm grafin-scoring:test || true`.
 
 - [ ] **Step 7: Commit**
 
@@ -862,13 +862,13 @@ git commit -m "build: Dockerfile (own context), CI (ruff+mypy+pytest), README, e
 
 - [ ] **Step 1: Generate C4 Component + Code docs**
 
-Run the `c4-architecture` plugin's `c4-code` agent over `garda_ai_scoring/` and the `c4-component` agent to synthesize, writing into `docs/c4/` — matching the other repos' C4 layout. Document the `scoring/` domain vs `api/` transport boundary, the `/v1/score` contract, the RED metrics, and that the service is stateless (no DB/Redis).
+Run the `c4-architecture` plugin's `c4-code` agent over `grafin_ai_scoring/` and the `c4-component` agent to synthesize, writing into `docs/c4/` — matching the other repos' C4 layout. Document the `scoring/` domain vs `api/` transport boundary, the `/v1/score` contract, the RED metrics, and that the service is stateless (no DB/Redis).
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add docs/c4
-git commit -m "docs: C4 component + code for garda-ai-scoring"
+git commit -m "docs: C4 component + code for grafin-ai-scoring"
 ```
 
 ---
@@ -881,7 +881,7 @@ git commit -m "docs: C4 component + code for garda-ai-scoring"
 - Bearer-token auth, fail-fast if unset → Tasks 3 (required field) + 5 (dependency) + app import (Task 6). ✅
 - Ops parity `/healthz` `/readyz` `/metrics` → Task 6. ✅
 - Observability: structlog JSON, correlation-id middleware, RED metrics with bounded labels + `prefix_name_unit`, observability tests → Tasks 4, 6, 7. ✅
-- Config (pydantic-settings, `GARDA_` prefix, scorer/seed/rates) → Task 3. ✅
+- Config (pydantic-settings, `GRAFIN_` prefix, scorer/seed/rates) → Task 3. ✅
 - Packaging: own-context Dockerfile, `.dockerignore`, `.env.example`, CI (ruff+mypy+pytest) → Task 8. ✅
 - Type-safety (mypy strict) across all tasks; API-design (versioned URL, status codes, error shape) in Tasks 5–6. ✅
 - C4 docs → Task 9. ✅
