@@ -39,7 +39,7 @@ describe('TransactionDetailsModal generate flow', () => {
       if (url === '/transactions/7/explanation') return { data: expl };
       if (url === '/transactions/7/str-draft') {
         return { data: {
-          nomor_draf: 'LTKM-DRAFT-7', pihak: { pengirim: 'A', penerima: 'B' }, kronologi: 'K.',
+          nomor_draf: 'LTKM-DRAFT-7', pihak: { pengirim: { nama: 'A', rekening: '0001', bank: 'Bank 1' }, penerima: { nama: null, rekening: '0002', bank: 'Bank 2' } }, kronologi: 'K.',
           indikator: ['Fan-in'], analisis: 'An.', rekomendasi: 'Rek.', catatan: 'DRAF — perlu verifikasi analis sebelum dilaporkan ke PPATK',
         } };
       }

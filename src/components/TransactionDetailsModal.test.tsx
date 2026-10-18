@@ -39,7 +39,7 @@ const txn: TransactionDetail = {
 
 const draftDoc: StrDraft = {
   nomor_draf: 'LTKM-DRAFT-42',
-  pihak: { pengirim: 'Bank Rakyat Indonesia (0021****881)', penerima: '008 (0081****112)' },
+  pihak: { pengirim: { nama: 'A**** S****', rekening: '0021****881', bank: 'Bank Rakyat Indonesia' }, penerima: { nama: null, rekening: '0081****112', bank: '008' } },
   kronologi: 'Transfer BI-FAST Rp 15.000.000.',
   indikator: ['Fan-in tinggi', 'Nominal tidak biasa'],
   analisis: 'Pola rekening penampung.',

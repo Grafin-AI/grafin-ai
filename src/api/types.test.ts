@@ -23,7 +23,7 @@ import type { InstitutionsResponse, StrDraft, TransactionExplanation, Transactio
 describe('demo-final api types', () => {
   it('explanation carries reason code, confidence, references and draft', () => {
     const draft: StrDraft = {
-      nomor_draf: 'LTKM-DRAFT-1', pihak: { pengirim: 'A', penerima: 'B' }, kronologi: 'k',
+      nomor_draf: 'LTKM-DRAFT-1', pihak: { pengirim: { nama: 'A', rekening: '0001', bank: 'Bank 1' }, penerima: { nama: null, rekening: '0002', bank: 'Bank 2' } }, kronologi: 'k',
       indikator: ['i'], analisis: 'a', rekomendasi: 'r', catatan: 'DRAF',
     };
     const e: TransactionExplanation = {

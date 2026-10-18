@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, FileText, Loader2, Printer } from 'lucide-react';
-import type { StrDraft as StrDraftData } from '../api/types';
+import type { StrDraft as StrDraftData, StrDraftParty } from '../api/types';
 
 export const DEFAULT_DRAFT_NOTE = 'DRAF — perlu verifikasi analis sebelum dilaporkan ke PPATK';
+
+/** "Nama (Bank · rekening)"; tolerates a plain string from older payloads. */
+export function formatParty(p: StrDraftParty | string): string {
+  if (typeof p === 'string') return p;
+  const where = [p.bank, p.rekening].filter(Boolean).join(' · ');
+  return p.nama ? `${p.nama} (${where})` : where;
+}
 
 /** Plain-text rendering of the draft for the clipboard. */
 export function formatStrDraftText(d: StrDraftData): string {
@@ -10,7 +17,7 @@ export function formatStrDraftText(d: StrDraftData): string {
     `${d.nomor_draf}`,
     d.catatan || DEFAULT_DRAFT_NOTE,
     '',
-    `Pihak: Pengirim ${d.pihak.pengirim} → Penerima ${d.pihak.penerima}`,
+    `Pihak: Pengirim ${formatParty(d.pihak.pengirim)} → Penerima ${formatParty(d.pihak.penerima)}`,
     `Kronologi: ${d.kronologi}`,
     `Indikator:\n${d.indikator.map((i) => `- ${i}`).join('\n')}`,
     `Analisis: ${d.analisis}`,
@@ -80,7 +87,7 @@ export function StrDraft({ draft, pending = false, error = null, canGenerate = f
 
   const fields: Array<[string, ReactNode]> = draft
     ? [
-        ['Pihak', `Pengirim ${draft.pihak.pengirim} → Penerima ${draft.pihak.penerima}`],
+        ['Pihak', `Pengirim ${formatParty(draft.pihak.pengirim)} → Penerima ${formatParty(draft.pihak.penerima)}`],
         ['Kronologi', draft.kronologi],
         ['Indikator', draft.indikator.length > 1 ? (
           <ul className="m-0 pl-4 list-disc space-y-0.5">{draft.indikator.map((i) => <li key={i}>{i}</li>)}</ul>

@@ -102,9 +102,15 @@ export interface PolicyReference {
   title: string;
 }
 
+export interface StrDraftParty {
+  nama: string | null;
+  rekening: string;
+  bank: string | null;
+}
+
 export interface StrDraftParties {
-  pengirim: string;
-  penerima: string;
+  pengirim: StrDraftParty;
+  penerima: StrDraftParty;
 }
 
 /** LTKM (Laporan Transaksi Keuangan Mencurigakan) draft. */
