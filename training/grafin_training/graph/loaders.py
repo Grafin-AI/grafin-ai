@@ -9,7 +9,7 @@ from torch_geometric.data import Data, HeteroData
 from torch_geometric.loader import LinkNeighborLoader
 from torch_geometric.transforms import BaseTransform
 
-from garda_training.graph.build import EDGE, SplitGraph
+from grafin_training.graph.build import EDGE, SplitGraph
 
 
 class AddEgoIds(BaseTransform):  # type: ignore[misc]

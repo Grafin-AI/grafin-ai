@@ -1,1 +1,1 @@
-"""Garda AI fraud-scorer training (Multi-GNN port, causal evaluation, model bundle)."""
+"""Grafin AI fraud-scorer training (Multi-GNN port, causal evaluation, model bundle)."""

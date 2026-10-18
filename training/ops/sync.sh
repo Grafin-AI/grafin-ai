@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Data and results <-> gs://$GARDA_GCS_BUCKET. Data lives in ../garda-ai-data next to the repo.
+# Data and results <-> gs://$GRAFIN_GCS_BUCKET. Data lives in ../grafin-ai-data next to the repo.
 #   push-data     laptop -> bucket: raw/HI-Small, HI-Small-ID, HI-Medium-ID
 #   pull-data     bucket -> VM
 #   push-results  runs/ mlruns/ bundles/ -> bucket
 #   pull-results  bucket -> laptop
 source "$(dirname "$0")/_env.sh"
-require GARDA_GCS_BUCKET
-DATA_DIR="$(cd "$REPO_DIR/.." && pwd)/garda-ai-data"
-BUCKET="gs://$GARDA_GCS_BUCKET"
+require GRAFIN_GCS_BUCKET
+DATA_DIR="$(cd "$REPO_DIR/.." && pwd)/grafin-ai-data"
+BUCKET="gs://$GRAFIN_GCS_BUCKET"
 DATASETS=(raw/HI-Small HI-Small-ID HI-Medium-ID)
 rsync_dir() {
   if [[ "$2" != gs://* ]]; then mkdir -p "$2"; fi

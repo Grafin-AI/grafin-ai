@@ -14,12 +14,12 @@ from typing import Any
 import torch
 import torch_geometric
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 log = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MLFLOW_URI = f"sqlite:///{REPO_ROOT / 'mlruns' / 'mlflow.db'}"
-EXPERIMENT = "garda-training"
+EXPERIMENT = "grafin-training"
 
 
 def make_run_id(dataset: str, protocol: str, seed: int, now: datetime | None = None) -> str:

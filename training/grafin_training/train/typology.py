@@ -3,7 +3,7 @@
 Read only from the transaction graph (who sent to whom, when) and never from the labels, and
 causal: a transaction at time t sees only edges with timestamp in [t - window, t] (itself
 included), the same window the platform's explanation evidence uses. Fan thresholds match the
-backend's risk factors (garda-ai-backend services/explain/rules.py), so a "Fan-in" typology
+backend's risk factors (grafin-ai-backend services/explain/rules.py), so a "Fan-in" typology
 comes with a "Fan-in Tinggi" factor. First matching rule wins:
 
   cycle          the receiver already reaches the sender within CYCLE_WINDOW_S

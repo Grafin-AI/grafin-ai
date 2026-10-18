@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 import torch
 
-from garda_training.config import GnnConfig, load_gnn_config
-from garda_training.data.prepare import prepare_dataset
-from garda_training.errors import TrainingDivergedError
-from garda_training.graph.build import SplitGraph
-from garda_training.tracking import RunDir, Tracker
-from garda_training.train.gnn import load_checkpoint, set_seed, train_gnn
-from garda_training.train.paper import paper_inputs
+from grafin_training.config import GnnConfig, load_gnn_config
+from grafin_training.data.prepare import prepare_dataset
+from grafin_training.errors import TrainingDivergedError
+from grafin_training.graph.build import SplitGraph
+from grafin_training.tracking import RunDir, Tracker
+from grafin_training.train.gnn import load_checkpoint, set_seed, train_gnn
+from grafin_training.train.paper import paper_inputs
 
 PAPER = Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml"
 

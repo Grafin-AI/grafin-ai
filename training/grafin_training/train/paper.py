@@ -9,11 +9,11 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-from garda_training.config import GnnConfig
-from garda_training.data.features import NormStats, apply_norm, fit_norm
-from garda_training.data.prepare import PreparedData
-from garda_training.data.split import DaySplit, paper_split, rows_for_days
-from garda_training.graph.build import SplitGraph, paper_graphs
+from grafin_training.config import GnnConfig
+from grafin_training.data.features import NormStats, apply_norm, fit_norm
+from grafin_training.data.prepare import PreparedData
+from grafin_training.data.split import DaySplit, paper_split, rows_for_days
+from grafin_training.graph.build import SplitGraph, paper_graphs
 
 
 @dataclass(frozen=True)

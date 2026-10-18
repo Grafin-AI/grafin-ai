@@ -15,13 +15,13 @@ import torch
 from sklearn.metrics import average_precision_score, precision_recall_curve, roc_auc_score
 from torch_geometric.data import Data, HeteroData
 
-from garda_training.config import GnnConfig
-from garda_training.data.prepare import PreparedData
-from garda_training.errors import ConfigError
-from garda_training.graph.build import EDGE, REV, SplitGraph, make_graph
-from garda_training.graph.loaders import make_loader
-from garda_training.train.gnn import build_model, forward_edges, set_seed
-from garda_training.train.paper import PaperArrays
+from grafin_training.config import GnnConfig
+from grafin_training.data.prepare import PreparedData
+from grafin_training.errors import ConfigError
+from grafin_training.graph.build import EDGE, REV, SplitGraph, make_graph
+from grafin_training.graph.loaders import make_loader
+from grafin_training.train.gnn import build_model, forward_edges, set_seed
+from grafin_training.train.paper import PaperArrays
 
 log = logging.getLogger(__name__)
 F32Array = npt.NDArray[np.float32]

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 SECONDS_PER_DAY = 86_400
 IntArray = npt.NDArray[np.int64]

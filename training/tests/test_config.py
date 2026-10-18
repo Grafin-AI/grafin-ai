@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from garda_training.config import load_gnn_config
-from garda_training.errors import ConfigError
+from grafin_training.config import load_gnn_config
+from grafin_training.errors import ConfigError
 
 PAPER = Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml"
 
@@ -51,7 +51,7 @@ def test_invalid_configs(tmp_path: Path, edit: tuple[str, str, object], message:
     raw = tomllib.loads(PAPER.read_text())
     section, key, value = edit
     raw[section][key] = value
-    from garda_training.config import parse_gnn_config
+    from grafin_training.config import parse_gnn_config
 
     with pytest.raises(ConfigError, match=message):
         parse_gnn_config(raw)

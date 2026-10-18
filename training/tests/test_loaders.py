@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from garda_training.graph.build import EDGE, paper_graphs
-from garda_training.graph.loaders import AddEgoIds, make_loader, seed_mask
+from grafin_training.graph.build import EDGE, paper_graphs
+from grafin_training.graph.loaders import AddEgoIds, make_loader, seed_mask
 
 
 def test_loader_ego_ids_and_seed_mask() -> None:

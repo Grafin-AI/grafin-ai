@@ -5,8 +5,8 @@ local SQLite store (`mlruns/mlflow.db`, artifacts in `mlruns/artifacts/`, both g
 MLflow 3.x refuses the old `file:./mlruns` store, so SQLite is the default.
 
 ```bash
-uv run garda-train mlflow-log --run small-id-s2            # default: $MLFLOW_TRACKING_URI or sqlite:///mlruns/mlflow.db
-uv run garda-train mlflow-log --run small-id-s2 --tracking-uri sqlite:////abs/path/mlflow.db
+uv run grafin-train mlflow-log --run small-id-s2            # default: $MLFLOW_TRACKING_URI or sqlite:///mlruns/mlflow.db
+uv run grafin-train mlflow-log --run small-id-s2 --tracking-uri sqlite:////abs/path/mlflow.db
 uvx mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db   # http://127.0.0.1:5000
 ```
 
@@ -38,7 +38,7 @@ What gets logged:
 20 epochs of history (stopped on patience); export typologies: Anomali Jaringan (GNN) 23244,
 Pengumpulan Dana (Fan-in) 1420, Penyebaran Dana (Fan-out) 570, Siklus Dana (Cycle) 483,
 Velositas Tinggi 114, Penampung-Penyebar (Gather-Scatter) 10. `small-raw-s1` is not in this
-checkout's `runs/`, so it is not logged; `garda-train mlflow-log --run small-raw-s1` adds it.
+checkout's `runs/`, so it is not logged; `grafin-train mlflow-log --run small-raw-s1` adds it.
 
 To share the store, upload the whole `mlruns/` directory (about 1 MB), for example
 `gcloud storage cp -r mlruns gs://<bucket>/mlruns`.

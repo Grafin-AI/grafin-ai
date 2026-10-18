@@ -8,14 +8,14 @@ import numpy as np
 import pytest
 import torch
 
-from garda_training.config import GnnConfig, load_gnn_config
-from garda_training.data.prepare import PreparedData, prepare_dataset
-from garda_training.errors import ConfigError
-from garda_training.graph.loaders import make_loader
-from garda_training.tracking import RunDir, Tracker
-from garda_training.train import gnn
-from garda_training.train.paper import paper_arrays, split_graphs
-from garda_training.train.score import (
+from grafin_training.config import GnnConfig, load_gnn_config
+from grafin_training.data.prepare import PreparedData, prepare_dataset
+from grafin_training.errors import ConfigError
+from grafin_training.graph.loaders import make_loader
+from grafin_training.tracking import RunDir, Tracker
+from grafin_training.train import gnn
+from grafin_training.train.paper import paper_arrays, split_graphs
+from grafin_training.train.score import (
     Thresholds,
     causal_day_scores,
     choose_thresholds,

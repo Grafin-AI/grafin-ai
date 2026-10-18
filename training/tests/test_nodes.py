@@ -4,8 +4,8 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_training.data.load import read_transactions
-from garda_training.data.nodes import assign_node_ids
+from grafin_training.data.load import read_transactions
+from grafin_training.data.nodes import assign_node_ids
 
 
 def test_node_ids_follow_upstream_first_appearance(fixture_paths: tuple[Path, Path]) -> None:

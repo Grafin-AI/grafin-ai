@@ -1,7 +1,7 @@
 [project]
-name = "garda-ai-training"
+name = "grafin-ai-training"
 version = "0.1.0"
-description = "Garda AI fraud-scorer training: Multi-GNN port, causal evaluation, model bundle export"
+description = "Grafin AI fraud-scorer training: Multi-GNN port, causal evaluation, model bundle export"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = "==3.11.*"
@@ -23,7 +23,7 @@ cpu = ["torch==2.5.1", "pyg-lib==0.4.0; sys_platform == 'linux'"]
 cu124 = ["torch==2.5.1", "pyg-lib==0.4.0; sys_platform == 'linux'"]
 
 [project.scripts]
-garda-train = "garda_training.cli:run"
+grafin-train = "grafin_training.cli:run"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8", "mypy>=1.13"]
@@ -33,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["garda_training"]
+packages = ["grafin_training"]
 
 [tool.uv]
 environments = [
@@ -66,7 +66,7 @@ explicit = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["garda_training/models/multignn.py", "tests/upstream_ref.py", "docs"]
+extend-exclude = ["grafin_training/models/multignn.py", "tests/upstream_ref.py", "docs"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]
@@ -74,11 +74,11 @@ select = ["E4", "E7", "E9", "F", "I"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["garda_training"]
-exclude = ["garda_training/models/multignn\\.py$"]
+files = ["grafin_training"]
+exclude = ["grafin_training/models/multignn\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["torch_geometric.*", "sklearn.*", "mlflow.*", "pyg_lib.*", "garda_training.models.multignn"]
+module = ["torch_geometric.*", "sklearn.*", "mlflow.*", "pyg_lib.*", "grafin_training.models.multignn"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import torch
 
-from garda_training.models.multignn import PNA
+from grafin_training.models.multignn import PNA
 
 UPSTREAM_SHA256 = "00ef7142e81d3080114142106867e6ef3002d5a01ff5474e9f75cab957fcefe7"
-VENDORED = Path(__file__).resolve().parents[1] / "garda_training" / "models" / "multignn.py"
+VENDORED = Path(__file__).resolve().parents[1] / "grafin_training" / "models" / "multignn.py"
 
 
 def test_vendored_models_file_is_byte_identical_to_upstream() -> None:

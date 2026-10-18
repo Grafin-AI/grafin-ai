@@ -7,8 +7,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_training.data.load import read_transactions, verify_dataset
-from garda_training.errors import DatasetError
+from grafin_training.data.load import read_transactions, verify_dataset
+from grafin_training.errors import DatasetError
 
 
 def test_read_raw_and_id_give_the_same_transactions(fixture_paths: tuple[Path, Path]) -> None:

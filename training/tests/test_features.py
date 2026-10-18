@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from garda_training.data.features import apply_norm, build_codebooks, fit_norm, paper_base_features
-from garda_training.data.load import read_transactions
+from grafin_training.data.features import apply_norm, build_codebooks, fit_norm, paper_base_features
+from grafin_training.data.load import read_transactions
 
 
 def test_codebooks_first_appearance(fixture_paths: tuple[Path, Path]) -> None:

@@ -21,12 +21,12 @@ from torch_geometric.data import Data, HeteroData
 from torch_geometric.nn import to_hetero
 from torch_geometric.utils import degree
 
-from garda_training.config import GnnConfig
-from garda_training.errors import TrainingDivergedError
-from garda_training.graph.build import EDGE, REV, SplitGraph
-from garda_training.graph.loaders import make_loader, seed_mask
-from garda_training.models.multignn import PNA
-from garda_training.tracking import RunDir, Tracker
+from grafin_training.config import GnnConfig
+from grafin_training.errors import TrainingDivergedError
+from grafin_training.graph.build import EDGE, REV, SplitGraph
+from grafin_training.graph.loaders import make_loader, seed_mask
+from grafin_training.models.multignn import PNA
+from grafin_training.tracking import RunDir, Tracker
 
 log = logging.getLogger(__name__)
 

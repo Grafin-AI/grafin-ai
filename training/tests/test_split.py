@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from garda_training.data.load import read_transactions
-from garda_training.data.split import calibration_split, day_index, paper_split, rows_for_days
-from garda_training.errors import ConfigError
+from grafin_training.data.load import read_transactions
+from grafin_training.data.split import calibration_split, day_index, paper_split, rows_for_days
+from grafin_training.errors import ConfigError
 from tests import upstream_ref
 
 HI_SMALL_DAILY = [

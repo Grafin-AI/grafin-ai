@@ -1,8 +1,8 @@
-# garda-ai-training — Design
+# grafin-ai-training — Design
 
 **Status:** approved in brainstorming 2026-10-17, awaiting written-spec review
 **Sub-project:** 2 of 4 (1 dataset ✅ · **2 training** · 3 Insight Narrator · 4 platform wiring); typology injection is spec #2 of the dataset repo and comes *after* this.
-**Repo:** `repositories/garda-ai-training` (new, local git, no remote). Replaces `workspace/garda-ai-fraud-scorer-model`, which stays untouched as a historical reference.
+**Repo:** `repositories/grafin-ai-training` (new, local git, no remote). Replaces `workspace/grafin-ai-fraud-scorer-model`, which stays untouched as a historical reference.
 
 ## 1. Purpose
 
@@ -11,7 +11,7 @@ Turn the Multi-GNN fork into a correct, reproducible training repo that:
 1. proves the port is faithful (F1 parity with the published paper on raw IBM HI-Small),
 2. measures what the Indonesian localization cost the model (raw vs HI-Small-ID),
 3. trains on HI-Medium-ID, compares a GNN against five scorer heads under a leakage-free *causal* protocol, picks a winner on validation and reports test once,
-4. exports a versioned **model bundle** (ONNX + feature spec + daily account-embedding snapshots) that `garda-ai-scoring` can serve on CPU.
+4. exports a versioned **model bundle** (ONNX + feature spec + daily account-embedding snapshots) that `grafin-ai-scoring` can serve on CPU.
 
 Non-goals are listed in §12.
 
@@ -19,7 +19,7 @@ Non-goals are listed in §12.
 
 | Topic | Decision |
 |---|---|
-| Repo name | `garda-ai-training` (matches `garda-ai-scoring`, `-ingest`, `-dataset`, `-sim`) |
+| Repo name | `grafin-ai-training` (matches `grafin-ai-scoring`, `-ingest`, `-dataset`, `-sim`) |
 | Code approach | **B** — new uv package; IBM `models.py` vendored **verbatim**; everything around it rebuilt as small tested modules |
 | History | Fresh repo (old fork had two "first commit"s). Keep IBM Apache-2.0 `LICENSE` + a `NOTICE` crediting IBM/Multi-GNN. Old checkpoints are not carried over (trained on un-localized data, CUDA-pickled). |
 | Compute | Develop/smoke on the Mac (M2, 16 GB, CPU/MPS) with HI-Small; full runs on a **GCP VM with 4× NVIDIA T4** (16 GB each). One run per GPU, up to 4 in parallel. No DDP. |
@@ -45,7 +45,7 @@ Non-goals are listed in §12.
 
 "Multi-" = reverse message passing + port numbering + ego IDs; "+EU" = edge updates. Upstream flags: `--model pna --emlps --reverse_mp --ports --ego`. Upstream PNA hyper-parameters (`model_settings.json`): `lr 6.116e-4, n_hidden 20, n_gnn_layers 2, n_mlp_layers 1, w_ce1 1.0004, w_ce2 7.0776, dropout 0.0834, final_dropout 0.2881`; loader `batch_size 8192`, `num_neighs [100, 100]`.
 
-**Datasets** (from `garda-ai-dataset`, in `garda-ai-data/`):
+**Datasets** (from `grafin-ai-dataset`, in `grafin-ai-data/`):
 
 | Dataset | Path | Rows | Days | Note |
 |---|---|---|---|---|
@@ -55,22 +55,22 @@ Non-goals are listed in §12.
 
 Both formats share the same 11 positional columns (the 2nd account column is named `Account` in raw, `To Account` in ID).
 
-**Known data issue — currency feature is constant in HI-*-ID.** The paper's four edge features are `Timestamp, Amount Received, Received Currency, Payment Format`. Localization converted every currency to IDR, so `Received Currency` carries no information there (amounts still differ by original FX rate). Success criterion 2 measures the cost; any fix belongs in `garda-ai-dataset`, not here.
+**Known data issue — currency feature is constant in HI-*-ID.** The paper's four edge features are `Timestamp, Amount Received, Received Currency, Payment Format`. Localization converted every currency to IDR, so `Received Currency` carries no information there (amounts still differ by original FX rate). Success criterion 2 measures the cost; any fix belongs in `grafin-ai-dataset`, not here.
 
 **Known data issue — HI-Small and HI-Medium have disjoint accounts.** The model is trained on Medium; the platform demo replays Small. This works because node input features are constant (all 1s): embeddings are a function of transaction structure, not identity, so the Medium-trained GNN can embed the Small graph. This also yields an honest unseen-dataset number (criterion 4).
 
 ## 4. Repository layout
 
 ```
-garda-ai-training/
+grafin-ai-training/
 ├── pyproject.toml            uv, hatchling, ruff (E4,E7,E9,F,I), mypy --strict (vendored models excluded)
 ├── Makefile                  install lint typecheck test check smoke smoke-small + ops targets
 ├── LICENSE  NOTICE  README.md
 ├── configs/
 │   ├── paper_pna.toml        upstream PNA hyper-parameters + flags (§3)
 │   └── study_medium.toml     causal study: heads, Optuna budget, thresholds policy
-├── garda_training/
-│   ├── cli.py                `garda-train` entry point
+├── grafin_training/
+│   ├── cli.py                `grafin-train` entry point
 │   ├── config.py             typed config (TOML → frozen dataclasses), validation → exit 3
 │   ├── errors.py             exit-code taxonomy (§10)
 │   ├── device.py             cpu|mps|cuda resolution; `--device cuda` without CUDA → exit 5
@@ -192,7 +192,7 @@ CSV (raw | id) ──prepare──► cache/<dataset-hash>/  (edges.parquet, nod
 - **Wave 2 — causal study (HI-Medium-ID):** causal GNN + heads × seeds {1,2}; paper-protocol HI-Medium-ID × seed 1 (reference vs 66.48); 1 GPU spare.
 - Then **transfer:** embed HI-Small-ID with the winning Medium GNN (daily refresh) and causally evaluate the shipped head on it.
 
-## 8. Model bundle (contract with `garda-ai-scoring`)
+## 8. Model bundle (contract with `grafin-ai-scoring`)
 
 ```
 bundles/<version>/                 version = <yyyy-mm-dd>-<dataset>-<head>-<git7>
@@ -209,8 +209,8 @@ bundles/<version>/                 version = <yyyy-mm-dd>-<dataset>-<head>-<git7
 **Snapshot selection rule (scorer):** use the latest snapshot whose `as_of ≤ start of the transaction's day` (dataset time). Production = newest snapshot; demo replay reproduces the daily refresh without future leakage.
 
 **Commands:**
-- `garda-train export --study <id>` builds the bundle from the winning head of the best-validation seed.
-- `garda-train embed --bundle <version> --data <dataset> --refresh daily` appends snapshots for another dataset (used for the HI-Small demo; also the "Embedding Refresh" loop from the pitch).
+- `grafin-train export --study <id>` builds the bundle from the winning head of the best-validation seed.
+- `grafin-train embed --bundle <version> --data <dataset> --refresh daily` appends snapshots for another dataset (used for the HI-Small demo; also the "Embedding Refresh" loop from the pitch).
 - `--dtype float16` stores snapshots in half precision; the export check reports the F1 delta.
 
 **Export self-checks (any failure → exit 4):** ONNX vs native max |Δscore| ≤ 1e-5 on 10 000 validation rows; all embedding values finite; every file hash matches the manifest; end-to-end replay — raw validation transactions → feature_spec → snapshot lookup → ONNX — reproduces the evaluator's validation scores within 1e-5.
@@ -220,8 +220,8 @@ bundles/<version>/                 version = <yyyy-mm-dd>-<dataset>-<head>-<git7
 ## 9. Tracking and ops
 
 - Every run writes `runs/<run-id>/`: `config.toml` (resolved), `env.json` (git sha, dirty flag, torch/PyG/CUDA versions, device), `data.json` (dataset hash, split days, counts), `metrics.json`, `checkpoints/`, `embeddings/`, `heads/`, `log.txt`. The run directory alone is enough to reproduce/inspect a run.
-- MLflow (file store `./mlruns`): params, per-epoch metrics, final metrics, artifacts by reference. `ops/sync.sh` rsyncs `mlruns/`, `runs/`, `bundles/` to `gs://$GARDA_GCS_BUCKET/` and data down from it. `mlflow ui` locally after sync.
-- `garda-train compare --study <id>` prints a markdown table of all candidates × seeds (validation, test, thresholds).
+- MLflow (file store `./mlruns`): params, per-epoch metrics, final metrics, artifacts by reference. `ops/sync.sh` rsyncs `mlruns/`, `runs/`, `bundles/` to `gs://$GRAFIN_GCS_BUCKET/` and data down from it. `mlflow ui` locally after sync.
+- `grafin-train compare --study <id>` prints a markdown table of all candidates × seeds (validation, test, thresholds).
 - `ops/vm_create.sh` documents the VM (4×T4, ≥ 52 GB RAM, ≥ 200 GB disk); no terraform.
 
 ## 10. Error handling
@@ -269,7 +269,7 @@ Explainer / fraud type / risk factors (next spec); scorer and backend changes (s
 | T4 16 GB OOM at `batch 8192 × [100,100]` on Medium | configurable batch/neighbors, AMP, peak-memory logging; parity runs use upstream values on Small |
 | Daily-refresh cost on Medium | `--refresh once` fallback; snapshot timing logged |
 | Parity misses the band | compare against the upstream code run unmodified on the same machine (scratchpad clone) to separate port bugs from seed variance before changing anything |
-| Constant currency feature lowers F1 on ID data | measured by criterion 2; fix lives in `garda-ai-dataset` |
+| Constant currency feature lowers F1 on ID data | measured by criterion 2; fix lives in `grafin-ai-dataset` |
 | Embedding snapshot volume (Small: 518 k × 20 × 4 B ≈ 41 MB/day) | small at D = 20; `float16` option |
 
 ## 15. Implementation notes (added 2026-10-17 during planning; verified by probes)

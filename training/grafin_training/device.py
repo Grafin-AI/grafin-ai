@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from garda_training.errors import ConfigError, CudaUnavailableError
+from grafin_training.errors import ConfigError, CudaUnavailableError
 
 DEVICE_CHOICES = ("auto", "cpu", "mps", "cuda")
 

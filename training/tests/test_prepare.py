@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-from garda_training.data.prepare import prepare_dataset
+from grafin_training.data.prepare import prepare_dataset
 from tests import upstream_ref
 
 

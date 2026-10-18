@@ -1,4 +1,4 @@
-"""`garda-train` command line: prepare | gnn | score | export-scores | compare | mlflow-log."""
+"""`grafin-train` command line: prepare | gnn | score | export-scores | compare | mlflow-log."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from garda_training.config import load_gnn_config, parse_gnn_config
-from garda_training.data.load import as_source
-from garda_training.data.prepare import prepare_dataset
-from garda_training.device import DEVICE_CHOICES, resolve_device
-from garda_training.errors import ConfigError, DatasetError, GardaTrainError
-from garda_training.report import collect_runs, render_markdown
-from garda_training.tracking import (
+from grafin_training.config import load_gnn_config, parse_gnn_config
+from grafin_training.data.load import as_source
+from grafin_training.data.prepare import prepare_dataset
+from grafin_training.device import DEVICE_CHOICES, resolve_device
+from grafin_training.errors import ConfigError, DatasetError, GrafinTrainError
+from grafin_training.report import collect_runs, render_markdown
+from grafin_training.tracking import (
     DEFAULT_MLFLOW_URI,
     RunDir,
     Tracker,
@@ -24,16 +24,16 @@ from garda_training.tracking import (
     log_run_to_mlflow,
     make_run_id,
 )
-from garda_training.train.export import SPLITS, export_scores
-from garda_training.train.gnn import load_checkpoint, set_seed, train_gnn
-from garda_training.train.paper import paper_arrays, paper_inputs, split_graphs
-from garda_training.train.score import causal_day_scores, restore_model, score_outputs
+from grafin_training.train.export import SPLITS, export_scores
+from grafin_training.train.gnn import load_checkpoint, set_seed, train_gnn
+from grafin_training.train.paper import paper_arrays, paper_inputs, split_graphs
+from grafin_training.train.score import causal_day_scores, restore_model, score_outputs
 
-log = logging.getLogger("garda_training")
+log = logging.getLogger("grafin_training")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="garda-train")
+    parser = argparse.ArgumentParser(prog="grafin-train")
     sub = parser.add_subparsers(dest="command", required=True)
 
     prep = sub.add_parser("prepare", help="verify, read and cache a transactions CSV")
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     try:
         return int(args.func(args))
-    except GardaTrainError as exc:
+    except GrafinTrainError as exc:
         log.error("%s", exc)
         return exc.exit_code
 

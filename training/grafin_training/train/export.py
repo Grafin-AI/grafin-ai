@@ -16,11 +16,11 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
-from garda_training.data.prepare import PreparedData
-from garda_training.errors import ConfigError, ExportCheckError
-from garda_training.tracking import RunDir
-from garda_training.train.score import APPROVED, BLOCKED, FLAGGED, Thresholds, statuses
-from garda_training.train.typology import TYPOLOGIES, typologies
+from grafin_training.data.prepare import PreparedData
+from grafin_training.errors import ConfigError, ExportCheckError
+from grafin_training.tracking import RunDir
+from grafin_training.train.score import APPROVED, BLOCKED, FLAGGED, Thresholds, statuses
+from grafin_training.train.typology import TYPOLOGIES, typologies
 
 SPLITS = ("val", "test")
 CSV_COLUMNS = ["transaction_id", "fraud_score", "prob", "status", "typology"]
@@ -88,7 +88,7 @@ def export_scores(run: RunDir, splits: list[str], prepared: PreparedData) -> dic
     out = run.path / "scores"
     parquet = out / "scores.parquet"
     if not parquet.is_file():
-        raise ConfigError(f"no scores at {parquet}; run `garda-train score` first")
+        raise ConfigError(f"no scores at {parquet}; run `grafin-train score` first")
     raw = run.read_json("scores/thresholds.json")
     th = Thresholds(float(raw["blocked"]), float(raw["flagged"]), float(raw["flag_recall_target"]))
 

@@ -13,12 +13,12 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from garda_training.data.features import Codebooks, build_codebooks, paper_base_features
-from garda_training.data.load import Source, read_transactions, verify_dataset
-from garda_training.data.nodes import assign_node_ids
-from garda_training.data.split import day_index
-from garda_training.errors import DatasetError
-from garda_training.graph.build import port_columns, time_delta_columns
+from grafin_training.data.features import Codebooks, build_codebooks, paper_base_features
+from grafin_training.data.load import Source, read_transactions, verify_dataset
+from grafin_training.data.nodes import assign_node_ids
+from grafin_training.data.split import day_index
+from grafin_training.errors import DatasetError
+from grafin_training.graph.build import port_columns, time_delta_columns
 
 log = logging.getLogger(__name__)
 CACHE_VERSION = 2  # 2: adds `row` (0-based input-file row index)

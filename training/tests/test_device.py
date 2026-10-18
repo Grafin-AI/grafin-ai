@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from garda_training.device import resolve_device
-from garda_training.errors import ConfigError, CudaUnavailableError
+from grafin_training.device import resolve_device
+from grafin_training.errors import ConfigError, CudaUnavailableError
 
 
 def test_resolve_device_cpu_and_unknown() -> None:

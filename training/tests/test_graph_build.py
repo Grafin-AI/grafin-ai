@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from garda_training.graph.build import (
+from grafin_training.graph.build import (
     EDGE,
     REV,
     _ports,

@@ -12,7 +12,7 @@ from typing import Literal
 
 import polars as pl
 
-from garda_training.errors import ConfigError, DatasetError
+from grafin_training.errors import ConfigError, DatasetError
 
 Source = Literal["raw", "id"]
 SOURCES: tuple[Source, ...] = ("raw", "id")
@@ -49,7 +49,7 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def expected_sha256(path: Path, source: Source) -> str:
-    """ID data: garda-ai-dataset MANIFEST.json "outputs". Raw data: SHA256SUMS from the fetch step."""
+    """ID data: grafin-ai-dataset MANIFEST.json "outputs". Raw data: SHA256SUMS from the fetch step."""
     if source == "id":
         manifest = path.parent / "MANIFEST.json"
         if not manifest.is_file():

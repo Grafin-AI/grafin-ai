@@ -8,8 +8,8 @@ import polars as pl
 import pytest
 import torch
 
-from garda_training.cli import main
-from garda_training.data.prepare import prepare_dataset
+from grafin_training.cli import main
+from grafin_training.data.prepare import prepare_dataset
 
 PAPER = str(Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml")
 

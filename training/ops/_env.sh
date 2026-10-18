@@ -9,8 +9,8 @@ if [[ -f "$OPS_DIR/vm.env" ]]; then
 fi
 # Extra flags for every gcloud compute ssh/scp call (account + optional IAP tunnel).
 GCLOUD_FLAGS=()
-if [[ -n "${GARDA_GCLOUD_ACCOUNT:-}" ]]; then GCLOUD_FLAGS+=(--account "$GARDA_GCLOUD_ACCOUNT"); fi
-if [[ "${GARDA_IAP:-}" == 1 ]]; then GCLOUD_FLAGS+=(--tunnel-through-iap); fi
+if [[ -n "${GRAFIN_GCLOUD_ACCOUNT:-}" ]]; then GCLOUD_FLAGS+=(--account "$GRAFIN_GCLOUD_ACCOUNT"); fi
+if [[ "${GRAFIN_IAP:-}" == 1 ]]; then GCLOUD_FLAGS+=(--tunnel-through-iap); fi
 require() {
   local name
   for name in "$@"; do

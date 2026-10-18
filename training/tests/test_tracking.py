@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from garda_training.errors import ConfigError
-from garda_training.tracking import (
+from grafin_training.errors import ConfigError
+from grafin_training.tracking import (
     RunDir,
     Tracker,
     environment_info,

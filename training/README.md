@@ -1,13 +1,13 @@
-# garda-ai-training
+# grafin-ai-training
 
-Training repo for the Garda AI fraud scorer. It is a faithful port of
+Training repo for the Grafin AI fraud scorer. It is a faithful port of
 [IBM/Multi-GNN](https://github.com/IBM/Multi-GNN) (Egressy et al., AAAI 2024) with the bugs found
 in our earlier fork fixed. It trains on the Indonesian-localized IBM AML data produced by
-`garda-ai-dataset`.
+`grafin-ai-dataset`.
 
 > **Status — Plan A (foundation + paper protocol).** It can reproduce the paper's Multi-PNA+EU
 > numbers and compare raw vs localized data. Plan B adds the causal protocol, the scorer heads
-> (XGBoost / LightGBM / CatBoost / MLP), ONNX export and the model bundle for `garda-ai-scoring`.
+> (XGBoost / LightGBM / CatBoost / MLP), ONNX export and the model bundle for `grafin-ai-scoring`.
 
 Design: [docs/superpowers/specs/2026-10-17-training-repo-design.md](docs/superpowers/specs/2026-10-17-training-repo-design.md)
 
@@ -20,7 +20,7 @@ make smoke          # synthetic fixture end to end, ~10 s
 make smoke-small    # real HI-Small-ID, 3 batches per loader, ~5 min
 ```
 
-Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda-ai-dataset`):
+Datasets are expected next to the repo in `../grafin-ai-data` (produced by `grafin-ai-dataset`):
 
 | `--source` | file | integrity check |
 |---|---|---|
@@ -30,13 +30,13 @@ Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda
 ## Commands
 
 ```bash
-garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>-v2/)
-garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
-garda-train gnn --resume RUN_ID                          # continue an interrupted run
-garda-train gnn --resume RUN_ID --patience 0 --max-hours 4  # ...or extend its budget
-garda-train score --run RUN_ID [--device cuda] [--batch-size N] [--flag-recall 0.9]
-garda-train export-scores --run RUN_ID [--splits test val]  # scores.csv for garda-ai-scoring
-garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
+grafin-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>-v2/)
+grafin-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
+grafin-train gnn --resume RUN_ID                          # continue an interrupted run
+grafin-train gnn --resume RUN_ID --patience 0 --max-hours 4  # ...or extend its budget
+grafin-train score --run RUN_ID [--device cuda] [--batch-size N] [--flag-recall 0.9]
+grafin-train export-scores --run RUN_ID [--splits test val]  # scores.csv for grafin-ai-scoring
+grafin-train compare                                      # markdown table of runs/ (mean ± std per dataset)
 ```
 
 `score` scores every validation and test transaction with the run's `best.pt`, causally: day *d*
@@ -48,7 +48,7 @@ threshold with recall >= `--flag-recall`. Output goes to `runs/<run-id>/scores/`
 `status` approved|flagged|blocked, `is_laundering`), `thresholds.json` and `score_metrics.json`.
 
 `export-scores` turns that into `scores/scores.csv` for the platform's precomputed scorer
-(`GARDA_SCORER=precomputed`): header `transaction_id,fraud_score,prob,status,typology`, chosen
+(`GRAFIN_SCORER=precomputed`): header `transaction_id,fraud_score,prob,status,typology`, chosen
 splits only (default both), sorted by `transaction_id`. `prob` is the raw probability;
 `fraud_score` rescales it piecewise-linearly so the dashboard bands match the thresholds
 (`[0, flagged)` → `[0, 0.4)`, `[flagged, blocked)` → `[0.4, 0.7)`, `[blocked, 1]` → `[0.7, 1]`).
@@ -57,7 +57,7 @@ empty for approved rows; for flagged/blocked rows it names the network pattern a
 transaction from the graph alone (never the labels), causally over the preceding 24 h (cycles:
 72 h): Siklus Dana (Cycle), Penampung-Penyebar (Gather-Scatter), Pengumpulan Dana (Fan-in),
 Penyebaran Dana (Fan-out), Velositas Tinggi, else `Anomali Jaringan (GNN)` — rules in
-`garda_training/train/typology.py`, thresholds shared with the backend's risk factors.
+`grafin_training/train/typology.py`, thresholds shared with the backend's risk factors.
 It needs the prepared dataset (`--cache-dir`, built on first use). `scores/export_meta.json`
 records the run, splits, row count, thresholds, breakpoints, typology counts and dataset sha256.
 
@@ -69,7 +69,7 @@ Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versio
 
 ### Experiment tracking (MLflow)
 
-`uv run garda-train mlflow-log --run <run-id> [--tracking-uri URI]` mirrors a finished run
+`uv run grafin-train mlflow-log --run <run-id> [--tracking-uri URI]` mirrors a finished run
 directory into MLflow (experiment `grafin-ai-multignn`, run name = run id, re-logging replaces it):
 config params, per-epoch loss/F1 (step = epoch), final val/test F1, PR-AUC, ROC-AUC,
 precision/recall, thresholds, typology counts, and the small JSON files as artifacts (never
@@ -84,7 +84,7 @@ Exit codes: `0` ok · `1` unexpected or training diverged · `2` dataset missing
 1. `cp ops/vm.env.example ops/vm.env` and fill in the project, zone, bucket and VM type.
    n1-highmem-8 is enough for HI-Small; use n1-highmem-16 for 4 parallel HI-Medium jobs.
 2. Laptop: `ops/sync.sh push-data`, then `ops/vm_create.sh`.
-3. VM: clone the repo next to an empty `garda-ai-data/`, copy `ops/vm.env`, run `ops/vm_setup.sh`
+3. VM: clone the repo next to an empty `grafin-ai-data/`, copy `ops/vm.env`, run `ops/vm_setup.sh`
    (checks GPUs, installs uv + CUDA 12.4 wheels, pulls data).
 4. Probe first: `ops/run_parallel.sh ops/jobs/probe.jobs`, then read `seconds` and
    `peak_gpu_mem_mb` in `runs/probe-small-id/metrics.json`. If a T4 runs out of memory, lower
@@ -98,7 +98,7 @@ Linux always needs an extra: `make install EXTRA=cu124` (GPU) or `EXTRA=cpu` (CI
 
 ## Fidelity to the paper
 
-- `garda_training/models/multignn.py` is upstream `models.py` byte for byte (a test checks its sha256).
+- `grafin_training/models/multignn.py` is upstream `models.py` byte for byte (a test checks its sha256).
 - The split, ports, time deltas, ego IDs, reverse message passing and hyper-parameters match
   upstream. Tests compare against verbatim upstream code in `tests/upstream_ref.py`.
 - One upstream quirk is reproduced on purpose: with reverse MP, the port swap meant for

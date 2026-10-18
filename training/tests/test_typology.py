@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from garda_training.train.typology import (
+from grafin_training.train.typology import (
     CYCLE,
     FAN_IN,
     FAN_OUT,

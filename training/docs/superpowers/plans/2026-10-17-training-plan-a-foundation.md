@@ -1,10 +1,10 @@
-# garda-ai-training — Plan A: Foundation + Paper Protocol
+# grafin-ai-training — Plan A: Foundation + Paper Protocol
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A tested, reproducible port of IBM Multi-GNN that runs the paper protocol on raw and localized IBM AML data on Mac (CPU) and a 4×T4 GCP VM (CUDA), producing Wave 1 parity results.
 
-**Architecture:** uv package `garda_training` with IBM's `models.py` vendored byte-for-byte and everything around it rebuilt as small modules: data (read/verify, node ids, split, features, cached `prepare`), graph (vectorised ports/time deltas, PyG graphs, loaders), train (paper protocol, training loop with resume), tracking (run dirs + MLflow SQLite), CLI, and GCP ops scripts. Plan B (causal protocol, heads, ONNX bundle) builds on this.
+**Architecture:** uv package `grafin_training` with IBM's `models.py` vendored byte-for-byte and everything around it rebuilt as small modules: data (read/verify, node ids, split, features, cached `prepare`), graph (vectorised ports/time deltas, PyG graphs, loaders), train (paper protocol, training loop with resume), tracking (run dirs + MLflow SQLite), CLI, and GCP ops scripts. Plan B (causal protocol, heads, ONNX bundle) builds on this.
 
 **Tech Stack:** Python 3.11 · torch 2.5.1 · torch_geometric 2.6.1 · pyg-lib 0.4.0 · polars 2.0.0 · numpy 2.x · scikit-learn · mlflow-skinny 3.17.1 (SQLite) · uv · ruff · mypy --strict · pytest.
 
@@ -14,11 +14,11 @@
 
 ## Ground rules for the implementer
 
-- Repo: `repositories/garda-ai-training` (git, branch `main`, no remote). **Work on branch `feat/plan-a-foundation`** (`git checkout -b feat/plan-a-foundation`). Never push.
+- Repo: `repositories/grafin-ai-training` (git, branch `main`, no remote). **Work on branch `feat/plan-a-foundation`** (`git checkout -b feat/plan-a-foundation`). Never push.
 - Commit author is preconfigured in the repo (`Thariq Iskandar Zulkarnain M P <thariqiskandar9@gmail.com>`). Every commit message ends with a blank line and `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
 - **Every code block in this plan was executed while planning** (42 tests, ruff, mypy --strict green; real HI-Small run). Write files exactly as given. If something fails, stop and report the exact output rather than improvising.
 - Downloads (`LICENSE`, `models.py`) come from IBM's GitHub at commit `252b0252afca109d1d216c411c59ff70753b25fc` and must match the sha256 values given.
-- Data lives next to the repo in `../garda-ai-data` (read-only for this plan).
+- Data lives next to the repo in `../grafin-ai-data` (read-only for this plan).
 - Linux only: every `uv sync` / `uv run` needs `--extra cpu` or `--extra cu124` (the Makefile handles this via `EXTRA=`). On the Mac use plain `uv`.
 
 ## File map
@@ -29,21 +29,21 @@
 | `Makefile`, `.github/workflows/ci.yml` | install / lint / typecheck / test / smoke |
 | `LICENSE`, `NOTICE`, `README.md` | Apache-2.0 + IBM attribution; usage and GPU runbook |
 | `configs/paper_pna.toml` | upstream Multi-PNA+EU hyper-parameters |
-| `garda_training/errors.py` | exit-code taxonomy |
-| `garda_training/device.py` | cpu / mps / cuda resolution |
-| `garda_training/config.py` | typed TOML config with strict validation and overrides |
-| `garda_training/models/multignn.py` | IBM `models.py`, verbatim |
-| `garda_training/data/load.py` | read raw/ID CSV → canonical frame; sha256 verification |
-| `garda_training/data/nodes.py` | (bank, account) → node ids |
-| `garda_training/data/split.py` | paper day split, calibration split |
-| `garda_training/data/features.py` | paper edge features, codebooks, train-only normalisation |
-| `garda_training/data/prepare.py` | cached, race-safe dataset preparation |
-| `garda_training/graph/build.py` | ports, time deltas, PyG graphs, paper split graphs |
-| `garda_training/graph/loaders.py` | LinkNeighborLoader, ego IDs, seed masks |
-| `garda_training/train/paper.py` | paper-protocol inputs |
-| `garda_training/train/gnn.py` | training loop, checkpoints, resume |
-| `garda_training/tracking.py` | run directories, MLflow |
-| `garda_training/report.py`, `garda_training/cli.py` | `garda-train prepare / gnn / compare` |
+| `grafin_training/errors.py` | exit-code taxonomy |
+| `grafin_training/device.py` | cpu / mps / cuda resolution |
+| `grafin_training/config.py` | typed TOML config with strict validation and overrides |
+| `grafin_training/models/multignn.py` | IBM `models.py`, verbatim |
+| `grafin_training/data/load.py` | read raw/ID CSV → canonical frame; sha256 verification |
+| `grafin_training/data/nodes.py` | (bank, account) → node ids |
+| `grafin_training/data/split.py` | paper day split, calibration split |
+| `grafin_training/data/features.py` | paper edge features, codebooks, train-only normalisation |
+| `grafin_training/data/prepare.py` | cached, race-safe dataset preparation |
+| `grafin_training/graph/build.py` | ports, time deltas, PyG graphs, paper split graphs |
+| `grafin_training/graph/loaders.py` | LinkNeighborLoader, ego IDs, seed masks |
+| `grafin_training/train/paper.py` | paper-protocol inputs |
+| `grafin_training/train/gnn.py` | training loop, checkpoints, resume |
+| `grafin_training/tracking.py` | run directories, MLflow |
+| `grafin_training/report.py`, `grafin_training/cli.py` | `grafin-train prepare / gnn / compare` |
 | `ops/*` | GCP VM create/setup, GCS sync, one-job-per-GPU runner, job files |
 | `tests/fixture.py`, `tests/conftest.py` | synthetic dataset in both formats |
 | `tests/upstream_ref.py` | verbatim upstream code used as an oracle |
@@ -62,9 +62,9 @@ Create the uv project with the platform-specific PyTorch / PyG wheels that were 
 - Create: `NOTICE`
 - Create: `Makefile`
 - Create: `.github/workflows/ci.yml`
-- Create: `garda_training/errors.py`
+- Create: `grafin_training/errors.py`
 - Create: `README.md`
-- Create: `garda_training/__init__.py`
+- Create: `grafin_training/__init__.py`
 - Create: `tests/__init__.py`
 - Create: `LICENSE`
 
@@ -75,18 +75,18 @@ Create the uv project with the platform-specific PyTorch / PyG wheels that were 
 ```python
 from __future__ import annotations
 
-from garda_training.errors import (
+from grafin_training.errors import (
     ConfigError,
     CudaUnavailableError,
     DatasetError,
     ExportCheckError,
-    GardaTrainError,
+    GrafinTrainError,
     TrainingDivergedError,
 )
 
 
 def test_exit_codes() -> None:
-    assert GardaTrainError.exit_code == 1
+    assert GrafinTrainError.exit_code == 1
     assert DatasetError.exit_code == 2
     assert ConfigError.exit_code == 3
     assert ExportCheckError.exit_code == 4
@@ -109,9 +109,9 @@ shasum -a 256 LICENSE   # expect c71d239df91726fc519c6eb72d318ec65820627232b2f79
 
 ```toml
 [project]
-name = "garda-ai-training"
+name = "grafin-ai-training"
 version = "0.1.0"
-description = "Garda AI fraud-scorer training: Multi-GNN port, causal evaluation, model bundle export"
+description = "Grafin AI fraud-scorer training: Multi-GNN port, causal evaluation, model bundle export"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = "==3.11.*"
@@ -133,7 +133,7 @@ cpu = ["torch==2.5.1", "pyg-lib==0.4.0; sys_platform == 'linux'"]
 cu124 = ["torch==2.5.1", "pyg-lib==0.4.0; sys_platform == 'linux'"]
 
 [project.scripts]
-garda-train = "garda_training.cli:run"
+grafin-train = "grafin_training.cli:run"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8", "mypy>=1.13"]
@@ -143,7 +143,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["garda_training"]
+packages = ["grafin_training"]
 
 [tool.uv]
 environments = [
@@ -176,7 +176,7 @@ explicit = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["garda_training/models/multignn.py", "tests/upstream_ref.py"]
+extend-exclude = ["grafin_training/models/multignn.py", "tests/upstream_ref.py"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]
@@ -184,11 +184,11 @@ select = ["E4", "E7", "E9", "F", "I"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["garda_training"]
-exclude = ["garda_training/models/multignn\\.py$"]
+files = ["grafin_training"]
+exclude = ["grafin_training/models/multignn\\.py$"]
 
 [[tool.mypy.overrides]]
-module = ["torch_geometric.*", "sklearn.*", "mlflow.*", "pyg_lib.*", "garda_training.models.multignn"]
+module = ["torch_geometric.*", "sklearn.*", "mlflow.*", "pyg_lib.*", "grafin_training.models.multignn"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
@@ -224,17 +224,17 @@ ops/*.env
 `NOTICE`:
 
 ```text
-garda-ai-training
-Copyright 2026 Meaningful Intelligence (Garda AI)
+grafin-ai-training
+Copyright 2026 Meaningful Intelligence (Grafin AI)
 
 This product includes software developed by IBM as part of Multi-GNN
 (https://github.com/IBM/Multi-GNN, commit 252b0252afca109d1d216c411c59ff70753b25fc),
 licensed under the Apache License, Version 2.0:
 
-- garda_training/models/multignn.py is a verbatim copy of upstream models.py.
+- grafin_training/models/multignn.py is a verbatim copy of upstream models.py.
 - tests/upstream_ref.py contains verbatim copies of upstream data_util.py functions and the
   split block of data_loading.py, used only as a test oracle.
-- garda_training/graph/ and garda_training/train/gnn.py are adapted from upstream
+- grafin_training/graph/ and grafin_training/train/gnn.py are adapted from upstream
   data_util.py, train_util.py and training.py.
 
 Reference: Egressy et al., "Provably Powerful Graph Neural Networks for Directed Multigraphs",
@@ -244,12 +244,12 @@ AAAI 2024 (arXiv:2306.11586).
 `Makefile`:
 
 ```makefile
-# garda-ai-training — common tasks. Linux needs EXTRA=cpu (CI) or EXTRA=cu124 (GPU VM).
+# grafin-ai-training — common tasks. Linux needs EXTRA=cpu (CI) or EXTRA=cu124 (GPU VM).
 EXTRA ?=
 SYNC_FLAGS = $(if $(EXTRA),--extra $(EXTRA),)
 # `uv run` re-syncs the environment: pass the same extra so CUDA/CPU torch is kept.
 RUN = uv run $(SYNC_FLAGS)
-DATA_ROOT ?= ../garda-ai-data
+DATA_ROOT ?= ../grafin-ai-data
 SMOKE_DIR ?= .smoke
 
 .PHONY: install lint typecheck test check smoke smoke-small compare clean-smoke
@@ -272,19 +272,19 @@ check: lint typecheck test
 # End-to-end on the synthetic fixture (CPU, ~10 s).
 smoke: clean-smoke
 	$(RUN) python tests/fixture.py $(SMOKE_DIR)/fixture
-	$(RUN) garda-train gnn --data $(SMOKE_DIR)/fixture/raw/HI-Fixture_Trans.csv --source raw \
+	$(RUN) grafin-train gnn --data $(SMOKE_DIR)/fixture/raw/HI-Fixture_Trans.csv --source raw \
 		--epochs 2 --batch-size 32 --num-neighs 10 10 --device cpu \
 		--runs-dir $(SMOKE_DIR)/runs --cache-dir $(SMOKE_DIR)/cache --no-mlflow
-	$(RUN) garda-train compare --runs-dir $(SMOKE_DIR)/runs
+	$(RUN) grafin-train compare --runs-dir $(SMOKE_DIR)/runs
 
 # Real HI-Small-ID, paper settings, 3 batches per loader (CPU, ~4-6 min on an M2).
 smoke-small:
-	$(RUN) garda-train gnn --data $(DATA_ROOT)/HI-Small-ID/HI-Small_Trans_sorted.csv --source id \
+	$(RUN) grafin-train gnn --data $(DATA_ROOT)/HI-Small-ID/HI-Small_Trans_sorted.csv --source id \
 		--epochs 1 --max-batches 3 --device cpu --runs-dir $(SMOKE_DIR)/runs \
 		--cache-dir cache --no-mlflow
 
 compare:
-	$(RUN) garda-train compare --runs-dir runs
+	$(RUN) grafin-train compare --runs-dir runs
 
 clean-smoke:
 	rm -rf $(SMOKE_DIR)
@@ -311,7 +311,7 @@ jobs:
       - run: make smoke
 ```
 
-`garda_training/errors.py`:
+`grafin_training/errors.py`:
 
 ```python
 """Exit-code taxonomy (spec §10). Every user-facing failure raises a subclass."""
@@ -319,37 +319,37 @@ jobs:
 from __future__ import annotations
 
 
-class GardaTrainError(Exception):
+class GrafinTrainError(Exception):
     """Base class; exit code 1 (unexpected / training failure)."""
 
     exit_code = 1
 
 
-class DatasetError(GardaTrainError):
+class DatasetError(GrafinTrainError):
     """Dataset missing or unreadable, or its sha256 does not match the manifest."""
 
     exit_code = 2
 
 
-class ConfigError(GardaTrainError):
+class ConfigError(GrafinTrainError):
     """Invalid configuration or CLI arguments."""
 
     exit_code = 3
 
 
-class ExportCheckError(GardaTrainError):
+class ExportCheckError(GrafinTrainError):
     """A model-bundle self-check failed (Plan B)."""
 
     exit_code = 4
 
 
-class CudaUnavailableError(GardaTrainError):
+class CudaUnavailableError(GrafinTrainError):
     """--device cuda was requested but CUDA is not available."""
 
     exit_code = 5
 
 
-class TrainingDivergedError(GardaTrainError):
+class TrainingDivergedError(GrafinTrainError):
     """The training loss became NaN or infinite; the last good checkpoint is kept."""
 
     exit_code = 1
@@ -358,15 +358,15 @@ class TrainingDivergedError(GardaTrainError):
 `README.md`:
 
 ```markdown
-# garda-ai-training
+# grafin-ai-training
 
 Work in progress. Design: docs/superpowers/specs/2026-10-17-training-repo-design.md
 ```
 
-`garda_training/__init__.py`:
+`grafin_training/__init__.py`:
 
 ```python
-"""Garda AI fraud-scorer training (Multi-GNN port, causal evaluation, model bundle)."""
+"""Grafin AI fraud-scorer training (Multi-GNN port, causal evaluation, model bundle)."""
 ```
 
 `tests/__init__.py`:
@@ -392,19 +392,19 @@ Expected: 1 passed
 - [ ] **Step 7: Commit**
 
 ```bash
-git add .github/workflows/ci.yml .gitignore .python-version LICENSE Makefile NOTICE README.md garda_training/__init__.py garda_training/errors.py pyproject.toml tests/__init__.py tests/test_errors.py uv.lock
+git add .github/workflows/ci.yml .gitignore .python-version LICENSE Makefile NOTICE README.md grafin_training/__init__.py grafin_training/errors.py pyproject.toml tests/__init__.py tests/test_errors.py uv.lock
 git commit -m "chore: scaffold uv project, pinned torch/PyG stack, exit codes" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ### Task 2: Vendor the upstream model and the test oracle
 
-`garda_training/models/multignn.py` must be **byte-identical** to IBM's `models.py` at commit 252b025 (download it, never retype it). `tests/upstream_ref.py` holds verbatim upstream functions (ports, time deltas, adjacency, z_norm, and the split block of `data_loading.get_data` wrapped in a function) used only as an oracle in later tests. Both files are excluded from ruff and mypy in `pyproject.toml`.
+`grafin_training/models/multignn.py` must be **byte-identical** to IBM's `models.py` at commit 252b025 (download it, never retype it). `tests/upstream_ref.py` holds verbatim upstream functions (ports, time deltas, adjacency, z_norm, and the split block of `data_loading.get_data` wrapped in a function) used only as an oracle in later tests. Both files are excluded from ruff and mypy in `pyproject.toml`.
 
 **Files:**
 - Create: `tests/test_vendored_model.py`
 - Create: `tests/upstream_ref.py`
-- Create: `garda_training/models/__init__.py`
-- Create: `garda_training/models/multignn.py`
+- Create: `grafin_training/models/__init__.py`
+- Create: `grafin_training/models/multignn.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -418,10 +418,10 @@ from pathlib import Path
 
 import torch
 
-from garda_training.models.multignn import PNA
+from grafin_training.models.multignn import PNA
 
 UPSTREAM_SHA256 = "00ef7142e81d3080114142106867e6ef3002d5a01ff5474e9f75cab957fcefe7"
-VENDORED = Path(__file__).resolve().parents[1] / "garda_training" / "models" / "multignn.py"
+VENDORED = Path(__file__).resolve().parents[1] / "grafin_training" / "models" / "multignn.py"
 
 
 def test_vendored_models_file_is_byte_identical_to_upstream() -> None:
@@ -452,9 +452,9 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 - [ ] **Step 3: Download upstream files (do not retype)**
 
 ```bash
-mkdir -p garda_training/models
-curl -fsSL https://raw.githubusercontent.com/IBM/Multi-GNN/252b0252afca109d1d216c411c59ff70753b25fc/models.py -o garda_training/models/multignn.py
-shasum -a 256 garda_training/models/multignn.py   # expect 00ef7142e81d3080114142106867e6ef3002d5a01ff5474e9f75cab957fcefe7
+mkdir -p grafin_training/models
+curl -fsSL https://raw.githubusercontent.com/IBM/Multi-GNN/252b0252afca109d1d216c411c59ff70753b25fc/models.py -o grafin_training/models/multignn.py
+shasum -a 256 grafin_training/models/multignn.py   # expect 00ef7142e81d3080114142106867e6ef3002d5a01ff5474e9f75cab957fcefe7
 ```
 
 - [ ] **Step 4: Write the implementation**
@@ -556,7 +556,7 @@ def paper_split_days(daily_trans):
     return split
 ```
 
-`garda_training/models/__init__.py`:
+`grafin_training/models/__init__.py`:
 
 ```python
 
@@ -570,7 +570,7 @@ Expected: 2 passed
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_training/models/__init__.py garda_training/models/multignn.py tests/test_vendored_model.py tests/upstream_ref.py
+git add grafin_training/models/__init__.py grafin_training/models/multignn.py tests/test_vendored_model.py tests/upstream_ref.py
 git commit -m "feat: vendor IBM Multi-GNN models.py verbatim plus upstream test oracle" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -581,8 +581,8 @@ git commit -m "feat: vendor IBM Multi-GNN models.py verbatim plus upstream test 
 **Files:**
 - Create: `tests/test_device.py`
 - Create: `tests/test_config.py`
-- Create: `garda_training/device.py`
-- Create: `garda_training/config.py`
+- Create: `grafin_training/device.py`
+- Create: `grafin_training/config.py`
 - Create: `configs/paper_pna.toml`
 
 - [ ] **Step 1: Write the failing tests**
@@ -595,8 +595,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from garda_training.device import resolve_device
-from garda_training.errors import ConfigError, CudaUnavailableError
+from grafin_training.device import resolve_device
+from grafin_training.errors import ConfigError, CudaUnavailableError
 
 
 def test_resolve_device_cpu_and_unknown() -> None:
@@ -621,8 +621,8 @@ from pathlib import Path
 
 import pytest
 
-from garda_training.config import load_gnn_config
-from garda_training.errors import ConfigError
+from grafin_training.config import load_gnn_config
+from grafin_training.errors import ConfigError
 
 PAPER = Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml"
 
@@ -667,7 +667,7 @@ def test_invalid_configs(tmp_path: Path, edit: tuple[str, str, object], message:
     raw = tomllib.loads(PAPER.read_text())
     section, key, value = edit
     raw[section][key] = value
-    from garda_training.config import parse_gnn_config
+    from grafin_training.config import parse_gnn_config
 
     with pytest.raises(ConfigError, match=message):
         parse_gnn_config(raw)
@@ -685,7 +685,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/device.py`:
+`grafin_training/device.py`:
 
 ```python
 """Device resolution. `auto` never picks MPS: PyG scatter ops are not reliable there."""
@@ -694,7 +694,7 @@ from __future__ import annotations
 
 import torch
 
-from garda_training.errors import ConfigError, CudaUnavailableError
+from grafin_training.errors import ConfigError, CudaUnavailableError
 
 DEVICE_CHOICES = ("auto", "cpu", "mps", "cuda")
 
@@ -715,7 +715,7 @@ def resolve_device(name: str) -> torch.device:
     return torch.device("cpu")
 ```
 
-`garda_training/config.py`:
+`grafin_training/config.py`:
 
 ```python
 """Typed GNN configuration loaded from TOML (configs/paper_pna.toml)."""
@@ -727,7 +727,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 SUPPORTED_MODELS = ("pna",)
 
@@ -932,7 +932,7 @@ Expected: 11 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add configs/paper_pna.toml garda_training/config.py garda_training/device.py tests/test_config.py tests/test_device.py
+git add configs/paper_pna.toml grafin_training/config.py grafin_training/device.py tests/test_config.py tests/test_device.py
 git commit -m "feat: device resolution and typed paper PNA config" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1138,8 +1138,8 @@ git commit -m "test: synthetic AML fixture in raw and localized formats" -m "Co-
 
 **Files:**
 - Create: `tests/test_load.py`
-- Create: `garda_training/data/load.py`
-- Create: `garda_training/data/__init__.py`
+- Create: `grafin_training/data/load.py`
+- Create: `grafin_training/data/__init__.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1155,8 +1155,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_training.data.load import read_transactions, verify_dataset
-from garda_training.errors import DatasetError
+from grafin_training.data.load import read_transactions, verify_dataset
+from grafin_training.errors import DatasetError
 
 
 def test_read_raw_and_id_give_the_same_transactions(fixture_paths: tuple[Path, Path]) -> None:
@@ -1194,7 +1194,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/data/load.py`:
+`grafin_training/data/load.py`:
 
 ```python
 """Read raw Kaggle or localized (HI-*-ID) transaction CSVs into one canonical Polars frame.
@@ -1211,7 +1211,7 @@ from typing import Literal
 
 import polars as pl
 
-from garda_training.errors import ConfigError, DatasetError
+from grafin_training.errors import ConfigError, DatasetError
 
 Source = Literal["raw", "id"]
 SOURCES: tuple[Source, ...] = ("raw", "id")
@@ -1248,7 +1248,7 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def expected_sha256(path: Path, source: Source) -> str:
-    """ID data: garda-ai-dataset MANIFEST.json "outputs". Raw data: SHA256SUMS from the fetch step."""
+    """ID data: grafin-ai-dataset MANIFEST.json "outputs". Raw data: SHA256SUMS from the fetch step."""
     if source == "id":
         manifest = path.parent / "MANIFEST.json"
         if not manifest.is_file():
@@ -1313,7 +1313,7 @@ def read_transactions(path: Path) -> pl.DataFrame:
     return frame.sort(["ts", "row"])
 ```
 
-`garda_training/data/__init__.py`:
+`grafin_training/data/__init__.py`:
 
 ```python
 
@@ -1327,7 +1327,7 @@ Expected: 2 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/data/__init__.py garda_training/data/load.py tests/test_load.py
+git add grafin_training/data/__init__.py grafin_training/data/load.py tests/test_load.py
 git commit -m "feat: canonical reader and sha256 verification for raw and ID datasets" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1337,7 +1337,7 @@ Accounts are keyed by (bank, account) and numbered in first-appearance order ove
 
 **Files:**
 - Create: `tests/test_nodes.py`
-- Create: `garda_training/data/nodes.py`
+- Create: `grafin_training/data/nodes.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1350,8 +1350,8 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_training.data.load import read_transactions
-from garda_training.data.nodes import assign_node_ids
+from grafin_training.data.load import read_transactions
+from grafin_training.data.nodes import assign_node_ids
 
 
 def test_node_ids_follow_upstream_first_appearance(fixture_paths: tuple[Path, Path]) -> None:
@@ -1379,7 +1379,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/data/nodes.py`:
+`grafin_training/data/nodes.py`:
 
 ```python
 """(bank, account) → contiguous node ids, numbered like the upstream formatter."""
@@ -1433,7 +1433,7 @@ Expected: 1 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/data/nodes.py tests/test_nodes.py
+git add grafin_training/data/nodes.py tests/test_nodes.py
 git commit -m "feat: (bank, account) node ids in upstream first-appearance order" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1443,7 +1443,7 @@ git commit -m "feat: (bank, account) node ids in upstream first-appearance order
 
 **Files:**
 - Create: `tests/test_split.py`
-- Create: `garda_training/data/split.py`
+- Create: `grafin_training/data/split.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1457,9 +1457,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from garda_training.data.load import read_transactions
-from garda_training.data.split import calibration_split, day_index, paper_split, rows_for_days
-from garda_training.errors import ConfigError
+from grafin_training.data.load import read_transactions
+from grafin_training.data.split import calibration_split, day_index, paper_split, rows_for_days
+from grafin_training.errors import ConfigError
 from tests import upstream_ref
 
 HI_SMALL_DAILY = [
@@ -1525,7 +1525,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/data/split.py`:
+`grafin_training/data/split.py`:
 
 ```python
 """Day-based temporal splits."""
@@ -1538,7 +1538,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 SECONDS_PER_DAY = 86_400
 IntArray = npt.NDArray[np.int64]
@@ -1609,7 +1609,7 @@ Expected: 5 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/data/split.py tests/test_split.py
+git add grafin_training/data/split.py tests/test_split.py
 git commit -m "feat: upstream day split and calibration split" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1619,7 +1619,7 @@ Base features are upstream's four (seconds since first transaction, amount recei
 
 **Files:**
 - Create: `tests/test_features.py`
-- Create: `garda_training/data/features.py`
+- Create: `grafin_training/data/features.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1632,8 +1632,8 @@ from pathlib import Path
 
 import numpy as np
 
-from garda_training.data.features import apply_norm, build_codebooks, fit_norm, paper_base_features
-from garda_training.data.load import read_transactions
+from grafin_training.data.features import apply_norm, build_codebooks, fit_norm, paper_base_features
+from grafin_training.data.load import read_transactions
 
 
 def test_codebooks_first_appearance(fixture_paths: tuple[Path, Path]) -> None:
@@ -1675,7 +1675,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/data/features.py`:
+`grafin_training/data/features.py`:
 
 ```python
 """Paper edge features, categorical codebooks and train-only normalisation."""
@@ -1775,7 +1775,7 @@ Expected: 3 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/data/features.py tests/test_features.py
+git add grafin_training/data/features.py tests/test_features.py
 git commit -m "feat: paper edge features, codebooks, train-only z-normalisation" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1785,8 +1785,8 @@ Upstream computes ports and time deltas with Python loops over per-node lists (h
 
 **Files:**
 - Create: `tests/test_graph_build.py`
-- Create: `garda_training/graph/build.py`
-- Create: `garda_training/graph/__init__.py`
+- Create: `grafin_training/graph/build.py`
+- Create: `grafin_training/graph/__init__.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1801,7 +1801,7 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from garda_training.graph.build import (
+from grafin_training.graph.build import (
     EDGE,
     REV,
     _ports,
@@ -1892,7 +1892,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/graph/build.py`:
+`grafin_training/graph/build.py`:
 
 ```python
 """Port numbers, time deltas and PyG graph objects (port of upstream data_util.py)."""
@@ -2028,7 +2028,7 @@ def paper_graphs(
     return graphs
 ```
 
-`garda_training/graph/__init__.py`:
+`grafin_training/graph/__init__.py`:
 
 ```python
 
@@ -2042,7 +2042,7 @@ Expected: 4 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/graph/__init__.py garda_training/graph/build.py tests/test_graph_build.py
+git add grafin_training/graph/__init__.py grafin_training/graph/build.py tests/test_graph_build.py
 git commit -m "feat: vectorised ports/time deltas and paper split graphs" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -2052,7 +2052,7 @@ git commit -m "feat: vectorised ports/time deltas and paper split graphs" -m "Co
 
 **Files:**
 - Create: `tests/test_prepare.py`
-- Create: `garda_training/data/prepare.py`
+- Create: `grafin_training/data/prepare.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2067,7 +2067,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-from garda_training.data.prepare import prepare_dataset
+from grafin_training.data.prepare import prepare_dataset
 from tests import upstream_ref
 
 
@@ -2116,7 +2116,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/data/prepare.py`:
+`grafin_training/data/prepare.py`:
 
 ```python
 """`prepare`: verify → read → node ids → codebooks → features → cache (keyed by file sha256)."""
@@ -2134,12 +2134,12 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from garda_training.data.features import Codebooks, build_codebooks, paper_base_features
-from garda_training.data.load import Source, read_transactions, verify_dataset
-from garda_training.data.nodes import assign_node_ids
-from garda_training.data.split import day_index
-from garda_training.errors import DatasetError
-from garda_training.graph.build import port_columns, time_delta_columns
+from grafin_training.data.features import Codebooks, build_codebooks, paper_base_features
+from grafin_training.data.load import Source, read_transactions, verify_dataset
+from grafin_training.data.nodes import assign_node_ids
+from grafin_training.data.split import day_index
+from grafin_training.errors import DatasetError
+from grafin_training.graph.build import port_columns, time_delta_columns
 
 log = logging.getLogger(__name__)
 CACHE_VERSION = 1
@@ -2263,7 +2263,7 @@ Expected: 2 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/data/prepare.py tests/test_prepare.py
+git add grafin_training/data/prepare.py tests/test_prepare.py
 git commit -m "feat: prepare step with race-safe dataset cache" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -2273,7 +2273,7 @@ Port of upstream `train_util`: `LinkNeighborLoader` per split graph, `AddEgoIds`
 
 **Files:**
 - Create: `tests/test_loaders.py`
-- Create: `garda_training/graph/loaders.py`
+- Create: `grafin_training/graph/loaders.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2285,8 +2285,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from garda_training.graph.build import EDGE, paper_graphs
-from garda_training.graph.loaders import AddEgoIds, make_loader, seed_mask
+from grafin_training.graph.build import EDGE, paper_graphs
+from grafin_training.graph.loaders import AddEgoIds, make_loader, seed_mask
 
 
 def test_loader_ego_ids_and_seed_mask() -> None:
@@ -2329,7 +2329,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/graph/loaders.py`:
+`grafin_training/graph/loaders.py`:
 
 ```python
 """Link-neighbour loaders, ego IDs and seed-edge masks (port of upstream train_util.py)."""
@@ -2343,7 +2343,7 @@ from torch_geometric.data import Data, HeteroData
 from torch_geometric.loader import LinkNeighborLoader
 from torch_geometric.transforms import BaseTransform
 
-from garda_training.graph.build import EDGE, SplitGraph
+from grafin_training.graph.build import EDGE, SplitGraph
 
 
 class AddEgoIds(BaseTransform):  # type: ignore[misc]
@@ -2405,7 +2405,7 @@ Expected: 2 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/graph/loaders.py tests/test_loaders.py
+git add grafin_training/graph/loaders.py tests/test_loaders.py
 git commit -m "feat: link-neighbour loaders, ego IDs and seed masks" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -2415,7 +2415,7 @@ The run directory is the source of truth (config, env, data facts, metrics, chec
 
 **Files:**
 - Create: `tests/test_tracking.py`
-- Create: `garda_training/tracking.py`
+- Create: `grafin_training/tracking.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2430,8 +2430,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from garda_training.errors import ConfigError
-from garda_training.tracking import RunDir, Tracker, environment_info, flatten, make_run_id
+from grafin_training.errors import ConfigError
+from grafin_training.tracking import RunDir, Tracker, environment_info, flatten, make_run_id
 
 
 def test_run_id_and_run_dir(tmp_path: Path) -> None:
@@ -2470,7 +2470,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/tracking.py`:
+`grafin_training/tracking.py`:
 
 ```python
 """Run directories (source of truth) and failure-tolerant MLflow logging."""
@@ -2489,12 +2489,12 @@ from typing import Any
 import torch
 import torch_geometric
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 log = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MLFLOW_URI = f"sqlite:///{REPO_ROOT / 'mlruns' / 'mlflow.db'}"
-EXPERIMENT = "garda-training"
+EXPERIMENT = "grafin-training"
 
 
 def make_run_id(dataset: str, protocol: str, seed: int, now: datetime | None = None) -> str:
@@ -2622,7 +2622,7 @@ Expected: 3 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/tracking.py tests/test_tracking.py
+git add grafin_training/tracking.py tests/test_tracking.py
 git commit -m "feat: run directories and failure-tolerant MLflow tracking" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -2632,9 +2632,9 @@ git commit -m "feat: run directories and failure-tolerant MLflow tracking" -m "C
 
 **Files:**
 - Create: `tests/test_train.py`
-- Create: `garda_training/train/gnn.py`
-- Create: `garda_training/train/paper.py`
-- Create: `garda_training/train/__init__.py`
+- Create: `grafin_training/train/gnn.py`
+- Create: `grafin_training/train/paper.py`
+- Create: `grafin_training/train/__init__.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2649,13 +2649,13 @@ import numpy as np
 import pytest
 import torch
 
-from garda_training.config import GnnConfig, load_gnn_config
-from garda_training.data.prepare import prepare_dataset
-from garda_training.errors import TrainingDivergedError
-from garda_training.graph.build import SplitGraph
-from garda_training.tracking import RunDir, Tracker
-from garda_training.train.gnn import load_checkpoint, set_seed, train_gnn
-from garda_training.train.paper import paper_inputs
+from grafin_training.config import GnnConfig, load_gnn_config
+from grafin_training.data.prepare import prepare_dataset
+from grafin_training.errors import TrainingDivergedError
+from grafin_training.graph.build import SplitGraph
+from grafin_training.tracking import RunDir, Tracker
+from grafin_training.train.gnn import load_checkpoint, set_seed, train_gnn
+from grafin_training.train.paper import paper_inputs
 
 PAPER = Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml"
 
@@ -2752,7 +2752,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/train/gnn.py`:
+`grafin_training/train/gnn.py`:
 
 ```python
 """GNN training loop (port of upstream training.py / train_util.py) with best-val checkpointing,
@@ -2776,12 +2776,12 @@ from torch_geometric.data import Data, HeteroData
 from torch_geometric.nn import to_hetero
 from torch_geometric.utils import degree
 
-from garda_training.config import GnnConfig
-from garda_training.errors import TrainingDivergedError
-from garda_training.graph.build import EDGE, REV, SplitGraph
-from garda_training.graph.loaders import make_loader, seed_mask
-from garda_training.models.multignn import PNA
-from garda_training.tracking import RunDir, Tracker
+from grafin_training.config import GnnConfig
+from grafin_training.errors import TrainingDivergedError
+from grafin_training.graph.build import EDGE, REV, SplitGraph
+from grafin_training.graph.loaders import make_loader, seed_mask
+from grafin_training.models.multignn import PNA
+from grafin_training.tracking import RunDir, Tracker
 
 log = logging.getLogger(__name__)
 
@@ -3086,7 +3086,7 @@ def train_gnn(
     )
 ```
 
-`garda_training/train/paper.py`:
+`grafin_training/train/paper.py`:
 
 ```python
 """Paper protocol inputs: upstream day split, train-only normalisation, three split graphs."""
@@ -3098,11 +3098,11 @@ from typing import Any
 import numpy as np
 import torch
 
-from garda_training.config import GnnConfig
-from garda_training.data.features import apply_norm, fit_norm
-from garda_training.data.prepare import PreparedData
-from garda_training.data.split import paper_split, rows_for_days
-from garda_training.graph.build import SplitGraph, paper_graphs
+from grafin_training.config import GnnConfig
+from grafin_training.data.features import apply_norm, fit_norm
+from grafin_training.data.prepare import PreparedData
+from grafin_training.data.split import paper_split, rows_for_days
+from grafin_training.graph.build import SplitGraph, paper_graphs
 
 
 def paper_inputs(
@@ -3136,7 +3136,7 @@ def paper_inputs(
     return graphs, data_info
 ```
 
-`garda_training/train/__init__.py`:
+`grafin_training/train/__init__.py`:
 
 ```python
 
@@ -3150,18 +3150,18 @@ Expected: 4 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/train/__init__.py garda_training/train/gnn.py garda_training/train/paper.py tests/test_train.py
+git add grafin_training/train/__init__.py grafin_training/train/gnn.py grafin_training/train/paper.py tests/test_train.py
 git commit -m "feat: Multi-GNN training loop with best-val checkpoints, resume, NaN guard" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-### Task 14: `garda-train` CLI and run comparison
+### Task 14: `grafin-train` CLI and run comparison
 
-Subcommands `prepare`, `gnn` (new run or `--resume RUN_ID`, which reloads the saved config and refuses if the dataset hash changed) and `compare` (markdown table plus mean ± std of test F1 per dataset/source/protocol). Every `GardaTrainError` maps to its exit code.
+Subcommands `prepare`, `gnn` (new run or `--resume RUN_ID`, which reloads the saved config and refuses if the dataset hash changed) and `compare` (markdown table plus mean ± std of test F1 per dataset/source/protocol). Every `GrafinTrainError` maps to its exit code.
 
 **Files:**
 - Create: `tests/test_cli.py`
-- Create: `garda_training/report.py`
-- Create: `garda_training/cli.py`
+- Create: `grafin_training/report.py`
+- Create: `grafin_training/cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3176,7 +3176,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from garda_training.cli import main
+from grafin_training.cli import main
 
 PAPER = str(Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml")
 
@@ -3302,7 +3302,7 @@ Expected: FAIL — `ModuleNotFoundError` / `ImportError` for the module this tas
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_training/report.py`:
+`grafin_training/report.py`:
 
 ```python
 """`compare`: markdown table of finished runs plus mean ± std per (dataset, source, protocol)."""
@@ -3369,10 +3369,10 @@ def render_markdown(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 ```
 
-`garda_training/cli.py`:
+`grafin_training/cli.py`:
 
 ```python
-"""`garda-train` command line: prepare | gnn | compare."""
+"""`grafin-train` command line: prepare | gnn | compare."""
 
 from __future__ import annotations
 
@@ -3383,27 +3383,27 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from garda_training.config import load_gnn_config, parse_gnn_config
-from garda_training.data.load import as_source
-from garda_training.data.prepare import prepare_dataset
-from garda_training.device import DEVICE_CHOICES, resolve_device
-from garda_training.errors import ConfigError, DatasetError, GardaTrainError
-from garda_training.report import collect_runs, render_markdown
-from garda_training.tracking import (
+from grafin_training.config import load_gnn_config, parse_gnn_config
+from grafin_training.data.load import as_source
+from grafin_training.data.prepare import prepare_dataset
+from grafin_training.device import DEVICE_CHOICES, resolve_device
+from grafin_training.errors import ConfigError, DatasetError, GrafinTrainError
+from grafin_training.report import collect_runs, render_markdown
+from grafin_training.tracking import (
     DEFAULT_MLFLOW_URI,
     RunDir,
     Tracker,
     environment_info,
     make_run_id,
 )
-from garda_training.train.gnn import set_seed, train_gnn
-from garda_training.train.paper import paper_inputs
+from grafin_training.train.gnn import set_seed, train_gnn
+from grafin_training.train.paper import paper_inputs
 
-log = logging.getLogger("garda_training")
+log = logging.getLogger("grafin_training")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="garda-train")
+    parser = argparse.ArgumentParser(prog="grafin-train")
     sub = parser.add_subparsers(dest="command", required=True)
 
     prep = sub.add_parser("prepare", help="verify, read and cache a transactions CSV")
@@ -3530,7 +3530,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     try:
         return int(args.func(args))
-    except GardaTrainError as exc:
+    except GrafinTrainError as exc:
         log.error("%s", exc)
         return exc.exit_code
 
@@ -3547,8 +3547,8 @@ Expected: 2 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_training/cli.py garda_training/report.py tests/test_cli.py
-git commit -m "feat: garda-train CLI (prepare, gnn, compare)" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+git add grafin_training/cli.py grafin_training/report.py tests/test_cli.py
+git commit -m "feat: grafin-train CLI (prepare, gnn, compare)" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ### Task 15: GCP ops scripts, job files and README
@@ -3572,15 +3572,15 @@ Operator scripts for the 4×T4 VM: create (Deep Learning VM image with the NVIDI
 
 ```bash
 # Copy to ops/vm.env (gitignored) and fill in. Sourced by every ops/*.sh script.
-GARDA_GCP_PROJECT=your-project-id
-GARDA_GCP_ZONE=asia-southeast2-a          # pick a zone with T4 quota: gcloud compute accelerator-types list --filter=name=nvidia-tesla-t4
-GARDA_VM_NAME=garda-train
-GARDA_VM_TYPE=n1-highmem-16               # 104 GB RAM: 4 parallel HI-Medium jobs. n1-highmem-8 (52 GB) is enough for HI-Small.
-GARDA_GPU_COUNT=4
-GARDA_IMAGE_FAMILY=common-cu124-ubuntu-2204-py310   # list: see ops/vm_create.sh
-GARDA_DISK_GB=300
-GARDA_GCS_BUCKET=your-bucket-name
-GARDA_EXTRA=cu124
+GRAFIN_GCP_PROJECT=your-project-id
+GRAFIN_GCP_ZONE=asia-southeast2-a          # pick a zone with T4 quota: gcloud compute accelerator-types list --filter=name=nvidia-tesla-t4
+GRAFIN_VM_NAME=grafin-train
+GRAFIN_VM_TYPE=n1-highmem-16               # 104 GB RAM: 4 parallel HI-Medium jobs. n1-highmem-8 (52 GB) is enough for HI-Small.
+GRAFIN_GPU_COUNT=4
+GRAFIN_IMAGE_FAMILY=common-cu124-ubuntu-2204-py310   # list: see ops/vm_create.sh
+GRAFIN_DISK_GB=300
+GRAFIN_GCS_BUCKET=your-bucket-name
+GRAFIN_EXTRA=cu124
 ```
 
 `ops/_env.sh`:
@@ -3615,21 +3615,21 @@ require() {
 #   gcloud compute images list --project deeplearning-platform-release --no-standard-images \
 #     --filter="family~cu12" --format="value(family)" | sort -u
 source "$(dirname "$0")/_env.sh"
-require GARDA_GCP_PROJECT GARDA_GCP_ZONE GARDA_VM_NAME GARDA_VM_TYPE GARDA_GPU_COUNT \
-  GARDA_IMAGE_FAMILY GARDA_DISK_GB
-gcloud compute instances create "$GARDA_VM_NAME" \
-  --project "$GARDA_GCP_PROJECT" \
-  --zone "$GARDA_GCP_ZONE" \
-  --machine-type "$GARDA_VM_TYPE" \
-  --accelerator "type=nvidia-tesla-t4,count=$GARDA_GPU_COUNT" \
+require GRAFIN_GCP_PROJECT GRAFIN_GCP_ZONE GRAFIN_VM_NAME GRAFIN_VM_TYPE GRAFIN_GPU_COUNT \
+  GRAFIN_IMAGE_FAMILY GRAFIN_DISK_GB
+gcloud compute instances create "$GRAFIN_VM_NAME" \
+  --project "$GRAFIN_GCP_PROJECT" \
+  --zone "$GRAFIN_GCP_ZONE" \
+  --machine-type "$GRAFIN_VM_TYPE" \
+  --accelerator "type=nvidia-tesla-t4,count=$GRAFIN_GPU_COUNT" \
   --maintenance-policy TERMINATE \
-  --image-family "$GARDA_IMAGE_FAMILY" \
+  --image-family "$GRAFIN_IMAGE_FAMILY" \
   --image-project deeplearning-platform-release \
-  --boot-disk-size "${GARDA_DISK_GB}GB" \
+  --boot-disk-size "${GRAFIN_DISK_GB}GB" \
   --metadata install-nvidia-driver=True \
   --scopes cloud-platform
-echo "created. next: gcloud compute ssh $GARDA_VM_NAME --zone $GARDA_GCP_ZONE, clone the repo, run ops/vm_setup.sh"
-echo "STOP THE VM WHEN IDLE: gcloud compute instances stop $GARDA_VM_NAME --zone $GARDA_GCP_ZONE"
+echo "created. next: gcloud compute ssh $GRAFIN_VM_NAME --zone $GRAFIN_GCP_ZONE, clone the repo, run ops/vm_setup.sh"
+echo "STOP THE VM WHEN IDLE: gcloud compute instances stop $GRAFIN_VM_NAME --zone $GRAFIN_GCP_ZONE"
 ```
 
 `ops/vm_setup.sh`:
@@ -3638,7 +3638,7 @@ echo "STOP THE VM WHEN IDLE: gcloud compute instances stop $GARDA_VM_NAME --zone
 #!/usr/bin/env bash
 # Run ON the VM inside the cloned repo: checks GPUs, installs uv + CUDA deps, pulls data.
 source "$(dirname "$0")/_env.sh"
-require GARDA_GCS_BUCKET GARDA_EXTRA
+require GRAFIN_GCS_BUCKET GRAFIN_EXTRA
 nvidia-smi -L
 if ! command -v uv >/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -3646,8 +3646,8 @@ if ! command -v uv >/dev/null; then
 fi
 cd "$REPO_DIR"
 uv python install 3.11
-uv sync --frozen --extra "$GARDA_EXTRA"
-uv run --extra "$GARDA_EXTRA" python -c \
+uv sync --frozen --extra "$GRAFIN_EXTRA"
+uv run --extra "$GRAFIN_EXTRA" python -c \
   "import torch, torch_geometric.typing as t; n = torch.cuda.device_count(); assert n > 0 and t.WITH_PYG_LIB; print(f'cuda ok: {n} GPU(s)')"
 "$OPS_DIR/sync.sh" pull-data
 ```
@@ -3656,15 +3656,15 @@ uv run --extra "$GARDA_EXTRA" python -c \
 
 ```bash
 #!/usr/bin/env bash
-# Data and results <-> gs://$GARDA_GCS_BUCKET. Data lives in ../garda-ai-data next to the repo.
+# Data and results <-> gs://$GRAFIN_GCS_BUCKET. Data lives in ../grafin-ai-data next to the repo.
 #   push-data     laptop -> bucket: raw/HI-Small, HI-Small-ID, HI-Medium-ID
 #   pull-data     bucket -> VM
 #   push-results  runs/ mlruns/ bundles/ -> bucket
 #   pull-results  bucket -> laptop
 source "$(dirname "$0")/_env.sh"
-require GARDA_GCS_BUCKET
-DATA_DIR="$(cd "$REPO_DIR/.." && pwd)/garda-ai-data"
-BUCKET="gs://$GARDA_GCS_BUCKET"
+require GRAFIN_GCS_BUCKET
+DATA_DIR="$(cd "$REPO_DIR/.." && pwd)/grafin-ai-data"
+BUCKET="gs://$GRAFIN_GCS_BUCKET"
 DATASETS=(raw/HI-Small HI-Small-ID HI-Medium-ID)
 rsync_dir() {
   if [[ "$2" != gs://* ]]; then mkdir -p "$2"; fi
@@ -3690,13 +3690,13 @@ esac
 
 ```bash
 #!/usr/bin/env bash
-# Run one garda-train job per GPU: line i of JOBS_FILE runs on GPU i (CUDA_VISIBLE_DEVICES=i).
-# Lines are garda-train arguments; blank lines and '#' comments are ignored.
+# Run one grafin-train job per GPU: line i of JOBS_FILE runs on GPU i (CUDA_VISIBLE_DEVICES=i).
+# Lines are grafin-train arguments; blank lines and '#' comments are ignored.
 # Exits non-zero if any job fails. Logs: logs/<jobs-name>-gpu<i>.log
 #   usage: ops/run_parallel.sh ops/jobs/wave1_parity.jobs
 source "$(dirname "$0")/_env.sh"
 JOBS_FILE="${1:?usage: $0 JOBS_FILE}"
-EXTRA="${GARDA_EXTRA:-cu124}"
+EXTRA="${GRAFIN_EXTRA:-cu124}"
 N_GPUS="${N_GPUS:-$(nvidia-smi -L | wc -l)}"
 JOBS=()
 while IFS= read -r line; do
@@ -3713,9 +3713,9 @@ pids=()
 for i in "${!JOBS[@]}"; do
   log="logs/${name}-gpu${i}.log"
   # shellcheck disable=SC2086 # job lines are intentionally word-split into arguments
-  CUDA_VISIBLE_DEVICES="$i" nohup uv run --extra "$EXTRA" garda-train ${JOBS[$i]} >"$log" 2>&1 &
+  CUDA_VISIBLE_DEVICES="$i" nohup uv run --extra "$EXTRA" grafin-train ${JOBS[$i]} >"$log" 2>&1 &
   pids+=("$!")
-  echo "gpu$i pid $!: garda-train ${JOBS[$i]}  (log: $log)"
+  echo "gpu$i pid $!: grafin-train ${JOBS[$i]}  (log: $log)"
 done
 failed=0
 for i in "${!pids[@]}"; do
@@ -3731,32 +3731,32 @@ exit "$failed"
 
 ```text
 # One short job to measure seconds/batch and GPU memory before committing to a wave.
-gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda --epochs 1 --max-batches 20 --run-id probe-small-id --no-mlflow
+gnn --data ../grafin-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda --epochs 1 --max-batches 20 --run-id probe-small-id --no-mlflow
 ```
 
 `ops/jobs/wave1_parity.jobs`:
 
 ```text
 # Wave 1 — paper protocol on HI-Small: parity (raw, criterion 1) and currency check (ID, criterion 2).
-gnn --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 1 --device cuda
-gnn --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 2 --device cuda
-gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda
-gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 2 --device cuda
+gnn --data ../grafin-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 1 --device cuda
+gnn --data ../grafin-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 2 --device cuda
+gnn --data ../grafin-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda
+gnn --data ../grafin-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 2 --device cuda
 ```
 
 `README.md`:
 
 ````markdown
-# garda-ai-training
+# grafin-ai-training
 
-Training repo for the Garda AI fraud scorer. It is a faithful port of
+Training repo for the Grafin AI fraud scorer. It is a faithful port of
 [IBM/Multi-GNN](https://github.com/IBM/Multi-GNN) (Egressy et al., AAAI 2024) with the bugs found
 in our earlier fork fixed. It trains on the Indonesian-localized IBM AML data produced by
-`garda-ai-dataset`.
+`grafin-ai-dataset`.
 
 > **Status — Plan A (foundation + paper protocol).** It can reproduce the paper's Multi-PNA+EU
 > numbers and compare raw vs localized data. Plan B adds the causal protocol, the scorer heads
-> (XGBoost / LightGBM / CatBoost / MLP), ONNX export and the model bundle for `garda-ai-scoring`.
+> (XGBoost / LightGBM / CatBoost / MLP), ONNX export and the model bundle for `grafin-ai-scoring`.
 
 Design: [docs/superpowers/specs/2026-10-17-training-repo-design.md](docs/superpowers/specs/2026-10-17-training-repo-design.md)
 
@@ -3769,7 +3769,7 @@ make smoke          # synthetic fixture end to end, ~10 s
 make smoke-small    # real HI-Small-ID, 3 batches per loader, ~5 min
 ```
 
-Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda-ai-dataset`):
+Datasets are expected next to the repo in `../grafin-ai-data` (produced by `grafin-ai-dataset`):
 
 | `--source` | file | integrity check |
 |---|---|---|
@@ -3779,10 +3779,10 @@ Datasets are expected next to the repo in `../garda-ai-data` (produced by `garda
 ## Commands
 
 ```bash
-garda-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>/)
-garda-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
-garda-train gnn --resume RUN_ID                          # continue an interrupted run
-garda-train compare                                      # markdown table of runs/ (mean ± std per dataset)
+grafin-train prepare --data FILE --source raw|id          # verify + cache (cache/<source>-<sha16>/)
+grafin-train gnn --data FILE --source raw|id --seed 1 --device cuda [--epochs N] [--batch-size N] [--num-neighs A B]
+grafin-train gnn --resume RUN_ID                          # continue an interrupted run
+grafin-train compare                                      # markdown table of runs/ (mean ± std per dataset)
 ```
 
 Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versions, device),
@@ -3799,7 +3799,7 @@ Exit codes: `0` ok · `1` unexpected or training diverged · `2` dataset missing
 1. `cp ops/vm.env.example ops/vm.env` and fill in the project, zone, bucket and VM type.
    n1-highmem-8 is enough for HI-Small; use n1-highmem-16 for 4 parallel HI-Medium jobs.
 2. Laptop: `ops/sync.sh push-data`, then `ops/vm_create.sh`.
-3. VM: clone the repo next to an empty `garda-ai-data/`, copy `ops/vm.env`, run `ops/vm_setup.sh`
+3. VM: clone the repo next to an empty `grafin-ai-data/`, copy `ops/vm.env`, run `ops/vm_setup.sh`
    (checks GPUs, installs uv + CUDA 12.4 wheels, pulls data).
 4. Probe first: `ops/run_parallel.sh ops/jobs/probe.jobs`, then read `seconds` and
    `peak_gpu_mem_mb` in `runs/probe-small-id/metrics.json`. If a T4 runs out of memory, lower
@@ -3813,7 +3813,7 @@ Linux always needs an extra: `make install EXTRA=cu124` (GPU) or `EXTRA=cpu` (CI
 
 ## Fidelity to the paper
 
-- `garda_training/models/multignn.py` is upstream `models.py` byte for byte (a test checks its sha256).
+- `grafin_training/models/multignn.py` is upstream `models.py` byte for byte (a test checks its sha256).
 - The split, ports, time deltas, ego IDs, reverse message passing and hyper-parameters match
   upstream. Tests compare against verbatim upstream code in `tests/upstream_ref.py`.
 - One upstream quirk is reproduced on purpose: with reverse MP, the port swap meant for
@@ -3864,10 +3864,10 @@ cat > .smoke/test.jobs <<'EOF'
 gnn --data .smoke/fx/raw/HI-Fixture_Trans.csv --source raw --seed 1 --device cpu --epochs 1 --batch-size 32 --num-neighs 10 10 --runs-dir .smoke/pruns --cache-dir .smoke/pcache --no-mlflow
 gnn --data .smoke/fx/raw/HI-Fixture_Trans.csv --source raw --seed 2 --device cpu --epochs 1 --batch-size 32 --num-neighs 10 10 --runs-dir .smoke/pruns --cache-dir .smoke/pcache --no-mlflow
 EOF
-N_GPUS=2 GARDA_EXTRA=cpu ops/run_parallel.sh .smoke/test.jobs; echo "exit=$?"
+N_GPUS=2 GRAFIN_EXTRA=cpu ops/run_parallel.sh .smoke/test.jobs; echo "exit=$?"
 ls .smoke/pcache .smoke/pruns
 echo "gnn --data nope.csv --source raw --device cpu --no-mlflow" > .smoke/bad.jobs
-N_GPUS=1 GARDA_EXTRA=cpu ops/run_parallel.sh .smoke/bad.jobs; echo "exit=$?"
+N_GPUS=1 GRAFIN_EXTRA=cpu ops/run_parallel.sh .smoke/bad.jobs; echo "exit=$?"
 rm -rf .smoke logs && uv sync
 ```
 
@@ -3886,7 +3886,7 @@ Expected: finishes in ~5 minutes on an M2 with exit 0; log shows
 
 - [ ] **Step 3: Raw HI-Small prepare sanity**
 
-Run: `uv run garda-train prepare --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw`
+Run: `uv run grafin-train prepare --data ../grafin-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw`
 Expected: `n_edges 5078345`, `n_nodes 515088`, `n_days 18`, `laundering 5177`, ~15 s.
 
 - [ ] **Step 4: Final gate**

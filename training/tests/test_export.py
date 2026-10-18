@@ -8,10 +8,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from garda_training.cli import main
-from garda_training.train.export import rescale
-from garda_training.train.score import Thresholds, statuses
-from garda_training.train.typology import TYPOLOGIES
+from grafin_training.cli import main
+from grafin_training.train.export import rescale
+from grafin_training.train.score import Thresholds, statuses
+from grafin_training.train.typology import TYPOLOGIES
 
 PAPER = str(Path(__file__).resolve().parents[1] / "configs" / "paper_pna.toml")
 

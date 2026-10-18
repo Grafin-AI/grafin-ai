@@ -3,37 +3,37 @@
 from __future__ import annotations
 
 
-class GardaTrainError(Exception):
+class GrafinTrainError(Exception):
     """Base class; exit code 1 (unexpected / training failure)."""
 
     exit_code = 1
 
 
-class DatasetError(GardaTrainError):
+class DatasetError(GrafinTrainError):
     """Dataset missing or unreadable, or its sha256 does not match the manifest."""
 
     exit_code = 2
 
 
-class ConfigError(GardaTrainError):
+class ConfigError(GrafinTrainError):
     """Invalid configuration or CLI arguments."""
 
     exit_code = 3
 
 
-class ExportCheckError(GardaTrainError):
+class ExportCheckError(GrafinTrainError):
     """A model-bundle self-check failed (Plan B)."""
 
     exit_code = 4
 
 
-class CudaUnavailableError(GardaTrainError):
+class CudaUnavailableError(GrafinTrainError):
     """--device cuda was requested but CUDA is not available."""
 
     exit_code = 5
 
 
-class TrainingDivergedError(GardaTrainError):
+class TrainingDivergedError(GrafinTrainError):
     """The training loss became NaN or infinite; the last good checkpoint is kept."""
 
     exit_code = 1

@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from garda_training.errors import ConfigError
+from grafin_training.errors import ConfigError
 
 SUPPORTED_MODELS = ("pna",)
 

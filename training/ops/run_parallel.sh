@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run one garda-train job per GPU: line i of JOBS_FILE runs on GPU i (CUDA_VISIBLE_DEVICES=i).
-# Lines are garda-train arguments; blank lines and '#' comments are ignored.
+# Run one grafin-train job per GPU: line i of JOBS_FILE runs on GPU i (CUDA_VISIBLE_DEVICES=i).
+# Lines are grafin-train arguments; blank lines and '#' comments are ignored.
 # Exits non-zero if any job fails. Logs: logs/<jobs-name>-gpu<i>.log
 #   usage: ops/run_parallel.sh ops/jobs/wave1_parity.jobs
 source "$(dirname "$0")/_env.sh"
@@ -8,7 +8,7 @@ JOBS_FILE="${1:?usage: $0 JOBS_FILE}"
 umask 077  # runs/, logs/, cache/ owner-only
 # Reduce CUDA memory fragmentation (an OOM on a T4 showed 1.7 GB reserved but unusable).
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
-EXTRA="${GARDA_EXTRA:-cu124}"
+EXTRA="${GRAFIN_EXTRA:-cu124}"
 N_GPUS="${N_GPUS:-$(nvidia-smi -L | wc -l)}"
 JOBS=()
 while IFS= read -r line; do
@@ -25,9 +25,9 @@ pids=()
 for i in "${!JOBS[@]}"; do
   log="logs/${name}-gpu${i}.log"
   # shellcheck disable=SC2086 # job lines are intentionally word-split into arguments
-  CUDA_VISIBLE_DEVICES="$i" nohup uv run --extra "$EXTRA" garda-train ${JOBS[$i]} >"$log" 2>&1 &
+  CUDA_VISIBLE_DEVICES="$i" nohup uv run --extra "$EXTRA" grafin-train ${JOBS[$i]} >"$log" 2>&1 &
   pids+=("$!")
-  echo "gpu$i pid $!: garda-train ${JOBS[$i]}  (log: $log)"
+  echo "gpu$i pid $!: grafin-train ${JOBS[$i]}  (log: $log)"
 done
 failed=0
 for i in "${!pids[@]}"; do
