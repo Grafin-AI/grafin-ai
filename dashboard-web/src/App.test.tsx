@@ -13,9 +13,9 @@ const base = { db_ok: true, redis_ok: true, events_surfaced: 10 };
 
 describe('SystemHealthCards model card', () => {
   it('shows the configured model name', () => {
-    health.data = { ...base, model_accuracy_simulated: false, model_name: 'garda-gnn-v1' };
+    health.data = { ...base, model_accuracy_simulated: false, model_name: 'grafin-gnn-v1' };
     render(<SystemHealthCards />);
-    expect(screen.getByText('Model: garda-gnn-v1')).toBeInTheDocument();
+    expect(screen.getByText('Model: grafin-gnn-v1')).toBeInTheDocument();
     expect(screen.queryByText('Simulated (Phase 1)')).not.toBeInTheDocument();
     expect(screen.queryByText(/Label-replay simulation/)).not.toBeInTheDocument();
   });
