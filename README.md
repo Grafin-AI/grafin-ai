@@ -52,7 +52,7 @@ in plain Bahasa Indonesia.
 |---|---|
 | **Gemini** (`gemini-3.8-flash`, Generative Language API) | Insight Narrator explanations and LTKM drafts. A local Gemma model via Ollama is the fallback. |
 | **Cloud Run** | Service `grafin-api` runs the FastAPI backend (REST + WebSocket), with the scoring service and Redis as private sidecars on localhost. Only the API is public. |
-| **Firestore** (Native, `asia-southeast2`) | Stores Insight Narrator explanations (`transaction_explanations`) and LTKM drafts (`str_drafts`). An explanation is written once and never regenerated (`GARDA_EXPLANATION_STORE=firestore`). |
+| **Firestore** (Native, `asia-southeast2`) | Stores Insight Narrator explanations (`transaction_explanations`) and LTKM drafts (`str_drafts`). An explanation is written once and never regenerated (`GRAFIN_EXPLANATION_STORE=firestore`). |
 | **Firebase Hosting** | Serves the React dashboard, which calls the Cloud Run API directly with CORS. |
 | **Cloud SQL** (PostgreSQL 16) | Transactions, accounts, banks, scores, alerts, users |
 | **Artifact Registry** | Container images |
@@ -79,21 +79,20 @@ case summary.
 | [`backend/`](backend) | FastAPI API: auth, ingest, live WebSocket, analytics, Insight Narrator, LTKM, network graph, Radar |
 | [`dashboard-web/`](dashboard-web) | React + Vite + Tailwind dashboard |
 | [`scoring/`](scoring) | Scoring service. It serves the Multi-GNN scores exported by `training/` |
-| [`training/`](training) | Multi-GNN PNA training, evaluation, typology rules, score export (`garda-train`) |
+| [`training/`](training) | Multi-GNN PNA training, evaluation, typology rules, score export (`grafin-train`) |
 | [`ingest/`](ingest) | Loads reference data (banks, accounts) |
 | [`sim/`](sim) | Replays the dataset through the ingest API as live traffic |
 | [`dataset/`](dataset) | Builds HI-Small-ID, the Indonesian localisation of IBM AMLworld |
 | [`deploy/`](deploy) | Local stack, Terraform, and the Cloud Run / Firebase deploy steps ([`deploy/cloudrun/`](deploy/cloudrun)) |
 
 Each component was developed as its own repository and was merged here with
-`git subtree`, keeping its full history. Internal package names still use the
-earlier working name `garda`.
+`git subtree`, keeping its full history.
 
 ## Run locally
 
 ```bash
 cd deploy
-cp .env.example .env        # set the secrets and, optionally, GARDA_LLM_API_KEY (Gemini)
+cp .env.example .env        # set the secrets and, optionally, GRAFIN_LLM_API_KEY (Gemini)
 make up                     # postgres, redis, scoring, backend, dashboard
 make demo-history demo-test # replay validation days, then the test period live
 ```
