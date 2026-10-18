@@ -64,7 +64,7 @@ export function UserRiskProfiling() {
             <>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie data={riskDistributionData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" stroke="#0E1424">
+                  <Pie data={riskDistributionData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" stroke="#FFFFFF">
                     {riskDistributionData.map((entry) => <Cell key={entry.key} fill={entry.color} />)}
                   </Pie>
                   <Tooltip contentStyle={CHART.tooltip} itemStyle={CHART.tooltipItem} formatter={(v, n) => [formatInt(Number(v)), n]} />
@@ -155,7 +155,7 @@ export function UserRiskProfiling() {
             </thead>
             <tbody>
               {isLoading && Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} className="border-t border-[#172138]">
+                <tr key={i} className="border-t border-surface-inset">
                   {Array.from({ length: 7 }).map((__, j) => (
                     <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]')}><Skeleton className="h-4 w-full max-w-28" /></td>
                   ))}
@@ -181,7 +181,7 @@ export function UserRiskProfiling() {
                 const lvl = riskMeta(profile.risk_level);
                 const sc = scoreMeta(profile.risk_score);
                 return (
-                  <tr key={profile.entity_id} className="border-t border-[#172138] transition-colors hover:bg-card-2">
+                  <tr key={profile.entity_id} className="border-t border-surface-inset transition-colors hover:bg-card-2">
                     <td className="py-2 pl-[18px] pr-2">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-sm font-medium text-foreground">{profile.name}</span>
@@ -209,7 +209,7 @@ export function UserRiskProfiling() {
                         type="button"
                         onClick={() => handleViewProfile(profile.entity_id)}
                         aria-label={`Lihat profil ${profile.name}`}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#095A96]"
                       >
                         <Eye className="size-3.5" aria-hidden />
                         Detail

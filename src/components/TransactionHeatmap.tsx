@@ -21,7 +21,7 @@ export function TransactionHeatmap() {
   cells.forEach((row, d) => row.forEach((v, h) => { if (v > peak.v) peak = { day: d, hour: h, v }; }));
 
   return (
-    <section aria-label="Heatmap aktivitas" className="flex min-w-0 flex-col gap-3.5 rounded-xl border border-border bg-card px-[18px] py-4">
+    <section aria-label="Heatmap aktivitas" data-animate className="flex min-w-0 flex-col gap-3.5 rounded-xl border border-border bg-card px-[18px] py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-foreground">Heatmap Aktivitas</h2>
@@ -45,11 +45,11 @@ export function TransactionHeatmap() {
       ) : (
         <>
           <div className="overflow-x-auto">
-            <div className="grid min-w-[560px] gap-1 [grid-template-columns:36px_repeat(24,minmax(0,1fr))]" role="img"
+            <div className="grid min-w-[420px] gap-[3px] [grid-template-columns:32px_repeat(24,minmax(0,1fr))]" role="img"
               aria-label={`Heatmap transaksi; puncak ${DAYS_LONG[peak.day]} ${hh(peak.hour)} dengan ${formatInt(peak.v)} transaksi`}>
               <span />
               {Array.from({ length: 24 }, (_, h) => (
-                <span key={h} className="num text-center text-[10px] text-muted-foreground">{h % 3 === 0 ? String(h).padStart(2, '0') : ''}</span>
+                <span key={h} className="num text-center text-[10px] text-muted-foreground">{h % 6 === 0 ? String(h).padStart(2, '0') : ''}</span>
               ))}
               {DAYS.map((day, d) => (
                 <div key={day} className="contents">

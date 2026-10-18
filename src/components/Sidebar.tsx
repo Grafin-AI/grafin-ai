@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import gardaLogo from 'figma:asset/db1da7b05c661826c500feb1fd5509a19ea8cfd0.png';
 import { Activity, BarChart3, Radar, UserCheck } from 'lucide-react';
 import { useFraudAnalytics, useSystemHealth } from '../api/queries';
 import { formatScore } from '../lib/format';
@@ -24,26 +25,14 @@ interface SidebarProps {
   footer?: ReactNode;
 }
 
-function GardaMark() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" className="shrink-0">
-      <path d="M16 3l11 4v8c0 7-4.7 12.4-11 14-6.3-1.6-11-7-11-14V7z" fill="none" stroke="#139EF6" strokeWidth="2" />
-      <path d="M11 16l3.5 3.5L21 13" fill="none" stroke="#139EF6" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function Sidebar({ currentView = '/dashboard', onNavigate, footer }: SidebarProps) {
   return (
     <aside
       className="w-full shrink-0 border-b border-border bg-sidebar px-4 py-4 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:flex-col lg:gap-7 lg:border-b-0 lg:border-r lg:py-6"
     >
-      <div className="flex items-center gap-2.5">
-        <GardaMark />
-        <div className="flex flex-col leading-tight">
-          <span className="text-lg font-bold tracking-[.2px] text-foreground">Garda AI</span>
-          <span className="text-xs text-muted-foreground">Graph-AI Anti Fraud</span>
-        </div>
+      <div className="flex flex-col items-start gap-2">
+        <img src={gardaLogo} alt="Garda AI" className="h-8 w-auto max-w-full object-contain" />
+        <p className="text-xs text-muted-foreground">Fraud &amp; Anomaly Detection Platform</p>
       </div>
 
       <nav aria-label="Navigasi utama" className="mt-4 lg:mt-0">
@@ -60,7 +49,7 @@ export function Sidebar({ currentView = '/dashboard', onNavigate, footer }: Side
                     'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors',
                     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                     active
-                      ? 'bg-brand-soft font-medium text-foreground'
+                      ? 'bg-brand-soft font-medium text-[#0B6FB8]'
                       : 'text-text-secondary hover:bg-accent hover:text-foreground',
                   )}
                 >

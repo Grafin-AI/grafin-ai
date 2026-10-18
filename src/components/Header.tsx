@@ -25,7 +25,7 @@ export function Header({
 
       <div className="flex flex-wrap items-center gap-3">
         <span
-          className="inline-flex items-center gap-2 rounded-full bg-approved-bg px-3 py-1.5 text-[13px] font-medium text-[#5BE3B5]"
+          className="inline-flex items-center gap-2 rounded-full bg-approved-bg px-3 py-1.5 text-[13px] font-medium text-approved"
           role="status"
         >
           <span aria-hidden className="relative flex size-2">

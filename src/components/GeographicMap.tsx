@@ -16,10 +16,13 @@ export function GeographicMap() {
   const max = Math.max(1, ...provinces.map((p) => p.fraud_count));
 
   return (
-    <section aria-label="Fraud per provinsi" className="flex flex-col gap-3 rounded-xl border border-border bg-card px-[18px] py-4">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <MapPin className="size-4 text-link" aria-hidden /> Fraud per Provinsi
-      </h3>
+    <section aria-label="Sebaran wilayah" data-animate className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card px-[18px] py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <MapPin className="size-4 text-primary" aria-hidden /> Sebaran Wilayah
+        </h2>
+        <span className="text-xs text-muted-foreground">distribusi fraud per provinsi</span>
+      </div>
       {isLoading ? (
         <div className="space-y-2.5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
       ) : isError ? (
@@ -39,7 +42,7 @@ export function GeographicMap() {
                     <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', risk.pill)}>{risk.label}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-surface-inset" aria-hidden>
-                    <div className="h-1.5 rounded-full bg-primary" style={{ width: `${(p.fraud_count / max) * 100}%` }} />
+                    <div className="h-1.5 rounded-full bg-flagged" style={{ width: `${(p.fraud_count / max) * 100}%` }} />
                   </div>
                 </div>
                 <div className="text-right">

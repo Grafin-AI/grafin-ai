@@ -14,7 +14,7 @@ gsap.registerPlugin(useGSAP);
 
 export const MOTION_OK = '(prefers-reduced-motion: no-preference)';
 export const EASE = 'power2.out';
-export const DURATION = { fast: 0.25, base: 0.4, count: 0.8, pulse: 0.9 } as const;
+export const DURATION = { fast: 0.25, base: 0.35, count: 0.6, pulse: 0.9 } as const;
 
 /** True when the browser allows motion. False in jsdom (no matchMedia) or with reduced motion. */
 export function motionAllowed(): boolean {
@@ -34,7 +34,7 @@ export function withMotion(fn: () => void): (() => void) | undefined {
 }
 
 /** Card entrance: fade + rise, staggered. */
-export const enterFrom: gsap.TweenVars = { opacity: 0, y: 12, duration: DURATION.base, ease: EASE, stagger: 0.06 };
+export const enterFrom: gsap.TweenVars = { opacity: 0, y: 8, duration: DURATION.base, ease: EASE, stagger: 0.06 };
 
 /**
  * Staggered entrance for every `selector` match inside `scope` on mount (and
@@ -64,7 +64,7 @@ export function usePageFade(scope: RefObject<HTMLElement | null>, key: string) {
 /** New live-table row: slide down + fade in. No overshoot on data tables. */
 export function animateRowIn(el: Element) {
   if (!motionAllowed()) return;
-  gsap.from(el, { opacity: 0, y: -10, duration: 0.35, ease: EASE, clearProps: 'opacity,transform' });
+  gsap.from(el, { opacity: 0, y: -6, duration: 0.3, ease: EASE, clearProps: 'opacity,transform' });
 }
 
 /**
@@ -74,7 +74,7 @@ export function animateRowIn(el: Element) {
 export function pulseOnce(el: Element) {
   if (!motionAllowed()) return;
   const tl = gsap.timeline();
-  tl.fromTo(el, { scale: 1 }, { scale: 1.02, duration: 0.18, ease: 'power1.out', yoyo: true, repeat: 1, clearProps: 'transform' });
+  tl.fromTo(el, { scale: 1 }, { scale: 1.015, duration: 0.18, ease: 'power1.out', yoyo: true, repeat: 1, clearProps: 'transform' });
   const ring = el.querySelector('[data-pulse-ring]');
   if (ring) tl.fromTo(ring, { opacity: 1, scale: 1 }, { opacity: 0, scale: 1.03, duration: DURATION.pulse, ease: EASE }, 0);
 }

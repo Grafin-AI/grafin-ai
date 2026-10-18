@@ -95,7 +95,7 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
                   aria-pressed={active}
                   onClick={() => setFilter(f.key)}
                   className={cn(
-                    'inline-flex min-h-11 items-center gap-1.5 rounded-md border border-[#2B3B5C] px-3 text-[13px] transition-colors sm:min-h-9',
+                    'inline-flex min-h-11 items-center gap-1.5 rounded-md border border-[#C9D3E1] px-3 text-[13px] transition-colors sm:min-h-9',
                     active ? 'bg-brand-soft text-foreground' : `bg-transparent hover:bg-accent ${f.tone}`,
                   )}
                 >
@@ -127,14 +127,14 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
             </thead>
             <tbody ref={bodyRef}>
               {items.length === 0 && Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} className="border-t border-[#172138]">
+                <tr key={i} className="border-t border-surface-inset">
                   {Array.from({ length: 9 }).map((__, j) => (
                     <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]')}><Skeleton className="h-4 w-full max-w-24" /></td>
                   ))}
                 </tr>
               ))}
               {items.length > 0 && rows.length === 0 && (
-                <tr className="border-t border-[#172138]">
+                <tr className="border-t border-surface-inset">
                   <td colSpan={9} className="px-[18px] py-8 text-center text-muted-foreground">
                     Tidak ada transaksi dengan status ini di jendela live.
                   </td>
@@ -143,7 +143,7 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
               {rows.map((item: LiveItem) => {
                 const s = statusMeta(item.status);
                 return (
-                  <tr key={item.seq} data-seq={item.seq} className={cn('border-t border-[#172138] transition-colors hover:bg-card-2', s.row)}>
+                  <tr key={item.seq} data-seq={item.seq} className={cn('border-t border-surface-inset transition-colors hover:bg-card-2', s.row)}>
                     <td className="num py-2 pl-[18px] pr-2 text-text-secondary">TXN-{item.transaction_id}</td>
                     <td className="num whitespace-nowrap px-2 py-2 text-muted-foreground">{formatTime(item.event_time)}</td>
                     <td className="px-2 py-2 text-foreground">{item.bank || '—'}</td>
@@ -168,7 +168,7 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
                         type="button"
                         onClick={() => handleViewTransaction(item.transaction_id)}
                         aria-label={`Lihat detail TXN-${item.transaction_id}`}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#095A96]"
                       >
                         <Eye className="size-3.5" aria-hidden />
                         Detail

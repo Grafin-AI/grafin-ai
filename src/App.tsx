@@ -53,75 +53,49 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   );
 }
 
-// ── System health ────────────────────────────────────────────────────────────
-function HealthCard({ title, status, statusClass, bar, barClass, note }: {
-  title: string; status: ReactNode; statusClass: string; bar: number; barClass: string; note: string;
-}) {
+// ── System health (compact strip, last on the dashboard) ─────────────────────
+function HealthItem({ ok, tone, children }: { ok?: boolean; tone?: 'ok' | 'warn' | 'bad' | 'idle'; children: ReactNode }) {
+  const t = tone ?? (ok ? 'ok' : 'bad');
+  const dot = t === 'ok' ? 'bg-approved' : t === 'warn' ? 'bg-flagged' : t === 'bad' ? 'bg-blocked' : 'bg-text-faint';
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-foreground">{title}</span>
-        <span className={cn('text-sm', statusClass)}>{status}</span>
-      </div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-inset" aria-hidden>
-        <div className={cn('h-2 rounded-full', barClass)} style={{ width: `${bar}%` }} />
-      </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">{note}</p>
-    </div>
+    <span className="inline-flex items-center gap-2 text-[13px] text-text-secondary">
+      <span aria-hidden className={cn('size-2 shrink-0 rounded-full', dot)} />
+      {children}
+    </span>
   );
 }
 
 export function SystemHealthCards() {
   const { data, isLoading } = useSystemHealth();
 
-  if (isLoading) {
-    return (
-      <div className="grid gap-3">
-        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid gap-3">
-      <HealthCard
-        title="Database"
-        status={data?.db_ok ? 'Online' : 'Offline'}
-        statusClass={data?.db_ok ? 'text-approved' : 'text-blocked'}
-        bar={data?.db_ok ? 100 : 10}
-        barClass={data?.db_ok ? 'bg-approved' : 'bg-blocked'}
-        note={data?.db_ok ? 'Koneksi database sehat' : 'Database tidak dapat dijangkau'}
-      />
-      <HealthCard
-        title="Model Accuracy"
-        status={data?.model_name ? `Model: ${data.model_name}` : data?.model_accuracy_simulated ? 'Simulated (Phase 1)' : '—'}
-        statusClass={data?.model_name ? 'text-approved' : data?.model_accuracy_simulated ? 'text-flagged' : 'text-muted-foreground'}
-        bar={data?.model_name ? 100 : data?.model_accuracy_simulated ? 60 : 0}
-        barClass={data?.model_name ? 'bg-approved' : 'bg-flagged'}
-        note={data?.model_name
-          ? 'Penilaian model aktif'
-          : data?.model_accuracy_simulated
-            ? 'Label-replay simulation active — accuracy not yet measured'
-            : 'Belum ada data akurasi model'}
-      />
-      <HealthCard
-        title="Cache (Redis)"
-        status={data?.redis_ok ? 'Online' : 'Offline'}
-        statusClass={data?.redis_ok ? 'text-approved' : 'text-blocked'}
-        bar={data?.redis_ok ? 100 : 10}
-        barClass={data?.redis_ok ? 'bg-approved' : 'bg-blocked'}
-        note={data?.redis_ok ? 'Cache Redis beroperasi' : 'Redis tidak tersedia'}
-      />
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-foreground">Events Surfaced</span>
-          <span className="num text-sm text-link">
-            {data?.events_surfaced != null ? formatInt(data.events_surfaced) : '—'}
+    <section aria-label="Kesehatan sistem" data-animate className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-border bg-card px-[18px] py-3.5">
+      <h2 className="text-[15px] font-semibold text-foreground">Kesehatan Sistem</h2>
+      {isLoading ? (
+        <Skeleton className="h-4 w-80" />
+      ) : (
+        <>
+          <HealthItem ok={!!data?.db_ok}>{data?.db_ok ? 'Database sehat' : 'Database tidak terjangkau'}</HealthItem>
+          <HealthItem ok={!!data?.redis_ok}>{data?.redis_ok ? 'Redis sehat' : 'Redis tidak tersedia'}</HealthItem>
+          {data?.model_name ? (
+            <HealthItem tone="ok">Model: {data.model_name}</HealthItem>
+          ) : data?.model_accuracy_simulated ? (
+            <HealthItem tone="warn">
+              <span>Simulated (Phase 1)</span>
+              <span className="text-xs text-muted-foreground">Label-replay simulation active — accuracy not yet measured</span>
+            </HealthItem>
+          ) : (
+            <HealthItem tone="idle">Model: —</HealthItem>
+          )}
+          <span className="text-[13px] text-text-secondary">
+            Event diproses{' '}
+            <span className="num font-medium text-foreground">
+              {data?.events_surfaced != null ? formatInt(data.events_surfaced) : '—'}
+            </span>
           </span>
-        </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">Total event yang diproses sistem</p>
-      </div>
-    </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -130,17 +104,8 @@ const VIEWS: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Monitoring Transaksi', subtitle: 'Pemantauan real-time BI-FAST, QRIS, transfer antarbank' },
   '/radar': { title: 'Radar Regulator', subtitle: 'Pandangan lintas institusi untuk pengawasan OJK/BI' },
   '/user-risk-profiling': { title: 'Profil Risiko', subtitle: 'Skor risiko nasabah dan entitas dari model' },
-  '/analytics': { title: 'Analitik', subtitle: 'Kinerja deteksi, pola tipologi, sebaran wilayah dan kesehatan sistem' },
+  '/analytics': { title: 'Analitik', subtitle: 'Kinerja deteksi model dan nominal per tipologi' },
 };
-
-function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="mb-3">
-      <h2 className="text-base font-semibold text-foreground">{title}</h2>
-      <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
-    </div>
-  );
-}
 
 function MonitoringView({ onLatestEventTime }: { onLatestEventTime: (iso: string | null) => void }) {
   return (
@@ -152,31 +117,15 @@ function MonitoringView({ onLatestEventTime }: { onLatestEventTime: (iso: string
         </div>
         <AlertsPanel />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TypologyBars />
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <TransactionVolume />
-      </div>
-    </>
-  );
-}
-
-function AnalyticsView() {
-  return (
-    <>
-      <FraudAnalytics />
-      <div data-animate className="min-w-0">
         <TransactionHeatmap />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div data-animate className="min-w-0">
-          <SectionTitle title="Sebaran Wilayah" subtitle="Distribusi fraud per provinsi" />
-          <GeographicMap />
-        </div>
-        <div data-animate className="min-w-0">
-          <SectionTitle title="Kesehatan Sistem" subtitle="Status layanan dan model secara real-time" />
-          <SystemHealthCards />
-        </div>
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+        <TypologyBars />
+        <GeographicMap />
       </div>
+      <SystemHealthCards />
     </>
   );
 }
@@ -213,7 +162,7 @@ export default function App() {
           ) : currentView === '/user-risk-profiling' ? (
             <UserRiskProfiling />
           ) : currentView === '/analytics' ? (
-            <AnalyticsView />
+            <FraudAnalytics />
           ) : (
             <EmptyState title="Halaman Sedang Dibangun" body="Fitur ini akan segera tersedia" />
           )}

@@ -13,10 +13,10 @@ function levelMeta(severity: string) {
   switch (severity) {
     case 'critical':
     case 'high':
-      return { label: 'BLOKIR', text: 'text-blocked', bar: 'bg-blocked', border: 'border-[#4A1A28]', blocked: true };
+      return { label: 'BLOKIR', text: 'text-blocked', bar: 'bg-blocked', border: 'border-[#F6C7D0]', blocked: true };
     case 'medium':
     case 'warning':
-      return { label: 'TINJAU', text: 'text-flagged', bar: 'bg-flagged', border: 'border-[#3D2E12]', blocked: false };
+      return { label: 'TINJAU', text: 'text-flagged', bar: 'bg-flagged', border: 'border-[#F5D9A8]', blocked: false };
     default:
       return { label: severity.toUpperCase() || 'INFO', text: 'text-link', bar: 'bg-link', border: 'border-border', blocked: false };
   }
@@ -48,7 +48,7 @@ function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => v
             <button
               type="button"
               onClick={() => onAck(alert.id)}
-              className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
+              className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs text-link transition-colors hover:bg-accent hover:text-[#095A96]"
             >
               <Check className="size-3" aria-hidden />
               Tandai ditinjau
@@ -89,7 +89,7 @@ export function AlertsPanel() {
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-foreground">Peringatan</h2>
         {unread > 0 && (
-          <span className="num rounded-full bg-blocked-bg px-2 py-0.5 text-xs text-[#FF8A9B]">{formatInt(unread)} baru</span>
+          <span className="num rounded-full bg-blocked-bg px-2 py-0.5 text-xs text-blocked">{formatInt(unread)} baru</span>
         )}
       </div>
 
