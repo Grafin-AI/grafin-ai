@@ -290,7 +290,10 @@ async def test_gemini_and_ollama_request_shape(make_client):
     body = (await c.get(url, headers=_auth())).json()
     assert body["source"] == "llm" and body["model"] == "gemini-2.5-flash"
     assert seen[0].url.path == "/v1beta/models/gemini-2.5-flash:generateContent"
-    assert seen[0].url.params["key"] == "g-key"
+    assert seen[0].headers["x-goog-api-key"] == "g-key" and "key" not in seen[0].url.params
+    sent = json.loads(seen[0].content)
+    assert sent["systemInstruction"]["parts"][0]["text"].startswith("Anda adalah analis")
+    assert sent["generationConfig"]["responseMimeType"] == "application/json"
 
     await make_client.redis.flushdb()
     c = await make_client(_settings(llm_provider="ollama"), handler)
@@ -299,6 +302,28 @@ async def test_gemini_and_ollama_request_shape(make_client):
     assert str(seen[1].url) == "http://host.docker.internal:11434/api/chat"
     sent = json.loads(seen[1].content)
     assert sent["stream"] is False and sent["format"] == "json"
+
+
+async def test_gemma_folds_system_prompt_and_skips_json_mode(make_client):
+    """Gemma on the Gemini API rejects systemInstruction and JSON mode."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        text = "```json\n" + json.dumps(LLM_NARRATIVE) + "\n```"
+        parts = [{"text": "thinking...", "thought": True}, {"text": text}]
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": parts}}]})
+
+    s = _settings(llm_provider="gemini", llm_api_key="g", llm_model="gemma-3-27b-it")
+    c = await make_client(s, handler)
+    body = (await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())).json()
+    assert body["source"] == "llm" and body["model"] == "gemma-3-27b-it"
+    assert seen[0].url.path == "/v1beta/models/gemma-3-27b-it:generateContent"
+    sent = json.loads(seen[0].content)
+    assert "systemInstruction" not in sent
+    assert "responseMimeType" not in sent["generationConfig"]
+    prompt = sent["contents"][0]["parts"][0]["text"]
+    assert prompt.startswith("Anda adalah analis") and "Data transaksi (JSON)" in prompt
 
 
 async def test_explanation_404(make_client):

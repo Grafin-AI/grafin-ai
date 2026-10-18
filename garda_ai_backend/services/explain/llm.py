@@ -3,8 +3,8 @@
 Providers: anthropic (Messages API), gemini (generateContent), ollama (/api/chat).
 Any failure (transport, timeout, non-2xx, unparsable/invalid JSON) returns None and
 the caller falls back to the rules narrative. The API key is never logged: failures
-are logged by exception type only, because httpx error messages can embed the URL
-(Gemini carries the key as a query parameter).
+are logged by exception type only, because httpx error messages can embed the URL.
+Gemini/Gemma (same API) get the key in the x-goog-api-key header, never in the URL.
 """
 
 import json
@@ -91,19 +91,30 @@ async def _anthropic(client: httpx.AsyncClient, s: Settings, system: str, user: 
 
 
 async def _gemini(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
-    resp = await client.post(
-        f"{_base_url(s)}/v1beta/models/{resolve_model(s)}:generateContent",
-        params={"key": s.llm_api_key.get_secret_value()},
-        json={
+    model = resolve_model(s)
+    body: dict[str, Any]
+    if model.startswith("gemma"):
+        # Gemma on the Gemini API rejects systemInstruction and JSON mode: fold the system
+        # prompt into the user turn and rely on parse_narrative to pull out the JSON.
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": f"{system}\n\n{user}"}]}],
+            "generationConfig": {"temperature": 0.2},
+        }
+    else:
+        body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
-        },
+        }
+    resp = await client.post(
+        f"{_base_url(s)}/v1beta/models/{model}:generateContent",
+        headers={"x-goog-api-key": s.llm_api_key.get_secret_value()},
+        json=body,
         timeout=s.llm_timeout_s,
     )
     resp.raise_for_status()
     parts = resp.json()["candidates"][0]["content"]["parts"]
-    return "".join(p.get("text", "") for p in parts)
+    return "".join(p.get("text", "") for p in parts if not p.get("thought"))
 
 
 async def _ollama(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
