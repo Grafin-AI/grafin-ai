@@ -10,16 +10,20 @@ from garda_ai_backend.api.deps import (
     SessionDep,
     SettingsDep,
 )
-from garda_ai_backend.api.masking import mask_name
+from garda_ai_backend.api.masking import mask_account_id, mask_name
 from garda_ai_backend.api.users_view import can_unmask
 from garda_ai_backend.api.view_schemas import (
     LiveItem,
     LiveResponse,
+    NetworkEdge,
+    NetworkNode,
+    NetworkResponse,
     StrDraft,
     TransactionDetail,
     TransactionExplanation,
 )
 from garda_ai_backend.repositories.explanations import ExplanationsRepository
+from garda_ai_backend.repositories.network import WINDOW, NetworkRepository
 from garda_ai_backend.repositories.transactions import TransactionsRepository
 from garda_ai_backend.repositories.users import UserRepository
 from garda_ai_backend.services.explain import generate_explanation, load_explanation
@@ -81,6 +85,27 @@ async def _shape_explanation(
             session, result["transaction_id"], result["str_draft"], can_unmask(user, unmasked)
         )}
     return TransactionExplanation(**result)
+
+
+@router.get("/{transaction_id}/network", response_model=NetworkResponse)
+async def network(
+    transaction_id: int, session: SessionDep, user: CurrentUserDep, unmasked: bool = False
+) -> NetworkResponse:
+    """Accounts within 2 hops of the parties, edges in [t-24h, t]; capped at
+    NODE_CAP/EDGE_CAP. Node labels are masked account ids unless admin + ?unmasked=true."""
+    graph = await NetworkRepository(session).neighbourhood(transaction_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
+    unmask = can_unmask(user, unmasked)
+    nodes = [
+        NetworkNode(**n, label=n["id"] if unmask else mask_account_id(n["id"]))
+        for n in graph["nodes"]
+    ]
+    return NetworkResponse(
+        transaction_id=graph["transaction_id"], window_hours=int(WINDOW.total_seconds() // 3600),
+        nodes=nodes, edges=[NetworkEdge(**e) for e in graph["edges"]],
+        truncated=graph["truncated"],
+    )
 
 
 @router.get("/{transaction_id}/explanation", response_model=TransactionExplanation)

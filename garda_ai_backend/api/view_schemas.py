@@ -142,6 +142,34 @@ class TransactionExplanation(BaseModel):
     str_draft: StrDraft | None = None
 
 
+class NetworkNode(BaseModel):
+    id: str
+    label: str  # masked account unless admin + ?unmasked=true
+    bank: str
+    role: Literal["sender", "receiver", "other"]
+    flagged_count: int
+
+
+class NetworkEdge(BaseModel):
+    id: int
+    source: str
+    target: str
+    amount: float
+    currency: str
+    event_time: str
+    status: str
+    fraud_score: float
+    focal: bool
+
+
+class NetworkResponse(BaseModel):
+    transaction_id: int
+    window_hours: int
+    nodes: list[NetworkNode]
+    edges: list[NetworkEdge]
+    truncated: bool
+
+
 class RiskProfile(BaseModel):
     entity_id: str
     name: str
