@@ -10,7 +10,8 @@ import { Header } from './Header';
 describe('Header', () => {
   it('renders the title and the user, with NO simulation element', () => {
     render(<Header />);
-    expect(screen.getByText('Fraud Detection Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Monitoring Transaksi')).toBeInTheDocument();
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
     expect(screen.getByText('admin@garda.local')).toBeInTheDocument();
     // sim controls/indicator are gone (now on the Simulation page)
     expect(screen.queryByLabelText('Simulation speed')).not.toBeInTheDocument();

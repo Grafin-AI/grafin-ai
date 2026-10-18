@@ -1,63 +1,77 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { ScrollArea } from './ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Button } from './ui/button';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Eye } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
-import { Clock, Building, CreditCard, Activity, TrendingUp, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
+import { cn } from './ui/utils';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { UserProfileDetailsModal } from './UserProfileDetailsModal';
 import { useLiveTransactions } from '../api/useLiveTransactions';
 import { formatTime } from '../lib/formatTime';
-import type { LiveItem } from '../api/types';
+import { formatIDR, formatScore } from '../lib/format';
+import { statusMeta } from '../lib/status';
+import { animateRowIn } from '../lib/motion';
+import type { LiveItem, Status } from '../api/types';
 
-export function TransactionMonitor() {
+type Filter = 'all' | Extract<Status, 'flagged' | 'blocked'>;
+
+const FILTERS: { key: Filter; label: string; tone: string }[] = [
+  { key: 'all', label: 'Semua', tone: 'text-foreground' },
+  { key: 'flagged', label: 'Ditandai', tone: 'text-flagged' },
+  { key: 'blocked', label: 'Diblokir', tone: 'text-blocked' },
+];
+
+interface TransactionMonitorProps {
+  /** Reports the dataset time of the newest event (for the header LIVE badge). */
+  onLatestEventTime?: (iso: string | null) => void;
+}
+
+export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProps = {}) {
   const { items } = useLiveTransactions(100);
+  const [filter, setFilter] = useState<Filter>('all');
   const [selectedTransactionId, setSelectedTransactionId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
-      case 'flagged': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'blocked': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+  const counts = useMemo(() => ({
+    all: items.length,
+    flagged: items.filter((i) => i.status === 'flagged').length,
+    blocked: items.filter((i) => i.status === 'blocked').length,
+  }), [items]);
+  const rows = filter === 'all' ? items : items.filter((i) => i.status === filter);
+
+  const latest = items[0]?.event_time ?? null;
+  useEffect(() => { onLatestEventTime?.(latest); }, [latest, onLatestEventTime]);
+
+  // Slide in rows that arrived after the first paint (not the initial window).
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const known = useRef<Set<number> | null>(null);
+  useLayoutEffect(() => {
+    if (!items.length) return;
+    if (known.current == null) {
+      known.current = new Set(items.map((i) => i.seq));
+      return;
     }
-  };
-
-  const getFraudScoreTextColor = (score: number) => {
-    if (score > 0.7) return 'text-red-600';
-    if (score > 0.4) return 'text-amber-600';
-    return 'text-green-600';
-  };
-
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
+    const fresh = items.filter((i) => !known.current!.has(i.seq)).slice(0, 12);
+    fresh.forEach((i) => known.current!.add(i.seq));
+    if (known.current.size > 500) known.current = new Set(items.map((i) => i.seq));
+    fresh.forEach((i) => {
+      const tr = bodyRef.current?.querySelector(`tr[data-seq="${i.seq}"]`);
+      if (tr) animateRowIn(tr);
+    });
+  }, [items]);
 
   const handleViewTransaction = (transactionId: number) => {
     setSelectedTransactionId(transactionId);
     setIsModalOpen(true);
   };
-
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedTransactionId(null);
   };
-
   const handleOpenUserProfile = (entityId: string) => {
     setSelectedEntityId(entityId);
     setIsProfileModalOpen(true);
   };
-
   const handleCloseProfileModal = () => {
     setIsProfileModalOpen(false);
     setSelectedEntityId(null);
@@ -65,165 +79,109 @@ export function TransactionMonitor() {
 
   return (
     <>
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              Live Transaction Monitor
-              <Badge variant="secondary" className="ml-2">
-                {items.length} Active
-              </Badge>
-            </CardTitle>
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <div className="flex items-center gap-1">
-                <Activity className="w-4 h-4" />
-                Real-time monitoring
-              </div>
-              <div className="flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" />
-                Auto-refresh (live WS)
-              </div>
-            </div>
+      <section aria-label="Transaksi live" data-animate className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-[18px] py-3">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-semibold text-foreground">Transaksi Live</h2>
+            <span className="num rounded-full bg-secondary px-2 py-0.5 text-xs text-text-secondary">{items.length} terbaru</span>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[500px]">
-            <Table>
-              <TableHeader className="sticky top-0 bg-white border-b">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[140px] pl-6">Transaction ID</TableHead>
-                  <TableHead className="w-[180px]">Source Bank &amp; Type</TableHead>
-                  <TableHead className="w-[140px]">Amount</TableHead>
-                  <TableHead className="w-[130px]">Fraud Score</TableHead>
-                  <TableHead className="w-[130px]">Suspected Fraud</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[130px]">Timestamp</TableHead>
-                  <TableHead className="w-[100px] pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.length === 0 && (
-                  <>
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="pl-6"><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="pr-6"><Skeleton className="h-8 w-16" /></TableCell>
-                      </TableRow>
-                    ))}
-                  </>
-                )}
-                {items.map((item: LiveItem) => (
-                  <TableRow key={item.seq} className="hover:bg-gray-50/50">
-                    <TableCell className="pl-6">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-900">
-                          TXN-{item.transaction_id}
-                        </span>
-                      </div>
-                    </TableCell>
+          <div className="flex gap-1.5" role="group" aria-label="Filter status">
+            {FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFilter(f.key)}
+                  className={cn(
+                    'inline-flex min-h-11 items-center gap-1.5 rounded-md border border-[#2B3B5C] px-3 text-[13px] transition-colors sm:min-h-9',
+                    active ? 'bg-brand-soft text-foreground' : `bg-transparent hover:bg-accent ${f.tone}`,
+                  )}
+                >
+                  {f.label}
+                  <span className="num text-xs text-muted-foreground">{counts[f.key]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1">
-                          <Building className="w-3 h-3 text-gray-400" />
-                          <span className="text-sm font-medium">{item.bank || '—'}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <CreditCard className="w-3 h-3 text-gray-400" />
-                          <span className="text-xs text-gray-500">{item.type || '—'}</span>
-                        </div>
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatAmount(item.amount)}
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <div className="flex items-center gap-3 min-w-[120px]">
-                        <span className={`text-sm font-medium ${getFraudScoreTextColor(item.fraud_score)} min-w-[35px]`}>
-                          {Math.round(item.fraud_score * 100)}%
-                        </span>
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              item.fraud_score > 0.7
-                                ? 'bg-red-500'
-                                : item.fraud_score > 0.4
-                                ? 'bg-amber-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{ width: `${Math.max(item.fraud_score * 100, 5)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {item.typology ? (
-                          <>
-                            <AlertTriangle className="w-4 h-4 text-red-600" />
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-red-50 text-red-700 border-red-200"
-                            >
-                              {item.typology}
-                            </Badge>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                            <span className="text-xs text-gray-500">None</span>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <Badge
-                        className={`text-xs capitalize ${getStatusColor(item.status)}`}
-                      >
-                        {item.status}
-                      </Badge>
-                    </TableCell>
-
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(item.event_time)}
-                      </div>
-                    </TableCell>
-
-                    <TableCell className="pr-6">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewTransaction(item.transaction_id)}
-                        className="h-8 px-3 text-xs"
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+        <div className="max-h-[520px] overflow-auto">
+          <table className="w-full min-w-[860px] border-collapse text-[13px]">
+            <thead>
+              <tr className="text-left text-muted-foreground">
+                {['ID', 'Waktu (UTC)', 'Bank', 'Kanal', 'Nominal', 'Skor model', 'Tipologi', 'Status', ''].map((h, i) => (
+                  <th
+                    key={i}
+                    scope="col"
+                    className={cn(
+                      'sticky top-0 z-10 bg-card px-2 py-2.5 font-medium',
+                      i === 0 && 'pl-[18px]', i === 8 && 'pr-[18px]', h === 'Nominal' && 'text-right',
+                    )}
+                  >
+                    {h || <span className="sr-only">Aksi</span>}
+                  </th>
                 ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+              </tr>
+            </thead>
+            <tbody ref={bodyRef}>
+              {items.length === 0 && Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-t border-[#172138]">
+                  {Array.from({ length: 9 }).map((__, j) => (
+                    <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]')}><Skeleton className="h-4 w-full max-w-24" /></td>
+                  ))}
+                </tr>
+              ))}
+              {items.length > 0 && rows.length === 0 && (
+                <tr className="border-t border-[#172138]">
+                  <td colSpan={9} className="px-[18px] py-8 text-center text-muted-foreground">
+                    Tidak ada transaksi dengan status ini di jendela live.
+                  </td>
+                </tr>
+              )}
+              {rows.map((item: LiveItem) => {
+                const s = statusMeta(item.status);
+                return (
+                  <tr key={item.seq} data-seq={item.seq} className={cn('border-t border-[#172138] transition-colors hover:bg-card-2', s.row)}>
+                    <td className="num py-2 pl-[18px] pr-2 text-text-secondary">TXN-{item.transaction_id}</td>
+                    <td className="num whitespace-nowrap px-2 py-2 text-muted-foreground">{formatTime(item.event_time)}</td>
+                    <td className="px-2 py-2 text-foreground">{item.bank || '—'}</td>
+                    <td className="px-2 py-2 text-text-secondary">{item.type || '—'}</td>
+                    <td className="num whitespace-nowrap px-2 py-2 text-right text-foreground">{formatIDR(item.amount)}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-border" aria-hidden>
+                          <div className={cn('h-1.5', s.bar)} style={{ width: `${Math.max(item.fraud_score * 100, 2)}%` }} />
+                        </div>
+                        <span className={cn('num', s.text)}>{formatScore(item.fraud_score)}</span>
+                      </div>
+                    </td>
+                    <td className="max-w-[200px] truncate px-2 py-2 text-text-secondary" title={item.typology ?? undefined}>
+                      {item.typology ?? <span className="text-text-faint">—</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', s.pill)}>{s.label}</span>
+                    </td>
+                    <td className="py-1 pl-2 pr-[18px]">
+                      <button
+                        type="button"
+                        onClick={() => handleViewTransaction(item.transaction_id)}
+                        aria-label={`Lihat detail TXN-${item.transaction_id}`}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
+                      >
+                        <Eye className="size-3.5" aria-hidden />
+                        Detail
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-      {/* Transaction Details Modal */}
       <TransactionDetailsModal
         transactionId={selectedTransactionId}
         isOpen={isModalOpen}
@@ -231,7 +189,6 @@ export function TransactionMonitor() {
         onOpenUserProfile={handleOpenUserProfile}
       />
 
-      {/* User Profile Details Modal */}
       <UserProfileDetailsModal
         entityId={selectedEntityId}
         isOpen={isProfileModalOpen}

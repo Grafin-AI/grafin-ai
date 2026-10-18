@@ -1,130 +1,95 @@
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { TrendingUp, TrendingDown, Shield, AlertTriangle, CreditCard, Eye } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { useMetricsOverview } from '../api/queries';
+import { formatIDRCompact, formatInt, formatPct } from '../lib/format';
+import { useRef } from 'react';
+import { useCountUp, useStaggerIn } from '../lib/motion';
 
-interface MetricCardProps {
-  title: string;
-  value: string;
-  change: string;
-  trend: 'up' | 'down';
-  icon: React.ReactNode;
-  color: string;
+interface KpiProps {
+  label: string;
+  value: number;
+  format: (n: number) => string;
+  sub: string;
+  valueClass: string;
+  dotClass: string;
 }
 
-function MetricCard({ title, value, change, trend, icon, color }: MetricCardProps) {
+function Kpi({ label, value, format, sub, valueClass, dotClass }: KpiProps) {
+  const ref = useCountUp<HTMLSpanElement>(value, format);
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm">{title}</CardTitle>
-        <div className={`p-2 rounded-lg ${color}`}>
-          {icon}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl mb-1">{value}</div>
-        <p className={`text-xs flex items-center gap-1 ${
-          trend === 'up' ? 'text-green-600' : 'text-red-600'
-        }`}>
-          {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {change} from last hour
-        </p>
-      </CardContent>
-    </Card>
+    <div data-kpi className="flex flex-col gap-2.5 rounded-xl border border-border bg-card px-[18px] py-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] text-muted-foreground">{label}</span>
+        <span aria-hidden className={`size-2 rounded-full ${dotClass}`} />
+      </div>
+      <span ref={ref} className={`num text-[28px] font-semibold leading-none ${valueClass}`}>{format(value)}</span>
+      <span className="text-xs text-muted-foreground">{sub}</span>
+    </div>
   );
 }
 
-function MetricCardSkeleton() {
+function KpiSkeleton() {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-8 w-8 rounded-lg" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-24 mb-2" />
-        <Skeleton className="h-3 w-36" />
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card px-[18px] py-4">
+      <Skeleton className="h-3.5 w-28" />
+      <Skeleton className="h-7 w-24" />
+      <Skeleton className="h-3 w-32" />
+    </div>
   );
 }
 
-const formatIDR = (amount: number) => {
-  if (amount >= 1_000_000_000_000) {
-    return `Rp ${(amount / 1_000_000_000_000).toFixed(1)}T`;
-  }
-  if (amount >= 1_000_000_000) {
-    return `Rp ${(amount / 1_000_000_000).toFixed(1)}B`;
-  }
-  if (amount >= 1_000_000) {
-    return `Rp ${(amount / 1_000_000).toFixed(1)}M`;
-  }
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
-};
+const GRID = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]';
 
 export function MetricsOverview() {
   const { data, isLoading, isError } = useMetricsOverview();
+  const ref = useRef<HTMLElement>(null);
+  useStaggerIn(ref, [!!data], '[data-kpi]');
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => <MetricCardSkeleton key={i} />)}
-      </div>
+      <section aria-label="Ringkasan" className={GRID}>
+        {[0, 1, 2, 3, 4].map((i) => <KpiSkeleton key={i} />)}
+      </section>
     );
   }
 
   if (isError || !data) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="col-span-4">
-          <CardContent className="pt-6">
-            <p className="text-sm text-gray-500">Unable to load metrics. Please try again.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <section aria-label="Ringkasan" className="rounded-xl border border-border bg-card p-4">
+        <p className="text-sm text-muted-foreground">Ringkasan metrik gagal dimuat. Mencoba lagi otomatis…</p>
+      </section>
     );
   }
 
-  const metrics = [
+  const total = data.total_transactions;
+  const approved = Math.max(0, total - data.flagged - data.blocked);
+  const ratio = (n: number) => (total ? n / total : 0);
+
+  const kpis: KpiProps[] = [
     {
-      title: "Total Transactions",
-      value: data.total_transactions.toLocaleString('id-ID'),
-      change: `${(data.fraud_rate * 100).toFixed(2)}% fraud rate`,
-      trend: "up" as const,
-      icon: <CreditCard className="w-4 h-4" style={{color: '#139EF6'}} />,
-      color: "bg-blue-50"
+      label: 'Transaksi diperiksa', value: total, format: formatInt,
+      sub: 'kumulatif periode simulasi', valueClass: 'text-foreground', dotClass: 'bg-primary',
     },
     {
-      title: "Fraud Detected",
-      value: data.flagged.toLocaleString('id-ID'),
-      change: `${data.blocked} blocked`,
-      trend: "down" as const,
-      icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
-      color: "bg-red-100"
+      label: 'Disetujui', value: ratio(approved), format: (n) => formatPct(n, 1),
+      sub: `${formatInt(approved)} transaksi`, valueClass: 'text-approved', dotClass: 'bg-approved',
     },
     {
-      title: "Fraud Rate",
-      value: `${(data.fraud_rate * 100).toFixed(2)}%`,
-      change: `${data.blocked} blocked txns`,
-      trend: data.fraud_rate < 0.01 ? "up" as const : "down" as const,
-      icon: <Shield className="w-4 h-4 text-green-600" />,
-      color: "bg-green-100"
+      label: 'Ditandai', value: ratio(data.flagged), format: (n) => formatPct(n, 2),
+      sub: `${formatInt(data.flagged)} untuk ditinjau`, valueClass: 'text-flagged', dotClass: 'bg-flagged',
     },
     {
-      title: "Total Amount",
-      value: formatIDR(data.total_amount),
-      change: `${data.flagged} flagged txns`,
-      trend: "up" as const,
-      icon: <Eye className="w-4 h-4" style={{color: '#139EF6'}} />,
-      color: "bg-blue-50"
-    }
+      label: 'Diblokir', value: data.blocked, format: formatInt,
+      sub: `${formatPct(ratio(data.blocked), 2)} dari total`, valueClass: 'text-blocked', dotClass: 'bg-blocked',
+    },
+    {
+      label: 'Nominal diproses', value: data.total_amount, format: formatIDRCompact,
+      sub: `tingkat risiko ${formatPct(data.fraud_rate, 2)}`, valueClass: 'text-foreground', dotClass: 'bg-link',
+    },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {metrics.map((metric, index) => (
-        <MetricCard key={index} {...metric} />
-      ))}
-    </div>
+    <section ref={ref} aria-label="Ringkasan" className={GRID}>
+      {kpis.map((k) => <Kpi key={k.label} {...k} />)}
+    </section>
   );
 }

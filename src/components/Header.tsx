@@ -1,66 +1,65 @@
-import { Bell, Settings, User, Search, Menu } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Badge } from './ui/badge';
+import { Bell, Search } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 interface HeaderProps {
-  onMenuClick?: () => void;
+  title?: string;
+  subtitle?: string;
+  /** Dataset time of the newest live event, already formatted; shown in the LIVE badge. */
+  liveTime?: string | null;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({
+  title = 'Monitoring Transaksi',
+  subtitle = 'Pemantauan real-time BI-FAST, QRIS, transfer antarbank',
+  liveTime,
+}: HeaderProps) {
   const { user } = useAuth();
+  const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
 
   return (
-    <header className="fixed top-0 left-64 right-0 bg-white border-b border-gray-200 px-6 py-4 z-40">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          {/* Mobile menu button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={onMenuClick}
-          >
-            <Menu className="w-5 h-5" />
-          </Button>
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
+      </div>
 
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Fraud Detection Dashboard</h1>
-            <p className="text-sm text-gray-500">Real-time monitoring and analytics</p>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span
+          className="inline-flex items-center gap-2 rounded-full bg-approved-bg px-3 py-1.5 text-[13px] font-medium text-[#5BE3B5]"
+          role="status"
+        >
+          <span aria-hidden className="relative flex size-2">
+            <span className="absolute inline-flex size-full rounded-full bg-approved opacity-60 motion-safe:animate-ping" />
+            <span className="relative inline-flex size-2 rounded-full bg-approved" />
+          </span>
+          LIVE{liveTime ? <span className="num">· {liveTime}</span> : null}
+        </span>
 
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Search transactions, banks..."
-              className="pl-10 w-72"
-            />
-          </div>
+        <label className="flex h-11 items-center gap-2 rounded-lg border border-border-strong bg-card px-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+          <Search className="size-4 text-muted-foreground" aria-hidden />
+          <span className="sr-only">Cari transaksi</span>
+          <input
+            type="search"
+            placeholder="Cari ID / rekening"
+            className="w-44 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+        </label>
 
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs bg-red-500 hover:bg-red-500">
-                3
-              </Badge>
-            </Button>
+        <button
+          type="button"
+          aria-label="Notifikasi"
+          className="grid size-11 place-items-center rounded-lg border border-border-strong bg-card text-foreground transition-colors hover:bg-accent"
+        >
+          <Bell className="size-[18px]" aria-hidden />
+        </button>
 
-            <Button variant="ghost" size="icon">
-              <Settings className="w-5 h-5" />
-            </Button>
-
-            <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user?.email ?? '—'}</p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role ?? ''}</p>
-              </div>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <User className="w-5 h-5" />
-              </Button>
-            </div>
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="grid size-8 place-items-center rounded-full bg-brand-soft text-[13px] font-semibold text-foreground">
+            {initials}
+          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm text-foreground">{user?.email ?? '—'}</span>
+            <span className="text-xs capitalize text-muted-foreground">{user?.role ?? ''}</span>
           </div>
         </div>
       </div>

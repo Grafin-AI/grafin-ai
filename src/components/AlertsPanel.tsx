@@ -1,89 +1,62 @@
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { ScrollArea } from './ui/scroll-area';
-import { AlertTriangle, Shield, Clock, Bell, Check } from 'lucide-react';
+import { useLayoutEffect, useRef } from 'react';
+import { Check } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
+import { cn } from './ui/utils';
 import { useAlerts, useAckAlert } from '../api/queries';
 import { formatTime } from '../lib/formatTime';
+import { formatInt } from '../lib/format';
+import { pulseOnce } from '../lib/motion';
 import type { AlertItem } from '../api/types';
 
-function getAlertColor(severity: string) {
+// Alerts are raised by the ingest pipeline for blocked transactions.
+function levelMeta(severity: string) {
   switch (severity) {
-    case 'critical': return 'bg-red-100 text-red-800 border-red-200';
+    case 'critical':
     case 'high':
-    case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'info': return 'border-blue-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
-}
-
-function getAlertStyle(severity: string): React.CSSProperties | undefined {
-  if (severity === 'info') return { backgroundColor: 'rgba(19, 158, 246, 0.1)' };
-  return undefined;
-}
-
-function getIcon(severity: string) {
-  switch (severity) {
-    case 'critical': return <AlertTriangle className="w-4 h-4 text-red-600" />;
-    case 'high':
-    case 'warning': return <Shield className="w-4 h-4 text-yellow-600" />;
-    case 'info': return <Bell className="w-4 h-4" style={{color: '#139EF6'}} />;
-    default: return <Bell className="w-4 h-4 text-gray-600" />;
+      return { label: 'BLOKIR', text: 'text-blocked', bar: 'bg-blocked', border: 'border-[#4A1A28]', blocked: true };
+    case 'medium':
+    case 'warning':
+      return { label: 'TINJAU', text: 'text-flagged', bar: 'bg-flagged', border: 'border-[#3D2E12]', blocked: false };
+    default:
+      return { label: severity.toUpperCase() || 'INFO', text: 'text-link', bar: 'bg-link', border: 'border-border', blocked: false };
   }
 }
 
 function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => void }) {
+  const m = levelMeta(alert.severity);
   return (
-    <div
-      className={`p-4 rounded-lg border ${getAlertColor(alert.severity)} mb-3`}
-      style={getAlertStyle(alert.severity)}
+    <li
+      data-alert-id={alert.id}
+      data-blocked={m.blocked || undefined}
+      className={cn('relative flex gap-3 rounded-[10px] border bg-card-2 p-3', m.border, alert.acknowledged && 'opacity-70')}
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5">
-          {getIcon(alert.severity)}
+      <span data-pulse-ring aria-hidden className="pointer-events-none absolute -inset-px rounded-[10px] opacity-0 ring-2 ring-blocked" />
+      <span aria-hidden className={cn('w-1 flex-none rounded-sm', m.bar)} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className={cn('text-[13px] font-semibold', m.text)}>{m.label}</span>
+          <span className="num text-xs text-muted-foreground">#{alert.id} · seq {alert.event_seq}</span>
         </div>
-
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-sm font-medium">
-              {alert.typology ? `${alert.typology} Alert` : `Alert #${alert.id}`}
-            </h4>
-            <Badge variant="outline" className="text-xs">
-              {alert.severity}
-            </Badge>
-          </div>
-
-          <p className="text-xs text-gray-600 mb-2">
-            Event seq: {alert.event_seq}
-            {alert.typology ? ` — Typology: ${alert.typology}` : ''}
-          </p>
-
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <div className="flex items-center gap-4">
-              {!alert.acknowledged && (
-                <button
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
-                  onClick={() => onAck(alert.id)}
-                >
-                  <Check className="w-3 h-3" />
-                  Acknowledge
-                </button>
-              )}
-              {alert.acknowledged && (
-                <span className="text-green-600 text-xs flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Acknowledged
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {formatTime(alert.event_time)}
-            </div>
-          </div>
+        <span className="text-[13px] text-foreground">{alert.typology ?? 'Transaksi diblokir model'}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="num text-xs text-muted-foreground">{formatTime(alert.event_time)}</span>
+          {alert.acknowledged ? (
+            <span className="inline-flex items-center gap-1 text-xs text-approved">
+              <Check className="size-3" aria-hidden /> Sudah ditinjau
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onAck(alert.id)}
+              className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
+            >
+              <Check className="size-3" aria-hidden />
+              Tandai ditinjau
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -92,42 +65,49 @@ export function AlertsPanel() {
   const ackMutation = useAckAlert();
 
   const alerts = data?.alerts ?? [];
-  const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
+  const unread = alerts.filter((a) => !a.acknowledged).length;
+
+  // Pulse alerts that arrive after the first load, once.
+  const listRef = useRef<HTMLUListElement>(null);
+  const seen = useRef<Set<number> | null>(null);
+  useLayoutEffect(() => {
+    if (!alerts.length) return;
+    if (seen.current == null) {
+      seen.current = new Set(alerts.map((a) => a.id));
+      return;
+    }
+    const fresh = alerts.filter((a) => !seen.current!.has(a.id));
+    fresh.forEach((a) => {
+      seen.current!.add(a.id);
+      const el = listRef.current?.querySelector(`[data-alert-id="${a.id}"][data-blocked]`);
+      if (el) pulseOnce(el);
+    });
+  }, [alerts]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="w-5 h-5" />
-          Recent Alerts
-          {criticalCount > 0 && (
-            <Badge className="bg-red-500 hover:bg-red-500 text-white">
-              {criticalCount}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-3">
-            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
-          </div>
-        ) : isError ? (
-          <p className="text-sm text-gray-500">Unable to load alerts.</p>
-        ) : alerts.length === 0 ? (
-          <p className="text-sm text-gray-500">No alerts at this time.</p>
-        ) : (
-          <ScrollArea className="h-80">
-            {alerts.map((alert) => (
-              <AlertRow
-                key={alert.id}
-                alert={alert}
-                onAck={(id) => ackMutation.mutate(id)}
-              />
-            ))}
-          </ScrollArea>
+    <section aria-label="Peringatan" data-animate className="flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-foreground">Peringatan</h2>
+        {unread > 0 && (
+          <span className="num rounded-full bg-blocked-bg px-2 py-0.5 text-xs text-[#FF8A9B]">{formatInt(unread)} baru</span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2.5">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[88px] w-full rounded-[10px]" />)}
+        </div>
+      ) : isError ? (
+        <p className="text-sm text-muted-foreground">Peringatan gagal dimuat.</p>
+      ) : alerts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Belum ada peringatan.</p>
+      ) : (
+        <ul ref={listRef} className="-mr-2 flex max-h-[520px] flex-col gap-2.5 overflow-y-auto pr-2">
+          {alerts.map((alert) => (
+            <AlertRow key={alert.id} alert={alert} onAck={(id) => ackMutation.mutate(id)} />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
