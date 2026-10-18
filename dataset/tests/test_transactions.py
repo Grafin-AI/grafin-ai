@@ -5,11 +5,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.transactions import (
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.transactions import (
     OFFSET_DAYS,
     check_vocabulary,
     format_output,

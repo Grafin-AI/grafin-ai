@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.paths import dataset_paths
+from grafin_ai_dataset.paths import dataset_paths
 
 
 def test_dataset_paths_layout(tmp_path: Path) -> None:

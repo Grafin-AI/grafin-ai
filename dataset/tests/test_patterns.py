@@ -3,10 +3,10 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import RawInputError
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import TRANS_COLS, scan_raw_trans
-from garda_ai_dataset.transforms.patterns import (
+from grafin_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import TRANS_COLS, scan_raw_trans
+from grafin_ai_dataset.transforms.patterns import (
     Attempt,
     build_typologies,
     match_patterns,

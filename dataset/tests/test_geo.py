@@ -1,8 +1,8 @@
-from garda_ai_dataset.geo import PROVINCES, province_for_entity
+from grafin_ai_dataset.geo import PROVINCES, province_for_entity
 
 
-def test_matches_garda_ai_ingest_known_values() -> None:
-    # Values produced by garda-ai-ingest/garda_ai_ingest/geo.py on 2026-10-16.
+def test_matches_grafin_ai_ingest_known_values() -> None:
+    # Values produced by grafin-ai-ingest/grafin_ai_ingest/geo.py on 2026-10-16.
     assert province_for_entity("80062E240") == "DKI Jakarta"
     assert province_for_entity("800C998A0") == "Jawa Tengah"
     assert province_for_entity("800C47F50") == "Jawa Tengah"

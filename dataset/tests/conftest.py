@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.mappings import Mappings, load_mappings
-from garda_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.mappings import Mappings, load_mappings
+from grafin_ai_dataset.paths import DatasetPaths
 from tests.fixture_data import write_raw
 
 

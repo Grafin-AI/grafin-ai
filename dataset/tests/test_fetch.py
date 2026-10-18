@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-import garda_ai_dataset.fetch as fetch_mod
-from garda_ai_dataset.errors import FetchError, RawInputError
-from garda_ai_dataset.fetch import run_fetch
-from garda_ai_dataset.paths import dataset_paths
+import grafin_ai_dataset.fetch as fetch_mod
+from grafin_ai_dataset.errors import FetchError, RawInputError
+from grafin_ai_dataset.fetch import run_fetch
+from grafin_ai_dataset.paths import dataset_paths
 
 NAMES = ["HI-Small_Trans.csv", "HI-Small_accounts.csv", "HI-Small_Patterns.txt"]
 

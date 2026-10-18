@@ -11,10 +11,10 @@ from pathlib import Path
 import polars as pl
 from faker import Faker
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.geo import province_for_entity
-from garda_ai_dataset.hashing import stable_int, weighted_pick
-from garda_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.geo import province_for_entity
+from grafin_ai_dataset.hashing import stable_int, weighted_pick
+from grafin_ai_dataset.mappings import Mappings
 
 ENTITY_COLUMNS = (
     "Entity ID",

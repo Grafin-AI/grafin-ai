@@ -12,27 +12,27 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset import __version__
-from garda_ai_dataset.errors import DiskSpaceError
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.entities import (
+from grafin_ai_dataset import __version__
+from grafin_ai_dataset.errors import DiskSpaceError
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.entities import (
     build_accounts,
     build_entities,
     check_entity_prefixes,
     first_seen_by_entity,
     read_legacy_accounts,
 )
-from garda_ai_dataset.transforms.institutions import assign_institutions
-from garda_ai_dataset.transforms.patterns import (
+from grafin_ai_dataset.transforms.institutions import assign_institutions
+from grafin_ai_dataset.transforms.patterns import (
     build_typologies,
     match_patterns,
     parse_patterns,
     render_patterns,
 )
-from garda_ai_dataset.transforms.transactions import (
+from grafin_ai_dataset.transforms.transactions import (
     check_vocabulary,
     format_output,
     localize_features,

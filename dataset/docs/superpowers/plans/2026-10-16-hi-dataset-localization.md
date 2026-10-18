@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `garda-ai-dataset`. It is a deterministic, validated pipeline that turns IBM's original AMLworld HI-Small and HI-Medium files into an Indonesian-localized dataset that the platform and Multi-GNN can read unchanged.
+**Goal:** Build `grafin-ai-dataset`. It is a deterministic, validated pipeline that turns IBM's original AMLworld HI-Small and HI-Medium files into an Indonesian-localized dataset that the platform and Multi-GNN can read unchanged.
 
 **Architecture:** The pipeline has four stages: `fetch`, `localize`, `validate` and `all`.
 - **Transforms** are pure Polars expressions and functions, driven by versioned mapping CSVs. They never receive the label column.
@@ -17,12 +17,12 @@
 
 ## Ground rules for every task
 
-- **Working directory:** `/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/garda-ai-dataset`. The path contains spaces, so always quote it.
+- **Working directory:** `/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/grafin-ai-dataset`. The path contains spaces, so always quote it.
 - **Commits:** the author is already configured in this repo (Thariq Iskandar Zulkarnain M P, thariqiskandar9@gmail.com). End every commit message with:
   `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`
 - **Never commit data.** `.gitignore` already ignores `*.csv` and `*.txt`, except `mappings/*.csv` and test fixtures. Check `git status` before each commit.
 - **Import order:** if `ruff check .` reports only import-order findings (`I001`) in the plan's code, run `uv run ruff check --fix .` and include the reordered files in the same commit. Any other ruff finding is a real defect; fix it by hand.
-- **Do not modify any other repository.** That includes `garda-ai-sim`, `garda-ai-ingest`, `garda-ai-deploy`, `garda-ai-backend`, `garda-ai-dashboard-web`, `workspace/*` and `garda-ai-data/HI-Small/`.
+- **Do not modify any other repository.** That includes `grafin-ai-sim`, `grafin-ai-ingest`, `grafin-ai-deploy`, `grafin-ai-backend`, `grafin-ai-dashboard-web`, `workspace/*` and `grafin-ai-data/HI-Small/`.
 - **Verified facts the code relies on** (checked against the real files on 2026-10-16):
   - **IBM Trans header:** `Timestamp,From Bank,Account,To Bank,Account,...`. Both account columns are named `Account`, so columns are read by position.
   - **Bank IDs** in Trans are zero-padded text (`010`, `0010`). Casting them to Int64 merges 0 `(bank, account)` keys on HI-Small. In `accounts.csv`, bank IDs are already unpadded.
@@ -41,17 +41,17 @@
 ## File structure
 
 ```
-garda-ai-dataset/
+grafin-ai-dataset/
 ├── pyproject.toml, uv.lock, Makefile, README.md, .github/workflows/ci.yml
 ├── mappings/                     recipe tables (committed)
 │   ├── fx_rates.csv  channels.csv  entity_types.csv  institutions.csv
 │   ├── provinces_cities.csv  kyc_status.csv  sectors_occupations.csv
-├── garda_ai_dataset/
+├── grafin_ai_dataset/
 │   ├── __init__.py               __version__
 │   ├── errors.py                 exceptions carrying exit codes
 │   ├── paths.py                  DatasetPaths: where raw/out files live
 │   ├── hashing.py                stable_int, weighted_pick, sha256_file
-│   ├── geo.py                    verbatim copy of garda-ai-ingest province logic
+│   ├── geo.py                    verbatim copy of grafin-ai-ingest province logic
 │   ├── mappings.py               load + validate mapping tables
 │   ├── raw.py                    read IBM files as text, by position
 │   ├── transforms/
@@ -63,7 +63,7 @@ garda-ai-dataset/
 │   ├── localize.py               two-pass orchestration + in-memory variant
 │   ├── validate.py               invariants + distribution report
 │   ├── fetch.py                  Kaggle per-file download + SHA256SUMS
-│   └── cli.py                    garda-dataset entry point
+│   └── cli.py                    grafin-dataset entry point
 └── tests/
     ├── __init__.py
     ├── fixture_data.py           hand-made raw IBM files (12 txns, 9 accounts, 2 attempts)
@@ -76,14 +76,14 @@ garda-ai-dataset/
 ### Task 1: Project scaffold, errors, paths, hashing
 
 **Files:**
-- Create: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`, `garda_ai_dataset/__init__.py`, `garda_ai_dataset/errors.py`, `garda_ai_dataset/paths.py`, `garda_ai_dataset/hashing.py`, `tests/__init__.py`
+- Create: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`, `grafin_ai_dataset/__init__.py`, `grafin_ai_dataset/errors.py`, `grafin_ai_dataset/paths.py`, `grafin_ai_dataset/hashing.py`, `tests/__init__.py`
 - Test: `tests/test_hashing.py`, `tests/test_paths.py`
 
 - [ ] **Step 1: Create `pyproject.toml`**
 
 ```toml
 [project]
-name = "garda-ai-dataset"
+name = "grafin-ai-dataset"
 version = "0.1.0"
 description = "Deterministic Indonesian localization of the IBM AML (AMLworld) HI datasets"
 requires-python = ">=3.12,<3.13"
@@ -93,7 +93,7 @@ dependencies = [
 ]
 
 [project.scripts]
-garda-dataset = "garda_ai_dataset.cli:main"
+grafin-dataset = "grafin_ai_dataset.cli:main"
 
 [dependency-groups]
 dev = [
@@ -120,7 +120,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["garda_ai_dataset"]
+packages = ["grafin_ai_dataset"]
 ```
 
 - [ ] **Step 2: Create `Makefile`** (recipe lines start with a TAB)
@@ -138,7 +138,7 @@ lint:
 	uv run ruff check .
 
 typecheck:
-	uv run mypy garda_ai_dataset
+	uv run mypy grafin_ai_dataset
 
 test:
 	uv run pytest -q
@@ -146,16 +146,16 @@ test:
 check: lint typecheck test
 
 fetch:
-	uv run garda-dataset fetch --dataset $(DATASET) --kaggle-json "$(KAGGLE_JSON)"
+	uv run grafin-dataset fetch --dataset $(DATASET) --kaggle-json "$(KAGGLE_JSON)"
 
 localize:
-	uv run garda-dataset localize --dataset $(DATASET)
+	uv run grafin-dataset localize --dataset $(DATASET)
 
 validate:
-	uv run garda-dataset validate --dataset $(DATASET)
+	uv run grafin-dataset validate --dataset $(DATASET)
 
 all:
-	uv run garda-dataset all --dataset $(DATASET) --kaggle-json "$(KAGGLE_JSON)"
+	uv run grafin-dataset all --dataset $(DATASET) --kaggle-json "$(KAGGLE_JSON)"
 ```
 
 - [ ] **Step 3: Create `.github/workflows/ci.yml`**
@@ -179,14 +179,14 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_dataset
+        run: uv run mypy grafin_ai_dataset
       - name: Test
         run: uv run pytest -q
 ```
 
 - [ ] **Step 4: Create the package skeleton**
 
-`garda_ai_dataset/__init__.py`:
+`grafin_ai_dataset/__init__.py`:
 
 ```python
 """Indonesian localization of the IBM AML (AMLworld) HI datasets."""
@@ -194,7 +194,7 @@ jobs:
 __version__ = "0.1.0"
 ```
 
-`garda_ai_dataset/errors.py`:
+`grafin_ai_dataset/errors.py`:
 
 ```python
 """Exceptions carrying the CLI exit code (spec section 10)."""
@@ -236,7 +236,7 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.hashing import sha256_file, stable_int, weighted_pick
+from grafin_ai_dataset.hashing import sha256_file, stable_int, weighted_pick
 
 
 def test_stable_int_is_deterministic_and_part_sensitive() -> None:
@@ -275,7 +275,7 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.paths import dataset_paths
+from grafin_ai_dataset.paths import dataset_paths
 
 
 def test_dataset_paths_layout(tmp_path: Path) -> None:
@@ -303,9 +303,9 @@ def test_unknown_size(tmp_path: Path) -> None:
 - [ ] **Step 6: Run the tests to verify they fail**
 
 Run: `uv sync && uv run pytest -q tests/test_hashing.py tests/test_paths.py`
-Expected: an ERROR during collection, `ModuleNotFoundError: No module named 'garda_ai_dataset.hashing'`.
+Expected: an ERROR during collection, `ModuleNotFoundError: No module named 'grafin_ai_dataset.hashing'`.
 
-- [ ] **Step 7: Implement `garda_ai_dataset/hashing.py`**
+- [ ] **Step 7: Implement `grafin_ai_dataset/hashing.py`**
 
 ```python
 """Deterministic hashing helpers. All synthetic choices derive from these (spec 6.1)."""
@@ -342,7 +342,7 @@ def sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
     return digest.hexdigest()
 ```
 
-- [ ] **Step 8: Implement `garda_ai_dataset/paths.py`**
+- [ ] **Step 8: Implement `grafin_ai_dataset/paths.py`**
 
 ```python
 """Where the raw and localized files of each dataset live under the data root."""
@@ -413,14 +413,14 @@ def dataset_paths(data_root: Path, size: str) -> DatasetPaths:
 
 - [ ] **Step 9: Run the tests and all tooling**
 
-Run: `uv run pytest -q tests/test_hashing.py tests/test_paths.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_hashing.py tests/test_paths.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `7 passed`, then `All checks passed!`, then `Success: no issues found`.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add pyproject.toml uv.lock Makefile .github garda_ai_dataset tests
-git commit -m "feat: scaffold garda-ai-dataset with errors, paths and hashing helpers
+git add pyproject.toml uv.lock Makefile .github grafin_ai_dataset tests
+git commit -m "feat: scaffold grafin-ai-dataset with errors, paths and hashing helpers
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
@@ -431,7 +431,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `mappings/fx_rates.csv`, `mappings/channels.csv`, `mappings/entity_types.csv`, `mappings/institutions.csv`, `mappings/provinces_cities.csv`, `mappings/kyc_status.csv`, `mappings/sectors_occupations.csv`
-- Create: `garda_ai_dataset/geo.py`, `garda_ai_dataset/mappings.py`
+- Create: `grafin_ai_dataset/geo.py`, `grafin_ai_dataset/mappings.py`
 - Test: `tests/test_geo.py`, `tests/test_mappings.py`
 
 - [ ] **Step 1: Create `mappings/fx_rates.csv`** (rates fetched 2026-10-16 for date 2025-09-04)
@@ -604,7 +604,7 @@ Mobee,Mobee,crypto_exchange,Pedagang Aset Kripto,2
 
 - [ ] **Step 5: Create `mappings/provinces_cities.csv`**
 
-The provinces must equal `garda-ai-ingest`'s 15 provinces exactly.
+The provinces must equal `grafin-ai-ingest`'s 15 provinces exactly.
 
 ```csv
 province,city
@@ -702,11 +702,11 @@ business,Real Estat,5
 `tests/test_geo.py`:
 
 ```python
-from garda_ai_dataset.geo import PROVINCES, province_for_entity
+from grafin_ai_dataset.geo import PROVINCES, province_for_entity
 
 
-def test_matches_garda_ai_ingest_known_values() -> None:
-    # Values produced by garda-ai-ingest/garda_ai_ingest/geo.py on 2026-10-16.
+def test_matches_grafin_ai_ingest_known_values() -> None:
+    # Values produced by grafin-ai-ingest/grafin_ai_ingest/geo.py on 2026-10-16.
     assert province_for_entity("80062E240") == "DKI Jakarta"
     assert province_for_entity("800C998A0") == "Jawa Tengah"
     assert province_for_entity("800C47F50") == "Jawa Tengah"
@@ -725,9 +725,9 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.errors import MappingError
-from garda_ai_dataset.geo import PROVINCES
-from garda_ai_dataset.mappings import MAPPINGS_DIR, load_mappings
+from grafin_ai_dataset.errors import MappingError
+from grafin_ai_dataset.geo import PROVINCES
+from grafin_ai_dataset.mappings import MAPPINGS_DIR, load_mappings
 
 TABLES = {
     "fx_rates.csv",
@@ -814,12 +814,12 @@ def test_non_numeric_rate(mapdir: Path) -> None:
 - [ ] **Step 8: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_geo.py tests/test_mappings.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.geo'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.geo'`.
 
-- [ ] **Step 9: Implement `garda_ai_dataset/geo.py`**
+- [ ] **Step 9: Implement `grafin_ai_dataset/geo.py`**
 
 ```python
-"""Province assignment: a VERBATIM copy of garda-ai-ingest/garda_ai_ingest/geo.py.
+"""Province assignment: a VERBATIM copy of grafin-ai-ingest/grafin_ai_ingest/geo.py.
 
 The platform already shows this province (ingest computes it at seed time), so
 entities.csv must produce the identical value for every Entity ID. Change both repos
@@ -844,7 +844,7 @@ def province_for_entity(entity_id: str) -> str:
     return _BUCKET[int(digest, 16) % len(_BUCKET)]
 ```
 
-- [ ] **Step 10: Implement `garda_ai_dataset/mappings.py`**
+- [ ] **Step 10: Implement `grafin_ai_dataset/mappings.py`**
 
 ```python
 """Load and validate the versioned mapping tables in ``mappings/`` (the localization recipe)."""
@@ -853,9 +853,9 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from garda_ai_dataset.errors import MappingError
-from garda_ai_dataset.geo import PROVINCES
-from garda_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.errors import MappingError
+from grafin_ai_dataset.geo import PROVINCES
+from grafin_ai_dataset.hashing import sha256_file
 
 MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
 INSTITUTION_KINDS = ("bank", "crypto_exchange")
@@ -1037,13 +1037,13 @@ def load_mappings(directory: Path = MAPPINGS_DIR) -> Mappings:
 
 - [ ] **Step 11: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_geo.py tests/test_mappings.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_geo.py tests/test_mappings.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `10 passed`, then ruff and mypy clean.
 
 - [ ] **Step 12: Commit**
 
 ```bash
-git add mappings garda_ai_dataset/geo.py garda_ai_dataset/mappings.py tests/test_geo.py tests/test_mappings.py
+git add mappings grafin_ai_dataset/geo.py grafin_ai_dataset/mappings.py tests/test_geo.py tests/test_mappings.py
 git status --short   # only these files; no data
 git commit -m "feat: mapping tables (FX, channels, institutions, entity types, profiles) and loader
 
@@ -1055,7 +1055,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 3: Raw readers, transaction transforms, and the test fixture
 
 **Files:**
-- Create: `garda_ai_dataset/raw.py`, `garda_ai_dataset/transforms/__init__.py`, `garda_ai_dataset/transforms/transactions.py`
+- Create: `grafin_ai_dataset/raw.py`, `grafin_ai_dataset/transforms/__init__.py`, `grafin_ai_dataset/transforms/transactions.py`
 - Create: `tests/fixture_data.py`, `tests/conftest.py`
 - Test: `tests/test_transactions.py`
 
@@ -1076,7 +1076,7 @@ Raw rows are deliberately unsorted. They include:
 
 from pathlib import Path
 
-from garda_ai_dataset.paths import DatasetPaths, dataset_paths
+from grafin_ai_dataset.paths import DatasetPaths, dataset_paths
 
 RAW_HEADER = (
     "Timestamp,From Bank,Account,To Bank,Account,Amount Received,Receiving Currency,"
@@ -1142,8 +1142,8 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.mappings import Mappings, load_mappings
-from garda_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.mappings import Mappings, load_mappings
+from grafin_ai_dataset.paths import DatasetPaths
 from tests.fixture_data import write_raw
 
 
@@ -1167,11 +1167,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.transactions import (
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.transactions import (
     OFFSET_DAYS,
     check_vocabulary,
     format_output,
@@ -1270,9 +1270,9 @@ def test_accounts_missing_column(tmp_path: Path) -> None:
 - [ ] **Step 4: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_transactions.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.raw'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.raw'`.
 
-- [ ] **Step 5: Implement `garda_ai_dataset/raw.py`**
+- [ ] **Step 5: Implement `grafin_ai_dataset/raw.py`**
 
 ```python
 """Readers for IBM-format files. Everything is read as text, and Trans columns by position."""
@@ -1281,7 +1281,7 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.errors import RawInputError
 
 TRANS_COLS = (
     "timestamp",
@@ -1297,7 +1297,7 @@ TRANS_COLS = (
     "is_laundering",
 )
 # IBM's header names BOTH account columns "Account". We read by position and write
-# "To Account" for the second, which is what garda-ai-sim reads.
+# "To Account" for the second, which is what grafin-ai-sim reads.
 OUT_HEADER = (
     "Timestamp",
     "From Bank",
@@ -1316,7 +1316,7 @@ ACCOUNT_COLS = ("Bank Name", "Bank ID", "Account Number", "Entity ID", "Entity N
 
 def _require(path: Path) -> None:
     if not path.exists():
-        raise RawInputError(f"input missing: {path} (run `garda-dataset fetch` first)")
+        raise RawInputError(f"input missing: {path} (run `grafin-dataset fetch` first)")
 
 
 def scan_trans_csv(path: Path) -> pl.LazyFrame:
@@ -1340,24 +1340,24 @@ def read_raw_accounts(path: Path) -> pl.DataFrame:
     return df.select(ACCOUNT_COLS)
 ```
 
-- [ ] **Step 6: Implement `garda_ai_dataset/transforms/__init__.py` and `transforms/transactions.py`**
+- [ ] **Step 6: Implement `grafin_ai_dataset/transforms/__init__.py` and `transforms/transactions.py`**
 
-`garda_ai_dataset/transforms/__init__.py`:
+`grafin_ai_dataset/transforms/__init__.py`:
 
 ```python
 """Pure transforms. None of them may read the Is Laundering label (spec 6.1)."""
 ```
 
-`garda_ai_dataset/transforms/transactions.py`:
+`grafin_ai_dataset/transforms/transactions.py`:
 
 ```python
 """Row-level transforms: time shift, bank ids, FX to IDR, channel names (spec 6.2)."""
 
 import polars as pl
 
-from garda_ai_dataset.errors import MappingError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.raw import OUT_HEADER
+from grafin_ai_dataset.errors import MappingError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.raw import OUT_HEADER
 
 OFFSET_DAYS = 1099  # 157 whole weeks: 2022-09-01 (Thu) -> 2025-09-04 (Thu)
 TS_FORMAT = "%Y/%m/%d %H:%M"
@@ -1432,13 +1432,13 @@ def check_vocabulary(raw: pl.LazyFrame, maps: Mappings) -> None:
 
 - [ ] **Step 7: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_transactions.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_transactions.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `9 passed`, then ruff and mypy clean.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_dataset/raw.py garda_ai_dataset/transforms tests/fixture_data.py tests/conftest.py tests/test_transactions.py
+git add grafin_ai_dataset/raw.py grafin_ai_dataset/transforms tests/fixture_data.py tests/conftest.py tests/test_transactions.py
 git commit -m "feat: raw IBM readers and transaction transforms (time, banks, FX, channels)
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -1449,7 +1449,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 4: Institution assignment
 
 **Files:**
-- Create: `garda_ai_dataset/transforms/institutions.py`
+- Create: `grafin_ai_dataset/transforms/institutions.py`
 - Test: `tests/test_institutions.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1457,10 +1457,10 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```python
 import polars as pl
 
-from garda_ai_dataset.mappings import Institution, Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import read_raw_accounts
-from garda_ai_dataset.transforms.institutions import assign_institutions
+from grafin_ai_dataset.mappings import Institution, Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import read_raw_accounts
+from grafin_ai_dataset.transforms.institutions import assign_institutions
 
 
 def _inst(name: str, kind: str, weight: int) -> Institution:
@@ -1530,9 +1530,9 @@ def test_fixture_with_real_tables(raw_paths: DatasetPaths, maps: Mappings) -> No
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_institutions.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.transforms.institutions'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.transforms.institutions'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/transforms/institutions.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/transforms/institutions.py`**
 
 ```python
 """Give each IBM Bank ID one Indonesian institution name (spec 6.3). Never reads the label."""
@@ -1541,7 +1541,7 @@ from collections.abc import Sequence
 
 import polars as pl
 
-from garda_ai_dataset.mappings import Institution
+from grafin_ai_dataset.mappings import Institution
 
 CRYPTO_BANK_PREFIX = "Crytpo Bank"  # IBM's own spelling in the HI-* accounts files
 
@@ -1592,13 +1592,13 @@ def _fill(bank_ids: list[int], sizes: list[int], targets: list[Institution]) -> 
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_institutions.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_institutions.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `5 passed`, then ruff and mypy clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/transforms/institutions.py tests/test_institutions.py
+git add grafin_ai_dataset/transforms/institutions.py tests/test_institutions.py
 git commit -m "feat: rank-preserving institution assignment with crypto-exchange pool
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -1609,7 +1609,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Entities, accounts, and first-seen dates
 
 **Files:**
-- Create: `garda_ai_dataset/transforms/entities.py`
+- Create: `grafin_ai_dataset/transforms/entities.py`
 - Test: `tests/test_entities.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1621,11 +1621,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.entities import (
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.entities import (
     ACCOUNT_COLUMNS,
     ENTITY_COLUMNS,
     build_accounts,
@@ -1634,7 +1634,7 @@ from garda_ai_dataset.transforms.entities import (
     first_seen_by_entity,
     read_legacy_accounts,
 )
-from garda_ai_dataset.transforms.transactions import localize_features
+from grafin_ai_dataset.transforms.transactions import localize_features
 from tests.fixture_data import LEGACY_ACCOUNTS
 
 START = date(2025, 9, 4)
@@ -1734,9 +1734,9 @@ def test_legacy_duplicate_keys_rejected(tmp_path: Path) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_entities.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.transforms.entities'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.transforms.entities'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/transforms/entities.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/transforms/entities.py`**
 
 ```python
 """Entity names, types, display-only profile fields, and the accounts file (spec 6.4).
@@ -1752,10 +1752,10 @@ from pathlib import Path
 import polars as pl
 from faker import Faker
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.geo import province_for_entity
-from garda_ai_dataset.hashing import stable_int, weighted_pick
-from garda_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.geo import province_for_entity
+from grafin_ai_dataset.hashing import stable_int, weighted_pick
+from grafin_ai_dataset.mappings import Mappings
 
 ENTITY_COLUMNS = (
     "Entity ID",
@@ -1913,7 +1913,7 @@ def build_accounts(
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_entities.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_entities.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `9 passed`, then ruff and mypy clean. If mypy reports Faker attributes as untyped, add this to `pyproject.toml` and re-run:
 
 ```toml
@@ -1925,7 +1925,7 @@ ignore_missing_imports = true
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/transforms/entities.py tests/test_entities.py pyproject.toml
+git add grafin_ai_dataset/transforms/entities.py tests/test_entities.py pyproject.toml
 git commit -m "feat: entity types/names/profiles and localized accounts with legacy risk carry-over
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -1936,7 +1936,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 6: Patterns, motif labels, and typologies
 
 **Files:**
-- Create: `garda_ai_dataset/transforms/patterns.py`
+- Create: `grafin_ai_dataset/transforms/patterns.py`
 - Test: `tests/test_patterns.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1947,10 +1947,10 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import RawInputError
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import TRANS_COLS, scan_raw_trans
-from garda_ai_dataset.transforms.patterns import (
+from grafin_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import TRANS_COLS, scan_raw_trans
+from grafin_ai_dataset.transforms.patterns import (
     Attempt,
     build_typologies,
     match_patterns,
@@ -2036,9 +2036,9 @@ def test_render_round_trips_and_substitutes(raw_paths: DatasetPaths) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_patterns.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.transforms.patterns'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.transforms.patterns'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/transforms/patterns.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/transforms/patterns.py`**
 
 ```python
 """Parse IBM Patterns.txt, match attempts to Trans rows, emit motif labels (spec 6.5).
@@ -2054,8 +2054,8 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset.errors import RawInputError
-from garda_ai_dataset.raw import TRANS_COLS
+from grafin_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.raw import TRANS_COLS
 
 _BEGIN = re.compile(r"^BEGIN LAUNDERING ATTEMPT - (?P<motif>[A-Z][A-Z-]*)")
 _END = "END LAUNDERING ATTEMPT"
@@ -2080,7 +2080,7 @@ class PatternMatch:
 
 def parse_patterns(path: Path) -> list[Attempt]:
     if not path.exists():
-        raise RawInputError(f"input missing: {path} (run `garda-dataset fetch` first)")
+        raise RawInputError(f"input missing: {path} (run `grafin-dataset fetch` first)")
     attempts: list[Attempt] = []
     motif: str | None = None
     begin: str | None = None
@@ -2168,13 +2168,13 @@ def render_patterns(
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_patterns.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_patterns.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `9 passed`, then ruff and mypy clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/transforms/patterns.py tests/test_patterns.py
+git add grafin_ai_dataset/transforms/patterns.py tests/test_patterns.py
 git commit -m "feat: Patterns.txt parsing, multiset matching, typology labels and rendering
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -2185,7 +2185,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 7: Two-pass localize orchestration
 
 **Files:**
-- Create: `garda_ai_dataset/localize.py`
+- Create: `grafin_ai_dataset/localize.py`
 - Test: `tests/test_localize.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -2196,11 +2196,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import DiskSpaceError, RawInputError
-from garda_ai_dataset.localize import localize_frames, run_localize
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths, dataset_paths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.errors import DiskSpaceError, RawInputError
+from grafin_ai_dataset.localize import localize_frames, run_localize
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths, dataset_paths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
 from tests.fixture_data import EXPECTED_TID, LEGACY_ACCOUNTS, RAW_ROWS, write_raw
 
 OUTPUTS = ("out_trans", "out_accounts", "out_entities", "out_patterns", "out_typologies")
@@ -2322,9 +2322,9 @@ def test_missing_raw_input(tmp_path: Path, maps: Mappings) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_localize.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.localize'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.localize'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/localize.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/localize.py`**
 
 ```python
 """Two-pass localization (spec 5 and 9).
@@ -2341,26 +2341,26 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset import __version__
-from garda_ai_dataset.errors import DiskSpaceError
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.entities import (
+from grafin_ai_dataset import __version__
+from grafin_ai_dataset.errors import DiskSpaceError
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.entities import (
     build_accounts,
     build_entities,
     first_seen_by_entity,
     read_legacy_accounts,
 )
-from garda_ai_dataset.transforms.institutions import assign_institutions
-from garda_ai_dataset.transforms.patterns import (
+from grafin_ai_dataset.transforms.institutions import assign_institutions
+from grafin_ai_dataset.transforms.patterns import (
     build_typologies,
     match_patterns,
     parse_patterns,
     render_patterns,
 )
-from garda_ai_dataset.transforms.transactions import (
+from grafin_ai_dataset.transforms.transactions import (
     check_vocabulary,
     format_output,
     localize_features,
@@ -2504,13 +2504,13 @@ def run_localize(
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: the whole suite passes, and ruff and mypy are clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/localize.py tests/test_localize.py
+git add grafin_ai_dataset/localize.py tests/test_localize.py
 git commit -m "feat: two-pass per-day localize orchestration with manifest
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -2521,7 +2521,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 8: Validator (invariants, distribution report, mutation tests)
 
 **Files:**
-- Create: `garda_ai_dataset/validate.py`
+- Create: `grafin_ai_dataset/validate.py`
 - Test: `tests/test_validate.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -2532,11 +2532,11 @@ import json
 import polars as pl
 import pytest
 
-import garda_ai_dataset.validate as validate_mod
-from garda_ai_dataset.localize import run_localize
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.validate import Check, ValidationReport, validate_dataset
+import grafin_ai_dataset.validate as validate_mod
+from grafin_ai_dataset.localize import run_localize
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.validate import Check, ValidationReport, validate_dataset
 
 ALL_CHECKS = {
     "header", "row_count", "node_merge", "labels", "graph_keys", "fx", "time", "order",
@@ -2666,9 +2666,9 @@ def test_node_merge_is_caught(raw_paths: DatasetPaths, maps: Mappings) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_validate.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.validate'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.validate'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/validate.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/validate.py`**
 
 ```python
 """Invariant checks (spec 8), run one dataset day at a time so HI-Medium fits in memory.
@@ -2684,20 +2684,20 @@ from datetime import date, datetime, timedelta
 
 import polars as pl
 
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.localize import localize_frames
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import (
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.localize import localize_frames
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import (
     OUT_HEADER,
     TRANS_COLS,
     read_raw_accounts,
     scan_raw_trans,
     scan_trans_csv,
 )
-from garda_ai_dataset.transforms.entities import first_seen_by_entity
-from garda_ai_dataset.transforms.patterns import build_typologies, match_patterns, parse_patterns
-from garda_ai_dataset.transforms.transactions import OFFSET_DAYS, parse_ts, to_idr
+from grafin_ai_dataset.transforms.entities import first_seen_by_entity
+from grafin_ai_dataset.transforms.patterns import build_typologies, match_patterns, parse_patterns
+from grafin_ai_dataset.transforms.transactions import OFFSET_DAYS, parse_ts, to_idr
 
 LABEL_SAMPLE_ROWS = 200_000
 ROW_CHECKS = ("labels", "graph_keys", "fx", "time", "order", "channels")
@@ -3032,13 +3032,13 @@ def _distribution(paths: DatasetPaths, maps: Mappings, out: pl.LazyFrame) -> lis
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: the whole suite passes, and ruff and mypy are clean. `test_fresh_build_passes` must print nothing; on failure it renders the report.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/validate.py tests/test_validate.py
+git add grafin_ai_dataset/validate.py tests/test_validate.py
 git commit -m "feat: per-day invariant validator with distribution report and mutation tests
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -3049,7 +3049,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 9: Kaggle fetch
 
 **Files:**
-- Create: `garda_ai_dataset/fetch.py`
+- Create: `grafin_ai_dataset/fetch.py`
 - Test: `tests/test_fetch.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -3067,9 +3067,9 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.errors import FetchError, RawInputError
-from garda_ai_dataset.fetch import run_fetch
-from garda_ai_dataset.paths import dataset_paths
+from grafin_ai_dataset.errors import FetchError, RawInputError
+from grafin_ai_dataset.fetch import run_fetch
+from grafin_ai_dataset.paths import dataset_paths
 
 NAMES = ["HI-Small_Trans.csv", "HI-Small_accounts.csv", "HI-Small_Patterns.txt"]
 
@@ -3171,9 +3171,9 @@ def test_incomplete_credentials(tmp_path: Path) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_fetch.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.fetch'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.fetch'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/fetch.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/fetch.py`**
 
 ```python
 """Download the original IBM files from Kaggle, one file at a time (spec 7).
@@ -3192,9 +3192,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from garda_ai_dataset.errors import FetchError, RawInputError
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.errors import FetchError, RawInputError
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.paths import DatasetPaths
 
 KAGGLE_DATASET = "ealtman2019/ibm-transactions-for-anti-money-laundering-aml"
 DOWNLOAD_URL = "https://www.kaggle.com/api/v1/datasets/download/{dataset}/{file}"
@@ -3211,7 +3211,7 @@ def _authorization(kaggle_json: Path) -> str:
         data = json.loads(kaggle_json.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise FetchError(
-            f"Kaggle credentials not found at {kaggle_json} (set GARDA_KAGGLE_JSON or pass "
+            f"Kaggle credentials not found at {kaggle_json} (set GRAFIN_KAGGLE_JSON or pass "
             "--kaggle-json)"
         ) from None
     except json.JSONDecodeError:
@@ -3241,7 +3241,7 @@ def write_sums(path: Path, sums: dict[str, str]) -> None:
 def _download(target: Path, authorization: str, opener: Opener) -> None:
     url = DOWNLOAD_URL.format(dataset=KAGGLE_DATASET, file=target.name)
     request = urllib.request.Request(
-        url, headers={"Authorization": authorization, "User-Agent": "garda-ai-dataset"}
+        url, headers={"Authorization": authorization, "User-Agent": "grafin-ai-dataset"}
     )
     part = target.with_name(target.name + ".part")
     try:
@@ -3296,13 +3296,13 @@ def run_fetch(
 
 - [ ] **Step 4: Run the tests and tooling**
 
-Run: `uv run pytest -q tests/test_fetch.py && uv run ruff check . && uv run mypy garda_ai_dataset`
+Run: `uv run pytest -q tests/test_fetch.py && uv run ruff check . && uv run mypy grafin_ai_dataset`
 Expected: `7 passed`, then ruff and mypy clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/fetch.py tests/test_fetch.py
+git add grafin_ai_dataset/fetch.py tests/test_fetch.py
 git commit -m "feat: per-file Kaggle fetch with SHA256SUMS and zip handling
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -3313,7 +3313,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 10: CLI
 
 **Files:**
-- Create: `garda_ai_dataset/cli.py`
+- Create: `grafin_ai_dataset/cli.py`
 - Test: `tests/test_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -3323,9 +3323,9 @@ from pathlib import Path
 
 import pytest
 
-import garda_ai_dataset.localize as localize_mod
-from garda_ai_dataset.cli import default_legacy_accounts, main
-from garda_ai_dataset.paths import DatasetPaths
+import grafin_ai_dataset.localize as localize_mod
+from grafin_ai_dataset.cli import default_legacy_accounts, main
+from grafin_ai_dataset.paths import DatasetPaths
 
 
 def _root(paths: DatasetPaths) -> str:
@@ -3384,27 +3384,27 @@ def test_default_legacy_accounts(tmp_path: Path) -> None:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest -q tests/test_cli.py`
-Expected: a collection ERROR, `ModuleNotFoundError: No module named 'garda_ai_dataset.cli'`.
+Expected: a collection ERROR, `ModuleNotFoundError: No module named 'grafin_ai_dataset.cli'`.
 
-- [ ] **Step 3: Implement `garda_ai_dataset/cli.py`**
+- [ ] **Step 3: Implement `grafin_ai_dataset/cli.py`**
 
 ```python
-"""`garda-dataset fetch|localize|validate|all --dataset small|medium`."""
+"""`grafin-dataset fetch|localize|validate|all --dataset small|medium`."""
 
 import argparse
 import os
 import sys
 from pathlib import Path
 
-from garda_ai_dataset.errors import DatasetError, ValidationFailed
-from garda_ai_dataset.fetch import run_fetch
-from garda_ai_dataset.localize import run_localize
-from garda_ai_dataset.mappings import Mappings, load_mappings
-from garda_ai_dataset.paths import SIZES, DatasetPaths, dataset_paths
-from garda_ai_dataset.validate import validate_dataset
+from grafin_ai_dataset.errors import DatasetError, ValidationFailed
+from grafin_ai_dataset.fetch import run_fetch
+from grafin_ai_dataset.localize import run_localize
+from grafin_ai_dataset.mappings import Mappings, load_mappings
+from grafin_ai_dataset.paths import SIZES, DatasetPaths, dataset_paths
+from grafin_ai_dataset.validate import validate_dataset
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DATA_ROOT = REPO_ROOT.parent / "garda-ai-data"
+DEFAULT_DATA_ROOT = REPO_ROOT.parent / "grafin-ai-data"
 DEFAULT_KAGGLE_JSON = Path("~/.kaggle/kaggle.json")
 COMMANDS = {
     "fetch": "download the original IBM files from Kaggle",
@@ -3424,7 +3424,7 @@ def default_legacy_accounts(data_root: Path, size: str) -> Path | None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="garda-dataset", description="Localize the IBM AML HI datasets for Indonesia."
+        prog="grafin-dataset", description="Localize the IBM AML HI datasets for Indonesia."
     )
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
@@ -3433,13 +3433,13 @@ def _parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--data-root",
             type=Path,
-            default=Path(os.environ.get("GARDA_DATA_ROOT", str(DEFAULT_DATA_ROOT))),
+            default=Path(os.environ.get("GRAFIN_DATA_ROOT", str(DEFAULT_DATA_ROOT))),
         )
         if name in ("fetch", "all"):
             cmd.add_argument(
                 "--kaggle-json",
                 type=Path,
-                default=Path(os.environ.get("GARDA_KAGGLE_JSON", str(DEFAULT_KAGGLE_JSON))),
+                default=Path(os.environ.get("GRAFIN_KAGGLE_JSON", str(DEFAULT_KAGGLE_JSON))),
             )
         if name in ("localize", "all"):
             cmd.add_argument(
@@ -3493,14 +3493,14 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run the whole suite and tooling**
 
-Run: `uv run pytest -q && uv run ruff check . && uv run mypy garda_ai_dataset && uv run garda-dataset --help`
+Run: `uv run pytest -q && uv run ruff check . && uv run mypy grafin_ai_dataset && uv run grafin-dataset --help`
 Expected: all tests pass, ruff and mypy are clean, and the help text lists `fetch`, `localize`, `validate` and `all`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_dataset/cli.py tests/test_cli.py
-git commit -m "feat: garda-dataset CLI with spec exit codes
+git add grafin_ai_dataset/cli.py tests/test_cli.py
+git commit -m "feat: grafin-dataset CLI with spec exit codes
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
@@ -3515,7 +3515,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: Write `README.md`**
 
 ````markdown
-# garda-ai-dataset
+# grafin-ai-dataset
 
 A deterministic, validated localization of IBM's synthetic AML data (AMLworld,
 [Kaggle](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml),
@@ -3533,8 +3533,8 @@ make all DATASET=small KAGGLE_JSON=/path/to/kaggle.json    # fetch + localize + 
 make all DATASET=medium KAGGLE_JSON=/path/to/kaggle.json   # ~3.2 GB download
 ```
 
-- **Output** goes to `../garda-ai-data/HI-<Size>-ID/`. Override the location with `GARDA_DATA_ROOT` or `--data-root`.
-- **Raw files** are stored in `../garda-ai-data/raw/HI-<Size>/`, alongside a `SHA256SUMS` file.
+- **Output** goes to `../grafin-ai-data/HI-<Size>-ID/`. Override the location with `GRAFIN_DATA_ROOT` or `--data-root`.
+- **Raw files** are stored in `../grafin-ai-data/raw/HI-<Size>/`, alongside a `SHA256SUMS` file.
 - **Re-runs are byte-identical**, except for the timestamps in `MANIFEST.json`.
 
 ## What changes, and what never does
@@ -3567,7 +3567,7 @@ Every rule is a CSV in `mappings/`. Edit the CSV, re-run, and the manifest recor
 
 ## Using it on the platform
 
-In `garda-ai-deploy/.env`, set `GARDA_DATA_HOST_DIR=../garda-ai-data/HI-Small-ID`, then reseed:
+In `grafin-ai-deploy/.env`, set `GRAFIN_DATA_HOST_DIR=../grafin-ai-data/HI-Small-ID`, then reseed:
 `make down`, `docker compose down -v`, `make up`, then `make demo-seed`.
 
 The demo row offsets still land on day boundaries, because the number of rows per day is unchanged. The calendar dates move from Sep 3–9 to Sep 6–12.
@@ -3595,7 +3595,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ### Task 12: Real HI-Small build and consumer smoke tests
 
-The raw HI-Small files are already in `../garda-ai-data/raw/HI-Small/`; they were downloaded on 2026-10-16. `fetch` adopts them and records their hashes without downloading. The user's Kaggle credentials are at `../../kaggle.json`, relative to this repo.
+The raw HI-Small files are already in `../grafin-ai-data/raw/HI-Small/`; they were downloaded on 2026-10-16. `fetch` adopts them and records their hashes without downloading. The user's Kaggle credentials are at `../../kaggle.json`, relative to this repo.
 
 **Files:** no code changes, unless a defect is found. In that case, fix it with a test first, then commit.
 
@@ -3610,7 +3610,7 @@ Expected:
 Then inspect the manifest:
 
 ```bash
-python3 -c "import json; m=json.load(open('../garda-ai-data/HI-Small-ID/MANIFEST.json')); print(json.dumps({k: m[k] for k in ('counts','typology','risk_source','wall_time_s')}, indent=2))"
+python3 -c "import json; m=json.load(open('../grafin-ai-data/HI-Small-ID/MANIFEST.json')); print(json.dumps({k: m[k] for k in ('counts','typology','risk_source','wall_time_s')}, indent=2))"
 ```
 
 The expected values:
@@ -3629,12 +3629,12 @@ The expected values:
 
 If any value differs, stop and report it. Do not adjust the expectation.
 
-- [ ] **Step 2: Sim reader smoke test** (read-only use of `garda-ai-sim`)
+- [ ] **Step 2: Sim reader smoke test** (read-only use of `grafin-ai-sim`)
 
 ```bash
-cd ../garda-ai-sim && uv run python - <<'EOF'
-from garda_ai_sim.reader import stream_transactions
-rows = list(stream_transactions(["../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv"], limit=1000))
+cd ../grafin-ai-sim && uv run python - <<'EOF'
+from grafin_ai_sim.reader import stream_transactions
+rows = list(stream_transactions(["../grafin-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv"], limit=1000))
 assert len(rows) == 1000 and rows[0].ordinal == 1
 assert rows[0].fields["payment_currency"] == "IDR"
 print("sim OK", rows[0].csv_ts, rows[0].fields)
@@ -3643,18 +3643,18 @@ EOF
 
 Expected: `sim OK 2025-09-04 00:... {...'payment_currency': 'IDR'...}`.
 
-- [ ] **Step 3: Ingest seed parser smoke test** (read-only use of `garda-ai-ingest`; a fake DB connection)
+- [ ] **Step 3: Ingest seed parser smoke test** (read-only use of `grafin-ai-ingest`; a fake DB connection)
 
 ```bash
-cd ../garda-ai-ingest && uv run python - <<'EOF'
+cd ../grafin-ai-ingest && uv run python - <<'EOF'
 import asyncio
-from garda_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.seed.reference import load_reference
 
 class FakeConn:
     async def executemany(self, sql, rows):
         return None
 
-print("ingest OK", asyncio.run(load_reference(FakeConn(), "../garda-ai-data/HI-Small-ID/HI-Small_accounts.csv")))
+print("ingest OK", asyncio.run(load_reference(FakeConn(), "../grafin-ai-data/HI-Small-ID/HI-Small_accounts.csv")))
 EOF
 ```
 
@@ -3664,8 +3664,8 @@ Expected: `ingest OK LoadCounts(banks=30470, entities=..., accounts=...)`. The a
 
 ```bash
 SCRATCH="/private/tmp/claude-501/-Users-thariqiskandar-Documents-Career-BI---OJK-Hackathon-2025-repositories/b70070dc-9509-41ba-95d0-3323e1dfe92a/scratchpad/mgnn-smoke"
-mkdir -p "$SCRATCH" && head -100001 ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv > "$SCRATCH/HI-Small_Trans.csv"
-cd ../workspace/garda-ai-fraud-scorer-model && uv run --no-project --python 3.11 --with "datatable==1.1.0" --with numpy python format_kaggle_files.py "$SCRATCH/HI-Small_Trans.csv"
+mkdir -p "$SCRATCH" && head -100001 ../grafin-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv > "$SCRATCH/HI-Small_Trans.csv"
+cd ../workspace/grafin-ai-fraud-scorer-model && uv run --no-project --python 3.11 --with "datatable==1.1.0" --with numpy python format_kaggle_files.py "$SCRATCH/HI-Small_Trans.csv"
 head -3 "$SCRATCH/formatted_transactions.csv" && wc -l "$SCRATCH/formatted_transactions.csv"
 ```
 
@@ -3675,7 +3675,7 @@ If `datatable==1.1.0` cannot be installed on this machine (no wheel for the plat
 
 - [ ] **Step 5: Confirm nothing outside this repo changed**
 
-Run: `for r in garda-ai-sim garda-ai-ingest garda-ai-deploy workspace/garda-ai-fraud-scorer-model; do echo "== $r"; git -C "../$r" status --short; done`
+Run: `for r in grafin-ai-sim grafin-ai-ingest grafin-ai-deploy workspace/grafin-ai-fraud-scorer-model; do echo "== $r"; git -C "../$r" status --short; done`
 
 Expected:
 - **sim, ingest and deploy:** no output.
@@ -3706,7 +3706,7 @@ This downloads about 3.2 GB. The machine has about 65 GB free and 16 GB of RAM. 
 
 - [ ] **Step 1: Fetch, build and validate**
 
-Run (background): `/usr/bin/time -l make all DATASET=medium KAGGLE_JSON="$(cd ../.. && pwd)/kaggle.json" > ../garda-ai-data/medium-build.log 2>&1`
+Run (background): `/usr/bin/time -l make all DATASET=medium KAGGLE_JSON="$(cd ../.. && pwd)/kaggle.json" > ../grafin-ai-data/medium-build.log 2>&1`
 
 Expected:
 - Exit 0, with every check `PASS` at the end of the log.
@@ -3719,7 +3719,7 @@ Expected:
 
 - [ ] **Step 2: Record the results**
 
-Read `../garda-ai-data/HI-Medium-ID/MANIFEST.json`. Append the Medium numbers to the README's "Verified builds" section:
+Read `../grafin-ai-data/HI-Medium-ID/MANIFEST.json`. Append the Medium numbers to the README's "Verified builds" section:
 - counts;
 - typology coverage;
 - wall time;

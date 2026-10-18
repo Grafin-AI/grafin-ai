@@ -16,9 +16,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from garda_ai_dataset.errors import FetchError, RawInputError
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.errors import FetchError, RawInputError
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.paths import DatasetPaths
 
 KAGGLE_DATASET = "ealtman2019/ibm-transactions-for-anti-money-laundering-aml"
 DOWNLOAD_URL = "https://www.kaggle.com/api/v1/datasets/download/{dataset}/{file}"
@@ -58,7 +58,7 @@ def _authorization(kaggle_json: Path) -> str:
         data = json.loads(kaggle_json.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise FetchError(
-            f"Kaggle credentials not found at {kaggle_json} (set GARDA_KAGGLE_JSON or pass "
+            f"Kaggle credentials not found at {kaggle_json} (set GRAFIN_KAGGLE_JSON or pass "
             "--kaggle-json)"
         ) from None
     except json.JSONDecodeError:
@@ -88,7 +88,7 @@ def write_sums(path: Path, sums: dict[str, str]) -> None:
 def _download(target: Path, authorization: str, opener: Opener) -> None:
     url = DOWNLOAD_URL.format(dataset=KAGGLE_DATASET, file=target.name)
     request = urllib.request.Request(
-        url, headers={"Authorization": authorization, "User-Agent": "garda-ai-dataset"}
+        url, headers={"Authorization": authorization, "User-Agent": "grafin-ai-dataset"}
     )
     part = target.with_name(target.name + ".part")
     unzipped = target.with_name(target.name + ".unzip")

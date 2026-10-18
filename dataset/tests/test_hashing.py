@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.hashing import sha256_file, stable_int, weighted_pick
+from grafin_ai_dataset.hashing import sha256_file, stable_int, weighted_pick
 
 
 def test_stable_int_is_deterministic_and_part_sensitive() -> None:

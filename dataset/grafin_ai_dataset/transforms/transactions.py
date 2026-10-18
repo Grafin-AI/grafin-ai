@@ -2,9 +2,9 @@
 
 import polars as pl
 
-from garda_ai_dataset.errors import MappingError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.raw import OUT_HEADER
+from grafin_ai_dataset.errors import MappingError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.raw import OUT_HEADER
 
 OFFSET_DAYS = 1099  # 157 whole weeks: 2022-09-01 (Thu) -> 2025-09-04 (Thu)
 TS_FORMAT = "%Y/%m/%d %H:%M"

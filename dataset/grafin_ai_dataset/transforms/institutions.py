@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import polars as pl
 
-from garda_ai_dataset.mappings import Institution
+from grafin_ai_dataset.mappings import Institution
 
 CRYPTO_BANK_PREFIX = "Crytpo Bank"  # IBM's own spelling in the HI-* accounts files
 

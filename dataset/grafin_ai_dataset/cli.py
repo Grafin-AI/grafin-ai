@@ -1,19 +1,19 @@
-"""`garda-dataset fetch|localize|validate|all --dataset small|medium`."""
+"""`grafin-dataset fetch|localize|validate|all --dataset small|medium`."""
 
 import argparse
 import os
 import sys
 from pathlib import Path
 
-from garda_ai_dataset.errors import DatasetError, ValidationFailed
-from garda_ai_dataset.fetch import run_fetch
-from garda_ai_dataset.localize import run_localize
-from garda_ai_dataset.mappings import Mappings, load_mappings
-from garda_ai_dataset.paths import SIZES, DatasetPaths, dataset_paths
-from garda_ai_dataset.validate import validate_dataset
+from grafin_ai_dataset.errors import DatasetError, ValidationFailed
+from grafin_ai_dataset.fetch import run_fetch
+from grafin_ai_dataset.localize import run_localize
+from grafin_ai_dataset.mappings import Mappings, load_mappings
+from grafin_ai_dataset.paths import SIZES, DatasetPaths, dataset_paths
+from grafin_ai_dataset.validate import validate_dataset
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DATA_ROOT = REPO_ROOT.parent / "garda-ai-data"
+DEFAULT_DATA_ROOT = REPO_ROOT.parent / "grafin-ai-data"
 DEFAULT_KAGGLE_JSON = Path("~/.kaggle/kaggle.json")
 COMMANDS = {
     "fetch": "download the original IBM files from Kaggle",
@@ -33,7 +33,7 @@ def default_legacy_accounts(data_root: Path, size: str) -> Path | None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="garda-dataset", description="Localize the IBM AML HI datasets for Indonesia."
+        prog="grafin-dataset", description="Localize the IBM AML HI datasets for Indonesia."
     )
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
@@ -42,13 +42,13 @@ def _parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--data-root",
             type=Path,
-            default=Path(os.environ.get("GARDA_DATA_ROOT", str(DEFAULT_DATA_ROOT))),
+            default=Path(os.environ.get("GRAFIN_DATA_ROOT", str(DEFAULT_DATA_ROOT))),
         )
         if name in ("fetch", "all"):
             cmd.add_argument(
                 "--kaggle-json",
                 type=Path,
-                default=Path(os.environ.get("GARDA_KAGGLE_JSON", str(DEFAULT_KAGGLE_JSON))),
+                default=Path(os.environ.get("GRAFIN_KAGGLE_JSON", str(DEFAULT_KAGGLE_JSON))),
             )
         if name in ("localize", "all"):
             cmd.add_argument(

@@ -3,11 +3,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import DiskSpaceError, RawInputError
-from garda_ai_dataset.localize import localize_frames, run_localize
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths, dataset_paths
-from garda_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.errors import DiskSpaceError, RawInputError
+from grafin_ai_dataset.localize import localize_frames, run_localize
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths, dataset_paths
+from grafin_ai_dataset.raw import OUT_HEADER, read_raw_accounts, scan_raw_trans
 from tests.fixture_data import EXPECTED_TID, LEGACY_ACCOUNTS, RAW_ROWS, write_raw
 
 OUTPUTS = ("out_trans", "out_accounts", "out_entities", "out_patterns", "out_typologies")
@@ -129,7 +129,7 @@ def test_missing_raw_input(tmp_path: Path, maps: Mappings) -> None:
 def test_unknown_entity_prefix_fails_before_touching_outputs(
     raw_paths: DatasetPaths, maps: Mappings
 ) -> None:
-    from garda_ai_dataset.errors import MappingError
+    from grafin_ai_dataset.errors import MappingError
 
     _run(raw_paths, maps)
     before = raw_paths.out_trans.read_bytes()

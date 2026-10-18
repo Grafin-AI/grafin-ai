@@ -11,20 +11,20 @@ from datetime import date, datetime, timedelta
 
 import polars as pl
 
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.localize import localize_frames
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import (
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.localize import localize_frames
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import (
     OUT_HEADER,
     TRANS_COLS,
     read_raw_accounts,
     scan_raw_trans,
     scan_trans_csv,
 )
-from garda_ai_dataset.transforms.entities import first_seen_by_entity
-from garda_ai_dataset.transforms.patterns import build_typologies, match_patterns, parse_patterns
-from garda_ai_dataset.transforms.transactions import OFFSET_DAYS, parse_ts, to_idr
+from grafin_ai_dataset.transforms.entities import first_seen_by_entity
+from grafin_ai_dataset.transforms.patterns import build_typologies, match_patterns, parse_patterns
+from grafin_ai_dataset.transforms.transactions import OFFSET_DAYS, parse_ts, to_idr
 
 LABEL_SAMPLE_ROWS = 200_000
 ROW_CHECKS = ("labels", "graph_keys", "fx", "time", "order", "channels")

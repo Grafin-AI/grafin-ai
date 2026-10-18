@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from garda_ai_dataset.errors import MappingError
-from garda_ai_dataset.geo import PROVINCES
-from garda_ai_dataset.mappings import MAPPINGS_DIR, load_mappings
+from grafin_ai_dataset.errors import MappingError
+from grafin_ai_dataset.geo import PROVINCES
+from grafin_ai_dataset.mappings import MAPPINGS_DIR, load_mappings
 
 TABLES = {
     "fx_rates.csv",

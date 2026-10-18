@@ -11,8 +11,8 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset.errors import RawInputError
-from garda_ai_dataset.raw import TRANS_COLS
+from grafin_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.raw import TRANS_COLS
 
 _BEGIN = re.compile(r"^BEGIN LAUNDERING ATTEMPT - (?P<motif>[A-Z][A-Z-]*)")
 _END = "END LAUNDERING ATTEMPT"
@@ -37,7 +37,7 @@ class PatternMatch:
 
 def parse_patterns(path: Path) -> list[Attempt]:
     if not path.exists():
-        raise RawInputError(f"input missing: {path} (run `garda-dataset fetch` first)")
+        raise RawInputError(f"input missing: {path} (run `grafin-dataset fetch` first)")
     attempts: list[Attempt] = []
     motif: str | None = None
     begin: str | None = None

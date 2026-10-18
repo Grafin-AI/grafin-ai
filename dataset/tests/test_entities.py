@@ -4,11 +4,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from garda_ai_dataset.errors import MappingError, RawInputError
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import read_raw_accounts, scan_raw_trans
-from garda_ai_dataset.transforms.entities import (
+from grafin_ai_dataset.errors import MappingError, RawInputError
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import read_raw_accounts, scan_raw_trans
+from grafin_ai_dataset.transforms.entities import (
     ACCOUNT_COLUMNS,
     ENTITY_COLUMNS,
     build_accounts,
@@ -17,7 +17,7 @@ from garda_ai_dataset.transforms.entities import (
     first_seen_by_entity,
     read_legacy_accounts,
 )
-from garda_ai_dataset.transforms.transactions import localize_features
+from grafin_ai_dataset.transforms.transactions import localize_features
 from tests.fixture_data import LEGACY_ACCOUNTS
 
 START = date(2025, 9, 4)

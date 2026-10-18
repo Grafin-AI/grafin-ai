@@ -1,4 +1,4 @@
-# garda-ai-dataset
+# grafin-ai-dataset
 
 A deterministic, validated localization of IBM's synthetic AML data (AMLworld,
 [Kaggle](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml),
@@ -16,9 +16,9 @@ make all DATASET=small KAGGLE_JSON=/path/to/kaggle.json    # fetch + localize + 
 make all DATASET=medium KAGGLE_JSON=/path/to/kaggle.json   # ~3.2 GB download
 ```
 
-- `KAGGLE_JSON` defaults to `$GARDA_KAGGLE_JSON`, then `~/.kaggle/kaggle.json`.
-- **Output** goes to `../garda-ai-data/HI-<Size>-ID/`. Override the location with `GARDA_DATA_ROOT` or `--data-root`.
-- **Raw files** are stored in `../garda-ai-data/raw/HI-<Size>/`, alongside a `SHA256SUMS` file.
+- `KAGGLE_JSON` defaults to `$GRAFIN_KAGGLE_JSON`, then `~/.kaggle/kaggle.json`.
+- **Output** goes to `../grafin-ai-data/HI-<Size>-ID/`. Override the location with `GRAFIN_DATA_ROOT` or `--data-root`.
+- **Raw files** are stored in `../grafin-ai-data/raw/HI-<Size>/`, alongside a `SHA256SUMS` file.
 - **Re-runs are byte-identical**, except for the timestamps in `MANIFEST.json`.
 
 ## What changes, and what never does
@@ -51,7 +51,7 @@ Every rule is a CSV in `mappings/`. Edit the CSV, re-run, and the manifest recor
 
 ## Using it on the platform
 
-In `garda-ai-deploy/.env`, set `GARDA_DATA_HOST_DIR=../garda-ai-data/HI-Small-ID`, then reseed:
+In `grafin-ai-deploy/.env`, set `GRAFIN_DATA_HOST_DIR=../grafin-ai-data/HI-Small-ID`, then reseed:
 `make down`, `docker compose down -v`, `make up`, then `make demo-seed`.
 
 The demo row offsets still land on day boundaries, because the number of rows per day is unchanged. The calendar dates move from Sep 3–9 to Sep 6–12.
@@ -83,8 +83,8 @@ QRIS, e-wallets and Indonesia-specific typologies (judi online, mule fan-in, pig
 | Peak RSS | 1.98 GB |
 
 Consumer smoke tests (read-only):
-- **garda-ai-sim reader**: PASS. The first 1,000 rows stream with `payment_currency` = `IDR`.
-- **garda-ai-ingest seed parser**: PASS. `LoadCounts(banks=30470, entities=166207, accounts=518581)`, and the account count equals the manifest.
+- **grafin-ai-sim reader**: PASS. The first 1,000 rows stream with `payment_currency` = `IDR`.
+- **grafin-ai-ingest seed parser**: PASS. `LoadCounts(banks=30470, entities=166207, accounts=518581)`, and the account count equals the manifest.
 - **Multi-GNN formatter** (`format_kaggle_files.py`): PASS, run under Rosetta with an x86_64 Python because `datatable==1.1.0` only ships x86_64 macOS wheels: `uv run --no-project --python cpython-3.11-macos-x86_64-none --with "datatable==1.1.0" --with numpy python format_kaggle_files.py <100k-row slice>`. It produced a 100,001-line `formatted_transactions.csv` (header + 100,000 rows). The localized currency columns are constant (IDR), so Multi-GNN's currency features become a single category.
 
 ### HI-Medium (2026-10-16)

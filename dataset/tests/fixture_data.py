@@ -12,7 +12,7 @@ Raw rows are deliberately unsorted. They include:
 
 from pathlib import Path
 
-from garda_ai_dataset.paths import DatasetPaths, dataset_paths
+from grafin_ai_dataset.paths import DatasetPaths, dataset_paths
 
 RAW_HEADER = (
     "Timestamp,From Bank,Account,To Bank,Account,Amount Received,Receiving Currency,"

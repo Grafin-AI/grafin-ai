@@ -3,12 +3,12 @@ import json
 import polars as pl
 import pytest
 
-import garda_ai_dataset.validate as validate_mod
-from garda_ai_dataset.hashing import sha256_file
-from garda_ai_dataset.localize import run_localize
-from garda_ai_dataset.mappings import Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.validate import Check, ValidationReport, validate_dataset
+import grafin_ai_dataset.validate as validate_mod
+from grafin_ai_dataset.hashing import sha256_file
+from grafin_ai_dataset.localize import run_localize
+from grafin_ai_dataset.mappings import Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.validate import Check, ValidationReport, validate_dataset
 
 ALL_CHECKS = {
     "header", "row_count", "node_merge", "labels", "graph_keys", "fx", "time", "order",

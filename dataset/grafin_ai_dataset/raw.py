@@ -4,7 +4,7 @@ from pathlib import Path
 
 import polars as pl
 
-from garda_ai_dataset.errors import RawInputError
+from grafin_ai_dataset.errors import RawInputError
 
 TRANS_COLS = (
     "timestamp",
@@ -20,7 +20,7 @@ TRANS_COLS = (
     "is_laundering",
 )
 # IBM's header names BOTH account columns "Account". We read by position and write
-# "To Account" for the second, which is what garda-ai-sim reads.
+# "To Account" for the second, which is what grafin-ai-sim reads.
 OUT_HEADER = (
     "Timestamp",
     "From Bank",
@@ -39,7 +39,7 @@ ACCOUNT_COLS = ("Bank Name", "Bank ID", "Account Number", "Entity ID", "Entity N
 
 def _require(path: Path) -> None:
     if not path.exists():
-        raise RawInputError(f"input missing: {path} (run `garda-dataset fetch` first)")
+        raise RawInputError(f"input missing: {path} (run `grafin-dataset fetch` first)")
 
 
 def scan_trans_csv(path: Path) -> pl.LazyFrame:

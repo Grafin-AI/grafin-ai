@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-import garda_ai_dataset.localize as localize_mod
-from garda_ai_dataset.cli import default_legacy_accounts, main
-from garda_ai_dataset.paths import DatasetPaths
+import grafin_ai_dataset.localize as localize_mod
+from grafin_ai_dataset.cli import default_legacy_accounts, main
+from grafin_ai_dataset.paths import DatasetPaths
 
 
 def _root(paths: DatasetPaths) -> str:

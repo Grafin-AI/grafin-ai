@@ -1,9 +1,9 @@
 import polars as pl
 
-from garda_ai_dataset.mappings import Institution, Mappings
-from garda_ai_dataset.paths import DatasetPaths
-from garda_ai_dataset.raw import read_raw_accounts
-from garda_ai_dataset.transforms.institutions import assign_institutions
+from grafin_ai_dataset.mappings import Institution, Mappings
+from grafin_ai_dataset.paths import DatasetPaths
+from grafin_ai_dataset.raw import read_raw_accounts
+from grafin_ai_dataset.transforms.institutions import assign_institutions
 
 
 def _inst(name: str, kind: str, weight: int) -> Institution:

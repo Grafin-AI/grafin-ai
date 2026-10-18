@@ -68,7 +68,7 @@ wheels = [
 ]
 
 [[package]]
-name = "garda-ai-dataset"
+name = "grafin-ai-dataset"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

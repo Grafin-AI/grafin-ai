@@ -1,4 +1,4 @@
-"""Province assignment: a VERBATIM copy of garda-ai-ingest/garda_ai_ingest/geo.py.
+"""Province assignment: a VERBATIM copy of grafin-ai-ingest/grafin_ai_ingest/geo.py.
 
 The platform already shows this province (ingest computes it at seed time), so
 entities.csv must produce the identical value for every Entity ID. Change both repos
