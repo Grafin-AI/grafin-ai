@@ -24,7 +24,8 @@ const STATUS_PILL: Record<Status, { label: string; cls: string }> = {
   approved: { label: 'DISETUJUI', cls: 'bg-approved-bg text-approved' },
 };
 
-const scoreColor = (s: number) => (s >= 0.85 ? 'text-blocked' : s >= 0.6 ? 'text-flagged' : 'text-approved');
+// Same bands as the exported fraud_score: [0.7, 1] blocked, [0.4, 0.7) flagged.
+const scoreColor = (s: number) => (s >= 0.7 ? 'text-blocked' : s >= 0.4 ? 'text-flagged' : 'text-approved');
 
 const formatAmount = (amount: number, currency = 'IDR') =>
   new Intl.NumberFormat('id-ID', {
