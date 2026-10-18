@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build all four service images for the VM's architecture and push them to
-# Artifact Registry. Run from a machine with the source repos checked out.
+# Artifact Registry. Run from a checkout of this monorepo.
 #
 #   ./scripts/build-and-push.sh asia-southeast2-docker.pkg.dev/my-project/grafin v1
 #
@@ -15,10 +15,10 @@ TAG="${2:-latest}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 declare -a SERVICES=(
-  "grafin-ai-backend:grafin-ai-backend"
-  "grafin-ai-scoring:grafin-ai-scoring"
-  "grafin-ai-ingest:grafin-ai-ingest"
-  "grafin-ai-dashboard-web:grafin-ai-frontend"
+  "backend:grafin-ai-backend"
+  "scoring:grafin-ai-scoring"
+  "ingest:grafin-ai-ingest"
+  "dashboard-web:grafin-ai-frontend"
 )
 
 command -v docker >/dev/null || { echo "ERROR: docker not found"; exit 1; }

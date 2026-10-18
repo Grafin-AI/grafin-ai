@@ -14,7 +14,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/grafin/grafin-ai-training" "$TMP/grafin/grafin-ai-dataset"
 git -C "$REPO_DIR" archive HEAD | tar x -C "$TMP/grafin/grafin-ai-training"
-git -C "$ROOT/grafin-ai-dataset" archive HEAD | tar x -C "$TMP/grafin/grafin-ai-dataset"
+git -C "$ROOT/dataset" archive HEAD | tar x -C "$TMP/grafin/grafin-ai-dataset"
 if [[ -f "$OPS_DIR/vm.env" ]]; then cp "$OPS_DIR/vm.env" "$TMP/grafin/grafin-ai-training/ops/vm.env"; fi
 python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['outputs']['HI-Small_Trans_sorted.csv'])" \
   "$ROOT/grafin-ai-data/HI-Small-ID/MANIFEST.json" >"$TMP/grafin/expected_small_sha256"

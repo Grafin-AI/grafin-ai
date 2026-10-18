@@ -18,7 +18,7 @@ This repo contains:
   Postgres volume.
 - Optional, for model scores (`GRAFIN_SCORER=precomputed`): `scores.csv` from
   `grafin-train export-scores --run <run-id>`, with `GRAFIN_SCORES_HOST_DIR` pointing at
-  `../grafin-ai-training/runs/<run-id>/scores`.
+  `../training/runs/<run-id>/scores`.
 - Demo replay: `make demo-history` (validation days 2025-09-09..11, unpaced), then
   `make demo-test` (test period from 2025-09-12, speed 60).
 - `.env` file with required secrets (see `.env.example`)

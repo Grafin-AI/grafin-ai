@@ -26,7 +26,7 @@ services:
       retries: 10
 
   scoring:
-    build: { context: ../grafin-ai-scoring }
+    build: { context: ../scoring }
     environment:
       GRAFIN_SCORING_TOKEN: ${GRAFIN_SCORING_TOKEN:?set GRAFIN_SCORING_TOKEN}
       # label_replay (default) | precomputed (model scores from grafin-train export-scores)
@@ -34,7 +34,7 @@ services:
       GRAFIN_SCORES_PATH: /scores/scores.csv
     volumes:
       # Only read when GRAFIN_SCORER=precomputed; a missing host dir is created empty.
-      - ${GRAFIN_SCORES_HOST_DIR:-../grafin-ai-training/runs/current/scores}:/scores:ro
+      - ${GRAFIN_SCORES_HOST_DIR:-../training/runs/current/scores}:/scores:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
       interval: 5s
@@ -43,7 +43,7 @@ services:
     # internal only — not published to the host
 
   backend:
-    build: { context: ../grafin-ai-backend }
+    build: { context: ../backend }
     environment:
       GRAFIN_DATABASE_URL: *db_url
       GRAFIN_REDIS_URL: redis://redis:6379/0
@@ -74,7 +74,7 @@ services:
     ports: ["${BACKEND_HOST_PORT:-8000}:8000"]
 
   ingest:
-    build: { context: ../grafin-ai-ingest }
+    build: { context: ../ingest }
     environment:
       GRAFIN_DATABASE_URL: *db_url
       GRAFIN_DATA_DIR: /data
@@ -85,7 +85,7 @@ services:
     restart: "no"
 
   frontend:
-    build: { context: ../grafin-ai-dashboard-web }
+    build: { context: ../dashboard-web }
     environment:
       BACKEND_URL: http://backend:8000
     depends_on:
@@ -93,7 +93,7 @@ services:
     ports: ["${FRONTEND_HOST_PORT:-8080}:8080"]
 
   sim:
-    build: { context: ../grafin-ai-sim }
+    build: { context: ../sim }
     profiles: ["sim"]
     environment:
       GRAFIN_INGEST_URL: http://backend:8000/api/v1/ingest
