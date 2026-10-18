@@ -410,7 +410,7 @@ There is no clock to seed. "Now" is derived from the ingested data (`max(transac
 ### Software Features
 
 - **Idempotent admin creation** (`ensure_admin`): Checks for an existing user by email; creates one with role `"admin"` and an Argon2id-hashed password only if absent. Returns the existing or newly created `User`.
-- **CLI entry point** (`_main`): Seeds `admin@garda.local` with password `"admin"` and commits. Invoked via `python -m garda_ai_backend.seed`.
+- **CLI entry point** (`_main`): Seeds `admin@grafin.ai` with password `"admin"` and commits. Invoked via `python -m garda_ai_backend.seed`.
 
 ### Code Elements
 

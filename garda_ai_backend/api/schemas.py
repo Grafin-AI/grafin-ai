@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class LoginRequest(BaseModel):
     # Plain str, not EmailStr: login is an exact lookup, and EmailStr rejects
-    # reserved domains (e.g. the seeded admin@garda.local) with a 422.
+    # reserved domains (e.g. the seeded admin@grafin.ai) with a 422.
     email: str
     password: str
 
