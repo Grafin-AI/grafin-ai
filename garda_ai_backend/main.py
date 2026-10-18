@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         await app.state.http_client.aclose()
 
 
-app = FastAPI(title="Garda AI Backend", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Grafin AI Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(metrics_router)
 app.include_router(analytics_router)
