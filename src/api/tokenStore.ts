@@ -1,7 +1,7 @@
 import type { TokenResponse } from './types';
 
-const ACCESS = 'garda.access';
-const REFRESH = 'garda.refresh';
+const ACCESS = 'grafin.access';
+const REFRESH = 'grafin.refresh';
 
 export const tokenStore = {
   getAccess(): string | null {

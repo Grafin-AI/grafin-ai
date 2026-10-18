@@ -63,9 +63,9 @@
   --chart-4: #5BD4F8;
   --chart-5: #73E6F9;
 
-  --garda-dark-blue: #0F7BC4;
-  --garda-medium-blue: #139EF6;
-  --garda-light-blue: #43C2F7;
+  --grafin-dark-blue: #0F7BC4;
+  --grafin-medium-blue: #139EF6;
+  --grafin-light-blue: #43C2F7;
 
   --radius: 0.625rem;
 
@@ -122,9 +122,9 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-garda-dark-blue: var(--garda-dark-blue);
-  --color-garda-medium-blue: var(--garda-medium-blue);
-  --color-garda-light-blue: var(--garda-light-blue);
+  --color-grafin-dark-blue: var(--grafin-dark-blue);
+  --color-grafin-medium-blue: var(--grafin-medium-blue);
+  --color-grafin-light-blue: var(--grafin-light-blue);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
