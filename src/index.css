@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Garda AI light theme (the design on main), extended with semantic tokens for
+ * Grafin AI light theme (the design on main), extended with semantic tokens for
  * status colors and secondary surfaces. Light is the default.
  */
 :root {

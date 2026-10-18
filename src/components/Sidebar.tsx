@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import gardaLogo from 'figma:asset/db1da7b05c661826c500feb1fd5509a19ea8cfd0.png';
+import grafinLogo from '../assets/grafin-logo.svg';
 import { Activity, BarChart3, Radar, UserCheck } from 'lucide-react';
 import { useFraudAnalytics, useSystemHealth } from '../api/queries';
 import { formatScore } from '../lib/format';
@@ -31,8 +31,8 @@ export function Sidebar({ currentView = '/dashboard', onNavigate, footer }: Side
       className="w-full shrink-0 border-b border-border bg-sidebar px-4 py-4 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:flex-col lg:gap-7 lg:border-b-0 lg:border-r lg:py-6"
     >
       <div className="flex flex-col items-start gap-2">
-        <img src={gardaLogo} alt="Garda AI" className="h-8 w-auto max-w-full object-contain" />
-        <p className="text-xs text-muted-foreground">Fraud &amp; Anomaly Detection Platform</p>
+        <img src={grafinLogo} alt="Grafin AI" className="h-8 w-auto max-w-full object-contain" />
+        <p className="text-xs leading-snug text-muted-foreground">Graph-based Risk Analytics &amp; Federated Intelligence Network</p>
       </div>
 
       <nav aria-label="Navigasi utama" className="mt-4 lg:mt-0">

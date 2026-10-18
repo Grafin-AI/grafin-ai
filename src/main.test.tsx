@@ -16,7 +16,7 @@ describe('app shell', () => {
         </AuthProvider>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('Garda AI — Sign in')).toBeInTheDocument();
+    expect(await screen.findByText('Grafin AI — Sign in')).toBeInTheDocument();
     expect(screen.queryByText('secret dashboard')).not.toBeInTheDocument();
   });
 });

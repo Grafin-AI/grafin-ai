@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from './AuthContext';
+import grafinLogo from '../assets/grafin-logo.svg';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -24,7 +25,9 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <form onSubmit={submit} className="w-80 space-y-4 p-6 bg-white rounded-lg border">
-        <h1 className="text-xl font-semibold text-gray-900">Garda AI — Sign in</h1>
+        <img src={grafinLogo} alt="" aria-hidden="true" className="h-9 w-auto" />
+        <h1 className="text-xl font-semibold text-gray-900">Grafin AI — Sign in</h1>
+        <p className="-mt-2 text-xs text-gray-600">Graph-based Risk Analytics &amp; Federated Intelligence Network</p>
         <input
           type="email" required placeholder="Email" value={email}
           onChange={(e) => setEmail(e.target.value)}
