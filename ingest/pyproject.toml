@@ -1,5 +1,5 @@
 [project]
-name = "garda-ai-ingest"
+name = "grafin-ai-ingest"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-garda-ingest = "garda_ai_ingest.seed.run:main"
+grafin-ingest = "grafin_ai_ingest.seed.run:main"
 
 [dependency-groups]
 dev = [

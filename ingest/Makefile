@@ -1,4 +1,4 @@
-# Manual, operator-run deploy of the garda-ingest Cloud Run JOB.
+# Manual, operator-run deploy of the grafin-ingest Cloud Run JOB.
 #
 # Prerequisites (once per machine):
 #   gcloud auth login && gcloud config set project <your-project>
@@ -10,11 +10,11 @@
 #         make execute   (run the job now to seed reference data)
 -include deploy.env
 
-JOB        := garda-ingest
+JOB        := grafin-ingest
 IMAGE_NAME := ingest
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy execute

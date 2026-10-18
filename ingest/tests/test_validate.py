@@ -1,7 +1,7 @@
 import os
 
-from garda_ai_ingest.seed.reference import load_reference
-from garda_ai_ingest.seed.validate import validate
+from grafin_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.seed.validate import validate
 
 
 async def test_ok_after_good_load(db, data_dir):

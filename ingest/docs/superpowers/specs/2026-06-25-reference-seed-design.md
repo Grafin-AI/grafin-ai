@@ -1,9 +1,9 @@
-# garda-ai-ingest — Reference Seed Job (Phase 3)
+# grafin-ai-ingest — Reference Seed Job (Phase 3)
 
 **Date:** 2026-06-25
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-ingest` (NEW)
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
+**Repo:** `grafin-ai-ingest` (NEW)
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
 **Depends on:** the backend-owned DB schema (banks / entities / accounts) — by contract, via a
 committed DDL snapshot. No code dependency on any other service.
 
@@ -13,9 +13,9 @@ standalone **one-shot seed job**: load `banks`, `entities` (+ deterministic geo 
 before the sim streams (Phase 4) so `/ingest`'s FK references (`from_account`/`to_account` →
 `accounts`; `from_bank_id`/`to_bank_id` → `banks`) resolve.
 
-This is a **behavior-identical port** of `garda_ai_pipeline.etl.reference.load_reference` +
-`garda_ai_pipeline.geo` + the reference-relevant half of `garda_ai_pipeline.etl.validate`,
-repackaged as its own repo at the same engineering bar as `garda-ai-scoring` (Phase 1).
+This is a **behavior-identical port** of `grafin_ai_pipeline.etl.reference.load_reference` +
+`grafin_ai_pipeline.geo` + the reference-relevant half of `grafin_ai_pipeline.etl.validate`,
+repackaged as its own repo at the same engineering bar as `grafin-ai-scoring` (Phase 1).
 
 ## What this is (and is not)
 
@@ -28,32 +28,32 @@ repackaged as its own repo at the same engineering bar as `garda-ai-scoring` (Ph
   the reference tables, with a committed DDL snapshot (`tests/schema.sql`) for its own tests —
   the same pattern established in the 2026-06-23 pipeline decouple.
 
-## Configuration — `garda_ai_ingest/config.py`
+## Configuration — `grafin_ai_ingest/config.py`
 
-pydantic-settings, `env_prefix="GARDA_"`, `.env` supported (dev ergonomics), `extra="ignore"`:
+pydantic-settings, `env_prefix="GRAFIN_"`, `.env` supported (dev ergonomics), `extra="ignore"`:
 
 - `database_url: str` — **required** (no default) so a misconfigured run fails fast at startup.
   Accepts either a bare `postgresql://` DSN or SQLAlchemy's `postgresql+asyncpg://` form; the DSN
   is normalized for asyncpg (`db.asyncpg_dsn`, ported verbatim).
-- `data_dir: str = "../garda-ai-data/HI-Small"` — directory holding `HI-Small_accounts.csv`.
+- `data_dir: str = "../grafin-ai-data/HI-Small"` — directory holding `HI-Small_accounts.csv`.
 - `batch_size: int = 5000` — accounts insert batch size (matches the pipeline's `_BATCH`).
 
-## Data access — `garda_ai_ingest/db.py`
+## Data access — `grafin_ai_ingest/db.py`
 
-Ported verbatim from `garda_ai_pipeline/db.py`:
+Ported verbatim from `grafin_ai_pipeline/db.py`:
 - `asyncpg_dsn(url)` — strips SQLAlchemy's `+asyncpg` so `asyncpg.connect` gets a bare DSN.
 - `connect(url)` — `await asyncpg.connect(asyncpg_dsn(url))`.
 
 Single connection, closed in a `finally`. No pool — a one-shot job does not need one.
 
-## Geo enrichment — `garda_ai_ingest/geo.py`
+## Geo enrichment — `grafin_ai_ingest/geo.py`
 
-Ported **verbatim** from `garda_ai_pipeline/geo.py` (must stay byte-for-byte behavior-identical so
+Ported **verbatim** from `grafin_ai_pipeline/geo.py` (must stay byte-for-byte behavior-identical so
 the seeded province of any entity id is unchanged): the 15 Indonesian `PROVINCES`, the `_WEIGHTS`
 distribution, `_BUCKET`, and `province_for_entity(entity_id)` — a stable, seeded assignment from
 `sha256(entity_id)`. Deterministic: same entity id → same province, forever.
 
-## Seed load — `garda_ai_ingest/seed/reference.py`
+## Seed load — `grafin_ai_ingest/seed/reference.py`
 
 Ported from `load_reference`, behavior-identical, with the CSV column contract preserved
 (`Bank ID`, `Bank Name`, `Entity ID`, `Entity Name`, `Account Number`, `risk_score`,
@@ -87,7 +87,7 @@ duplicate rows and no row churn. Safe to invoke at every deploy-init.
 counts parsed from the CSV — used for the summary log (not a correctness gate; validation reads
 the DB).
 
-## Validation — `garda_ai_ingest/seed/validate.py`
+## Validation — `grafin_ai_ingest/seed/validate.py`
 
 A **reference-only** port of the pipeline's `validate` (the transaction/orphan checks do not apply
 — this job loads no transactions):
@@ -105,9 +105,9 @@ Reads back from the DB:
 `ok = banks > 0 and entities > 0 and accounts > 0 and entities_without_province == 0 and
 orphan_account_refs == 0`.
 
-## Orchestration + CLI — `garda_ai_ingest/seed/run.py`
+## Orchestration + CLI — `grafin_ai_ingest/seed/run.py`
 
-The console entrypoint (`garda-ingest` script + `python -m garda_ai_ingest.seed.run`):
+The console entrypoint (`grafin-ingest` script + `python -m grafin_ai_ingest.seed.run`):
 
 ```
 async def run_seed(data_dir, database_url, *, batch_size) -> ValidationReport
@@ -124,7 +124,7 @@ def main() -> None
   ETL runner. A clean run exits 0.
 - Wraps the load in a timer for the `duration_s` field.
 
-## Observability — `garda_ai_ingest/observability.py`
+## Observability — `grafin_ai_ingest/observability.py`
 
 Structured logging only — **no Prometheus/metrics server.** A one-shot job that exits does not fit
 a scrape model, and the platform has no Pushgateway; the correct observability surface for a batch
@@ -177,10 +177,10 @@ Same bar as Phase 1 (`backend-development`, `python-development`, `observability
 
 ## Packaging / ops
 
-- `pyproject.toml` (hatchling, uv) mirroring `garda-ai-scoring`: deps `asyncpg`, `structlog`,
+- `pyproject.toml` (hatchling, uv) mirroring `grafin-ai-scoring`: deps `asyncpg`, `structlog`,
   `pydantic-settings`; dev `pytest`, `pytest-asyncio`, `testcontainers[postgres]`, `ruff`, `mypy`.
-  `[project.scripts] garda-ingest = "garda_ai_ingest.seed.run:main"`.
-- `Dockerfile` — a slim image running `uv run --no-sync garda-ingest` (job container: runs to
+  `[project.scripts] grafin-ingest = "grafin_ai_ingest.seed.run:main"`.
+- `Dockerfile` — a slim image running `uv run --no-sync grafin-ingest` (job container: runs to
   completion and exits; used by the deploy-init step / compose in Phase 6).
 - `.github/workflows/ci.yml` — ruff + mypy + pytest (mirrors scoring's CI).
 - `README.md`, `.env.example`, `.gitignore`, `.dockerignore`, `.python-version`.

@@ -3,10 +3,10 @@ from types import SimpleNamespace
 import asyncpg
 import pytest
 
-from garda_ai_ingest.db import asyncpg_dsn
-from garda_ai_ingest.seed import run as run_mod
-from garda_ai_ingest.seed.run import run_seed
-from garda_ai_ingest.seed.validate import ValidationReport
+from grafin_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.seed import run as run_mod
+from grafin_ai_ingest.seed.run import run_seed
+from grafin_ai_ingest.seed.validate import ValidationReport
 
 
 async def test_run_seed_ok(db, pg_url, data_dir):

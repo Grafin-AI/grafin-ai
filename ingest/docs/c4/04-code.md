@@ -1,4 +1,4 @@
-# garda-ai-ingest — C4 Code
+# grafin-ai-ingest — C4 Code
 
 ## `config.py`
 - `Settings(BaseSettings)` — `database_url: str` (required), `data_dir: str`, `batch_size: int`.

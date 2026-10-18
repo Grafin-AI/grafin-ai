@@ -1,12 +1,12 @@
-# garda-ai-ingest Reference Seed Implementation Plan
+# grafin-ai-ingest Reference Seed Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `garda-ai-ingest`, a one-shot CLI job that idempotently seeds `banks` / `entities` (+ deterministic geo province) / `accounts` into the backend-owned Postgres, so the `/ingest` write-path's FK references resolve.
+**Goal:** Build `grafin-ai-ingest`, a one-shot CLI job that idempotently seeds `banks` / `entities` (+ deterministic geo province) / `accounts` into the backend-owned Postgres, so the `/ingest` write-path's FK references resolve.
 
-**Architecture:** A standalone repo (no service, no HTTP, no Redis). A CLI entrypoint connects to Postgres via raw asyncpg, streams `HI-Small_accounts.csv`, inserts reference rows `ON CONFLICT DO NOTHING`, validates row counts referentially, logs a structured summary, and exits with a clear code. Behavior-identical port of `garda_ai_pipeline.etl.reference` + `garda_ai_pipeline.geo` + the reference half of `garda_ai_pipeline.etl.validate`. Shares the DB **by contract** — a committed DDL snapshot for tests, no backend import.
+**Architecture:** A standalone repo (no service, no HTTP, no Redis). A CLI entrypoint connects to Postgres via raw asyncpg, streams `HI-Small_accounts.csv`, inserts reference rows `ON CONFLICT DO NOTHING`, validates row counts referentially, logs a structured summary, and exits with a clear code. Behavior-identical port of `grafin_ai_pipeline.etl.reference` + `grafin_ai_pipeline.geo` + the reference half of `grafin_ai_pipeline.etl.validate`. Shares the DB **by contract** — a committed DDL snapshot for tests, no backend import.
 
-**Tech Stack:** Python 3.12, uv, asyncpg, pydantic-settings, structlog, pytest + pytest-asyncio + testcontainers[postgres], ruff, mypy --strict. Mirrors the `garda-ai-scoring` (Phase 1) engineering bar.
+**Tech Stack:** Python 3.12, uv, asyncpg, pydantic-settings, structlog, pytest + pytest-asyncio + testcontainers[postgres], ruff, mypy --strict. Mirrors the `grafin-ai-scoring` (Phase 1) engineering bar.
 
 **Spec:** `docs/superpowers/specs/2026-06-25-reference-seed-design.md`
 
@@ -15,15 +15,15 @@
 ## File Structure
 
 ```
-garda-ai-ingest/
-  pyproject.toml                     # uv/hatchling; deps + [project.scripts] garda-ingest
+grafin-ai-ingest/
+  pyproject.toml                     # uv/hatchling; deps + [project.scripts] grafin-ingest
   .python-version                    # 3.12
   .env.example  .dockerignore  README.md   (.gitignore already committed)
   Dockerfile                         # job container: runs to completion, exits
   .github/workflows/ci.yml           # ruff + mypy + pytest
-  garda_ai_ingest/
+  grafin_ai_ingest/
     __init__.py
-    config.py                        # GARDA_ settings: database_url (req), data_dir, batch_size
+    config.py                        # GRAFIN_ settings: database_url (req), data_dir, batch_size
     db.py                            # asyncpg_dsn + connect (ported verbatim)
     geo.py                           # province_for_entity (ported verbatim)
     observability.py                 # configure_logging (structlog JSON)
@@ -52,13 +52,13 @@ Each task produces a self-contained, committable change.
 
 **Files:**
 - Create: `pyproject.toml`, `.python-version`, `.dockerignore`, `.env.example`, `README.md`
-- Create: `garda_ai_ingest/__init__.py`, `garda_ai_ingest/seed/__init__.py`, `tests/__init__.py`
+- Create: `grafin_ai_ingest/__init__.py`, `grafin_ai_ingest/seed/__init__.py`, `tests/__init__.py`
 
 - [ ] **Step 1: Write `pyproject.toml`**
 
 ```toml
 [project]
-name = "garda-ai-ingest"
+name = "grafin-ai-ingest"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -68,7 +68,7 @@ dependencies = [
 ]
 
 [project.scripts]
-garda-ingest = "garda_ai_ingest.seed.run:main"
+grafin-ingest = "grafin_ai_ingest.seed.run:main"
 
 [dependency-groups]
 dev = [
@@ -119,16 +119,16 @@ docs
 
 `.env.example`:
 ```
-GARDA_DATABASE_URL=postgresql://garda:garda@localhost:5432/garda
-GARDA_DATA_DIR=../garda-ai-data/HI-Small
-GARDA_LOG_LEVEL=INFO
+GRAFIN_DATABASE_URL=postgresql://grafin:grafin@localhost:5432/grafin
+GRAFIN_DATA_DIR=../grafin-ai-data/HI-Small
+GRAFIN_LOG_LEVEL=INFO
 ```
 
 `README.md`:
 ```markdown
-# garda-ai-ingest
+# grafin-ai-ingest
 
-One-shot reference/master-data seed for the Garda AML platform. Loads `banks`,
+One-shot reference/master-data seed for the Grafin AML platform. Loads `banks`,
 `entities` (+ deterministic geo province), and `accounts` from the HI-Small
 accounts CSV into the backend-owned Postgres, idempotently (`ON CONFLICT DO NOTHING`).
 Run once before the simulation streams transactions, so `/ingest` FK references resolve.
@@ -137,9 +137,9 @@ Run once before the simulation streams transactions, so `/ingest` FK references 
 
 ```bash
 uv sync
-GARDA_DATABASE_URL=postgresql://garda:garda@localhost:5432/garda \
-GARDA_DATA_DIR=../garda-ai-data/HI-Small \
-  uv run garda-ingest
+GRAFIN_DATABASE_URL=postgresql://grafin:grafin@localhost:5432/grafin \
+GRAFIN_DATA_DIR=../grafin-ai-data/HI-Small \
+  uv run grafin-ingest
 ```
 
 Exit codes: `0` ok · `1` validation failed · `2` accounts CSV not found · `3` reference
@@ -154,7 +154,7 @@ uv run pytest -q
 
 - [ ] **Step 3: Create the package skeleton (empty init files)**
 
-Create empty `garda_ai_ingest/__init__.py`, `garda_ai_ingest/seed/__init__.py`, `tests/__init__.py`.
+Create empty `grafin_ai_ingest/__init__.py`, `grafin_ai_ingest/seed/__init__.py`, `tests/__init__.py`.
 
 - [ ] **Step 4: Resolve the lockfile**
 
@@ -165,7 +165,7 @@ Expected: creates `.venv` + `uv.lock`, no errors.
 
 ```bash
 git add -A
-git commit -m "chore: scaffold garda-ai-ingest (pyproject, tooling, package skeleton)"
+git commit -m "chore: scaffold grafin-ai-ingest (pyproject, tooling, package skeleton)"
 ```
 
 ---
@@ -173,7 +173,7 @@ git commit -m "chore: scaffold garda-ai-ingest (pyproject, tooling, package skel
 ## Task 2: `config.py` — settings (fail-fast on database_url)
 
 **Files:**
-- Create: `garda_ai_ingest/config.py`
+- Create: `grafin_ai_ingest/config.py`
 - Test: `tests/test_config.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -183,42 +183,42 @@ git commit -m "chore: scaffold garda-ai-ingest (pyproject, tooling, package skel
 import pytest
 from pydantic import ValidationError
 
-from garda_ai_ingest.config import Settings
+from grafin_ai_ingest.config import Settings
 
 
 def test_requires_database_url(monkeypatch):
-    monkeypatch.delenv("GARDA_DATABASE_URL", raising=False)
+    monkeypatch.delenv("GRAFIN_DATABASE_URL", raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
 
 def test_defaults(monkeypatch):
-    monkeypatch.setenv("GARDA_DATABASE_URL", "postgresql://u:p@h:5432/db")
+    monkeypatch.setenv("GRAFIN_DATABASE_URL", "postgresql://u:p@h:5432/db")
     s = Settings(_env_file=None)
     assert s.database_url == "postgresql://u:p@h:5432/db"
-    assert s.data_dir == "../garda-ai-data/HI-Small"
+    assert s.data_dir == "../grafin-ai-data/HI-Small"
     assert s.batch_size == 5000
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_config.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.config`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.config`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# garda_ai_ingest/config.py
+# grafin_ai_ingest/config.py
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GRAFIN_", env_file=".env", extra="ignore")
 
     database_url: str
-    data_dir: str = "../garda-ai-data/HI-Small"
+    data_dir: str = "../grafin-ai-data/HI-Small"
     batch_size: int = 5000
 
 
@@ -244,14 +244,14 @@ git commit -m "feat: fail-fast settings (database_url required)"
 ## Task 3: `db.py` — asyncpg DSN + connect (ported verbatim)
 
 **Files:**
-- Create: `garda_ai_ingest/db.py`
+- Create: `grafin_ai_ingest/db.py`
 - Test: `tests/test_db.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_db.py
-from garda_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.db import asyncpg_dsn
 
 
 def test_strips_sqlalchemy_asyncpg_scheme():
@@ -265,12 +265,12 @@ def test_leaves_bare_dsn_untouched():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_db.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.db`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.db`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# garda_ai_ingest/db.py
+# grafin_ai_ingest/db.py
 import asyncpg
 
 
@@ -300,14 +300,14 @@ git commit -m "feat: asyncpg DSN normalization + connect"
 ## Task 4: `geo.py` — deterministic province enrichment (ported verbatim)
 
 **Files:**
-- Create: `garda_ai_ingest/geo.py`
+- Create: `grafin_ai_ingest/geo.py`
 - Test: `tests/test_geo.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_geo.py
-from garda_ai_ingest.geo import PROVINCES, province_for_entity
+from grafin_ai_ingest.geo import PROVINCES, province_for_entity
 
 
 def test_deterministic():
@@ -328,12 +328,12 @@ def test_stable_known_value():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_geo.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.geo`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.geo`
 
-- [ ] **Step 3: Write the implementation (copy verbatim from `garda_ai_pipeline/geo.py`)**
+- [ ] **Step 3: Write the implementation (copy verbatim from `grafin_ai_pipeline/geo.py`)**
 
 ```python
-# garda_ai_ingest/geo.py
+# grafin_ai_ingest/geo.py
 import hashlib
 
 PROVINCES = [
@@ -437,7 +437,7 @@ import pytest
 import pytest_asyncio
 from testcontainers.postgres import PostgresContainer
 
-from garda_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.db import asyncpg_dsn
 
 _SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
 
@@ -480,7 +480,7 @@ git commit -m "test: DDL snapshot + testcontainers Postgres fixture + sample dat
 ## Task 6: `seed/reference.py` — the idempotent loader
 
 **Files:**
-- Create: `garda_ai_ingest/seed/reference.py`
+- Create: `grafin_ai_ingest/seed/reference.py`
 - Test: `tests/test_reference.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -489,8 +489,8 @@ git commit -m "test: DDL snapshot + testcontainers Postgres fixture + sample dat
 # tests/test_reference.py
 import os
 
-from garda_ai_ingest.geo import province_for_entity
-from garda_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.geo import province_for_entity
+from grafin_ai_ingest.seed.reference import load_reference
 
 
 async def test_loads_banks_entities_accounts(db, data_dir):
@@ -540,19 +540,19 @@ async def test_do_nothing_never_overwrites_existing(db, data_dir):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_reference.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.seed.reference`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.seed.reference`
 
 - [ ] **Step 3: Write the implementation (ported from `load_reference`, returning typed counts)**
 
 ```python
-# garda_ai_ingest/seed/reference.py
+# grafin_ai_ingest/seed/reference.py
 import csv
 from decimal import Decimal, InvalidOperation
 from typing import NamedTuple
 
 import asyncpg
 
-from garda_ai_ingest.geo import province_for_entity
+from grafin_ai_ingest.geo import province_for_entity
 
 
 class LoadCounts(NamedTuple):
@@ -621,7 +621,7 @@ git commit -m "feat: idempotent reference loader (banks/entities/accounts, DO NO
 ## Task 7: `seed/validate.py` — reference-only post-load checks
 
 **Files:**
-- Create: `garda_ai_ingest/seed/validate.py`
+- Create: `grafin_ai_ingest/seed/validate.py`
 - Test: `tests/test_validate.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -630,8 +630,8 @@ git commit -m "feat: idempotent reference loader (banks/entities/accounts, DO NO
 # tests/test_validate.py
 import os
 
-from garda_ai_ingest.seed.reference import load_reference
-from garda_ai_ingest.seed.validate import validate
+from grafin_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.seed.validate import validate
 
 
 async def test_ok_after_good_load(db, data_dir):
@@ -654,12 +654,12 @@ async def test_not_ok_on_empty_db(db):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_validate.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.seed.validate`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.seed.validate`
 
 - [ ] **Step 3: Write the implementation (reference-only port of `validate`)**
 
 ```python
-# garda_ai_ingest/seed/validate.py
+# grafin_ai_ingest/seed/validate.py
 from typing import NamedTuple
 
 import asyncpg
@@ -722,13 +722,13 @@ git commit -m "feat: reference-only post-load validation"
 ## Task 8: `observability.py` + `seed/run.py` — orchestration, CLI, exit codes
 
 **Files:**
-- Create: `garda_ai_ingest/observability.py`, `garda_ai_ingest/seed/run.py`
+- Create: `grafin_ai_ingest/observability.py`, `grafin_ai_ingest/seed/run.py`
 - Test: `tests/test_run.py`
 
 - [ ] **Step 1: Write `observability.py` (structlog config, mirrors scoring)**
 
 ```python
-# garda_ai_ingest/observability.py
+# grafin_ai_ingest/observability.py
 import logging
 
 import structlog
@@ -756,8 +756,8 @@ import os
 
 import pytest
 
-from garda_ai_ingest.db import asyncpg_dsn
-from garda_ai_ingest.seed.run import run_seed
+from grafin_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.seed.run import run_seed
 
 
 async def test_run_seed_ok(db, pg_url, data_dir, monkeypatch):
@@ -789,19 +789,19 @@ validate path.
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_run.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_ingest.seed.run`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_ingest.seed.run`
 
 - [ ] **Step 4: Write the implementation**
 
 ```python
-# garda_ai_ingest/seed/run.py
+# grafin_ai_ingest/seed/run.py
 """One-shot reference-data seed.
 
 Loads banks/entities(+province)/accounts into the backend-owned Postgres, idempotently
 (``ON CONFLICT DO NOTHING``). Run once before the sim streams transactions so FK references
 resolve. Assumes the schema is already migrated (the backend owns migrations).
 
-Invoke: ``uv run garda-ingest`` or ``uv run python -m garda_ai_ingest.seed.run``.
+Invoke: ``uv run grafin-ingest`` or ``uv run python -m grafin_ai_ingest.seed.run``.
 
 Exit codes: 0 ok · 1 validation failed · 2 accounts CSV not found · 3 reference tables not found.
 """
@@ -813,11 +813,11 @@ import time
 import asyncpg
 import structlog
 
-from garda_ai_ingest.config import get_settings
-from garda_ai_ingest.db import connect
-from garda_ai_ingest.observability import configure_logging
-from garda_ai_ingest.seed.reference import load_reference
-from garda_ai_ingest.seed.validate import ValidationReport, validate
+from grafin_ai_ingest.config import get_settings
+from grafin_ai_ingest.db import connect
+from grafin_ai_ingest.observability import configure_logging
+from grafin_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.seed.validate import ValidationReport, validate
 
 log = structlog.get_logger()
 
@@ -869,7 +869,7 @@ Expected: PASS (3 tests)
 
 - [ ] **Step 6: Run the full suite + lint + type-check**
 
-Run: `uv run pytest -q && uv run ruff check . && uv run mypy garda_ai_ingest`
+Run: `uv run pytest -q && uv run ruff check . && uv run mypy grafin_ai_ingest`
 Expected: all pass; mypy clean under `--strict`.
 
 - [ ] **Step 7: Commit**
@@ -894,10 +894,10 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
-COPY garda_ai_ingest ./garda_ai_ingest
+COPY grafin_ai_ingest ./grafin_ai_ingest
 RUN uv sync --frozen --no-dev
 # --no-sync: the venv is already built above; skip uv's startup resync for faster starts.
-CMD ["uv", "run", "--no-sync", "garda-ingest"]
+CMD ["uv", "run", "--no-sync", "grafin-ingest"]
 ```
 
 - [ ] **Step 2: Write the CI workflow**
@@ -920,7 +920,7 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_ingest
+        run: uv run mypy grafin_ai_ingest
       - name: Test
         run: uv run pytest -q
 ```
@@ -928,14 +928,14 @@ jobs:
 - [ ] **Step 3: Write `docs/c4/03-component.md`**
 
 ```markdown
-# garda-ai-ingest — C4 Component
+# grafin-ai-ingest — C4 Component
 
-**Container:** `garda-ai-ingest` — a one-shot CLI **job** (not a long-running service). Runs at
+**Container:** `grafin-ai-ingest` — a one-shot CLI **job** (not a long-running service). Runs at
 deploy-init / on demand, seeds reference data, exits.
 
 ## Components
 
-- **CLI / Orchestrator** (`seed/run.py`) — the `garda-ingest` entrypoint. Configures logging,
+- **CLI / Orchestrator** (`seed/run.py`) — the `grafin-ingest` entrypoint. Configures logging,
   reads settings, opens one asyncpg connection, drives load → validate, emits the structured
   summary, maps outcomes to exit codes (0/1/2/3), closes the connection.
 - **Reference Loader** (`seed/reference.py`) — parses the accounts CSV, de-duplicates banks and
@@ -944,7 +944,7 @@ deploy-init / on demand, seeds reference data, exits.
 - **Validator** (`seed/validate.py`) — reads row counts and referential-integrity spot checks
   back from the DB; returns a `ValidationReport` with an `ok` gate.
 - **Geo** (`geo.py`) — deterministic, seeded province assignment (`sha256(entity_id)`).
-- **Config** (`config.py`) — `GARDA_`-prefixed settings; `database_url` required (fail-fast).
+- **Config** (`config.py`) — `GRAFIN_`-prefixed settings; `database_url` required (fail-fast).
 - **DB** (`db.py`) — asyncpg DSN normalization + connect.
 - **Observability** (`observability.py`) — structlog JSON logging.
 
@@ -961,7 +961,7 @@ deploy-init / on demand, seeds reference data, exits.
 - [ ] **Step 4: Write `docs/c4/04-code.md`**
 
 ```markdown
-# garda-ai-ingest — C4 Code
+# grafin-ai-ingest — C4 Code
 
 ## `config.py`
 - `Settings(BaseSettings)` — `database_url: str` (required), `data_dir: str`, `batch_size: int`.
@@ -995,7 +995,7 @@ deploy-init / on demand, seeds reference data, exits.
 
 - [ ] **Step 5: Verify CI steps locally**
 
-Run: `uv run ruff check . && uv run mypy garda_ai_ingest && uv run pytest -q`
+Run: `uv run ruff check . && uv run mypy grafin_ai_ingest && uv run pytest -q`
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -1010,8 +1010,8 @@ git commit -m "chore: Dockerfile (job container), CI, C4 component + code docs"
 ## Definition of Done
 
 - `uv run pytest -q` green (config, db, geo, reference, validate, run — ~15 tests).
-- `uv run ruff check .` clean; `uv run mypy garda_ai_ingest` clean under `--strict`.
-- `garda-ingest` seeds banks/entities/accounts idempotently; re-run leaves rows unchanged (DO NOTHING).
+- `uv run ruff check .` clean; `uv run mypy grafin_ai_ingest` clean under `--strict`.
+- `grafin-ingest` seeds banks/entities/accounts idempotently; re-run leaves rows unchanged (DO NOTHING).
 - Exit codes: 0 ok · 1 validation failed · 2 missing CSV · 3 missing schema — all reachable and documented.
 - No import of any other service; the DB is shared only via the committed DDL snapshot.
 - All commits authored as Thariq Iskandar Zulkarnain M P with the `Co-Authored-By: Claude` trailer.

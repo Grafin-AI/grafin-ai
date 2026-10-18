@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from testcontainers.postgres import PostgresContainer
 
-from garda_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.db import asyncpg_dsn
 
 _SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
 

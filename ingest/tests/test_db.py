@@ -1,4 +1,4 @@
-from garda_ai_ingest.db import asyncpg_dsn
+from grafin_ai_ingest.db import asyncpg_dsn
 
 
 def test_strips_sqlalchemy_asyncpg_scheme():

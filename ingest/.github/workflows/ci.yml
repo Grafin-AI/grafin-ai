@@ -16,6 +16,6 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_ingest
+        run: uv run mypy grafin_ai_ingest
       - name: Test
         run: uv run pytest -q

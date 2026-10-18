@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 import asyncpg
 
-from garda_ai_ingest.geo import province_for_entity
+from grafin_ai_ingest.geo import province_for_entity
 
 
 class LoadCounts(NamedTuple):

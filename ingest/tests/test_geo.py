@@ -1,4 +1,4 @@
-from garda_ai_ingest.geo import PROVINCES, province_for_entity
+from grafin_ai_ingest.geo import PROVINCES, province_for_entity
 
 
 def test_deterministic():

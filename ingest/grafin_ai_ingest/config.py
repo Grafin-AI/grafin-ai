@@ -4,10 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GRAFIN_", env_file=".env", extra="ignore")
 
     database_url: str
-    data_dir: str = "../garda-ai-data/HI-Small"
+    data_dir: str = "../grafin-ai-data/HI-Small"
     batch_size: int = 5000
     log_level: str = "INFO"
 

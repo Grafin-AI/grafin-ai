@@ -1,7 +1,7 @@
 import os
 
-from garda_ai_ingest.geo import province_for_entity
-from garda_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.geo import province_for_entity
+from grafin_ai_ingest.seed.reference import load_reference
 
 
 async def test_loads_banks_entities_accounts(db, data_dir):

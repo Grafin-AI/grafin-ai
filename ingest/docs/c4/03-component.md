@@ -1,11 +1,11 @@
-# garda-ai-ingest — C4 Component
+# grafin-ai-ingest — C4 Component
 
-**Container:** `garda-ai-ingest` — a one-shot CLI **job** (not a long-running service). Runs at
+**Container:** `grafin-ai-ingest` — a one-shot CLI **job** (not a long-running service). Runs at
 deploy-init / on demand, seeds reference data, exits.
 
 ## Components
 
-- **CLI / Orchestrator** (`seed/run.py`) — the `garda-ingest` entrypoint. Configures logging,
+- **CLI / Orchestrator** (`seed/run.py`) — the `grafin-ingest` entrypoint. Configures logging,
   reads settings, opens one asyncpg connection, drives load → validate, emits the structured
   summary, maps outcomes to exit codes (0/1/2/3), closes the connection.
 - **Reference Loader** (`seed/reference.py`) — parses the accounts CSV, de-duplicates banks and
@@ -14,7 +14,7 @@ deploy-init / on demand, seeds reference data, exits.
 - **Validator** (`seed/validate.py`) — reads row counts and referential-integrity spot checks
   back from the DB; returns a `ValidationReport` with an `ok` gate.
 - **Geo** (`geo.py`) — deterministic, seeded province assignment (`sha256(entity_id)`).
-- **Config** (`config.py`) — `GARDA_`-prefixed settings; `database_url` required (fail-fast).
+- **Config** (`config.py`) — `GRAFIN_`-prefixed settings; `database_url` required (fail-fast).
 - **DB** (`db.py`) — asyncpg DSN normalization + connect.
 - **Observability** (`observability.py`) — structlog JSON logging.
 

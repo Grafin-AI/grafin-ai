@@ -4,7 +4,7 @@ on:
 env:
   REGION: ${{ vars.GCP_REGION }}
   PROJECT: ${{ vars.GCP_PROJECT }}
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/garda/ingest
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/grafin/ingest
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -27,4 +27,4 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
       - name: Deploy Cloud Run Job
-        run: gcloud run jobs deploy garda-ingest --image "$IMAGE:${{ github.sha }}" --region "$REGION" --quiet
+        run: gcloud run jobs deploy grafin-ingest --image "$IMAGE:${{ github.sha }}" --region "$REGION" --quiet

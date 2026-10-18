@@ -4,7 +4,7 @@ Loads banks/entities(+province)/accounts into the backend-owned Postgres, idempo
 (``ON CONFLICT DO NOTHING``). Run once before the sim streams transactions so FK references
 resolve. Assumes the schema is already migrated (the backend owns migrations).
 
-Invoke: ``uv run garda-ingest`` or ``uv run python -m garda_ai_ingest.seed.run``.
+Invoke: ``uv run grafin-ingest`` or ``uv run python -m grafin_ai_ingest.seed.run``.
 
 Exit codes: 0 ok · 1 validation failed · 2 accounts CSV not found · 3 reference tables not found.
 """
@@ -16,11 +16,11 @@ import time
 import asyncpg
 import structlog
 
-from garda_ai_ingest.config import get_settings
-from garda_ai_ingest.db import connect
-from garda_ai_ingest.observability import configure_logging
-from garda_ai_ingest.seed.reference import load_reference
-from garda_ai_ingest.seed.validate import ValidationReport, validate
+from grafin_ai_ingest.config import get_settings
+from grafin_ai_ingest.db import connect
+from grafin_ai_ingest.observability import configure_logging
+from grafin_ai_ingest.seed.reference import load_reference
+from grafin_ai_ingest.seed.validate import ValidationReport, validate
 
 log = structlog.get_logger()
 
