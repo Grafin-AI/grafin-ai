@@ -1,4 +1,4 @@
-# Cloud Run + Firebase deployment (GCP project `garda-ai-dev-01`, region `asia-southeast2`)
+# Cloud Run + Firebase deployment (set `PROJECT_ID` to your GCP project; region `asia-southeast2`)
 
 Secrets are never committed. Create `api-env.yaml` and `scoring-env.yaml` locally (keys below).
 
@@ -17,7 +17,7 @@ gcloud artifacts repositories create grafin --repository-format=docker --locatio
 The scoring image bakes in the exported model scores (`training/runs/<run>/scores`) by
 appending `scoring.Dockerfile.append` to `scoring/Dockerfile`.
 ```bash
-REG=asia-southeast2-docker.pkg.dev/garda-ai-dev-01/grafin
+REG=asia-southeast2-docker.pkg.dev/$PROJECT_ID/grafin
 docker buildx build --platform linux/amd64 -t $REG/backend:v1 --push backend
 docker buildx build --platform linux/amd64 -t $REG/scoring:v1 --push <scoring context with scores/>
 ```
@@ -25,7 +25,7 @@ docker buildx build --platform linux/amd64 -t $REG/scoring:v1 --push <scoring co
 ## 3. Cloud Run: one public service, private sidecars
 ```bash
 gcloud run deploy grafin-api --region asia-southeast2 \
-  --add-cloudsql-instances garda-ai-dev-01:asia-southeast2:grafin-pg \
+  --add-cloudsql-instances $PROJECT_ID:asia-southeast2:grafin-pg \
   --min-instances 1 --max-instances 1 --no-cpu-throttling --timeout 3600 --execution-environment gen2 \
   --container backend --image $REG/backend:v1 --port 8000 --env-vars-file api-env.yaml \
       --memory 2Gi --cpu 2 --depends-on scoring,redis \
@@ -45,7 +45,7 @@ The runtime service account needs `roles/cloudsql.client`, `roles/datastore.user
 `GRAFIN_JWT_SECRET`, `GRAFIN_SCORING_TOKEN`, `GRAFIN_INGEST_TOKEN`, `GRAFIN_ENV=production`,
 `GRAFIN_LLM_PROVIDER=gemini`, `GRAFIN_LLM_MODEL=gemini-3.8-flash`, `GRAFIN_LLM_API_KEY`,
 `GRAFIN_LLM_TIMEOUT_S=60`, `GRAFIN_MODEL_NAME`, `GRAFIN_EXPLANATION_STORE=firestore`,
-`GRAFIN_FIRESTORE_PROJECT=garda-ai-dev-01`, `GRAFIN_CORS_ORIGINS=https://<site>.web.app,https://<site>.firebaseapp.com`.
+`GRAFIN_FIRESTORE_PROJECT=<project-id>`, `GRAFIN_CORS_ORIGINS=https://<site>.web.app,https://<site>.firebaseapp.com`.
 `scoring-env.yaml`: `GRAFIN_SCORING_TOKEN`, `GRAFIN_SCORER=precomputed`, `GRAFIN_SCORES_PATH=/scores/scores.csv`.
 
 ## 4. Dashboard on Firebase Hosting

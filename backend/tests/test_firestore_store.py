@@ -171,20 +171,20 @@ def test_firestore_client_created_lazily_once(monkeypatch):
 
     monkeypatch.setattr(fs, "_client", None)
     monkeypatch.setattr(firestore, "AsyncClient", _Stub)
-    s = _settings(explanation_store="firestore", firestore_project="garda-ai-dev-01")
+    s = _settings(explanation_store="firestore", firestore_project="grafin-test-project")
     first = fs.get_firestore_client(s)
     assert fs.get_firestore_client(s) is first
-    assert created == [{"project": "garda-ai-dev-01", "database": "(default)"}]
+    assert created == [{"project": "grafin-test-project", "database": "(default)"}]
 
 
 def test_settings_read_store_env(monkeypatch):
     monkeypatch.setenv("GRAFIN_EXPLANATION_STORE", "firestore")
-    monkeypatch.setenv("GRAFIN_FIRESTORE_PROJECT", "garda-ai-dev-01")
+    monkeypatch.setenv("GRAFIN_FIRESTORE_PROJECT", "grafin-test-project")
     monkeypatch.setenv("GRAFIN_FIRESTORE_DATABASE", "grafin")
     monkeypatch.setenv("GRAFIN_CORS_ORIGINS", "https://a.web.app, https://b.firebaseapp.com,")
     s = _settings()
     assert (s.explanation_store, s.firestore_project, s.firestore_database) == (
-        "firestore", "garda-ai-dev-01", "grafin",
+        "firestore", "grafin-test-project", "grafin",
     )
     assert s.cors_origin_list == ["https://a.web.app", "https://b.firebaseapp.com"]
 
@@ -204,10 +204,10 @@ async def _preflight(app: FastAPI, origin: str):
 
 async def test_cors_allows_configured_origin():
     app = FastAPI()
-    configure_cors(app, _settings(cors_origins="https://garda-ai-dev-01.web.app"))
-    r = await _preflight(app, "https://garda-ai-dev-01.web.app")
+    configure_cors(app, _settings(cors_origins="https://grafin-test-project.web.app"))
+    r = await _preflight(app, "https://grafin-test-project.web.app")
     assert r.status_code == 200
-    assert r.headers["access-control-allow-origin"] == "https://garda-ai-dev-01.web.app"
+    assert r.headers["access-control-allow-origin"] == "https://grafin-test-project.web.app"
     r = await _preflight(app, "https://evil.example")
     assert "access-control-allow-origin" not in r.headers
 
@@ -216,5 +216,5 @@ async def test_cors_allows_configured_origin():
 async def test_cors_empty_adds_no_middleware(origins):
     app = FastAPI()
     configure_cors(app, _settings(cors_origins=origins))
-    r = await _preflight(app, "https://garda-ai-dev-01.web.app")
+    r = await _preflight(app, "https://grafin-test-project.web.app")
     assert "access-control-allow-origin" not in r.headers

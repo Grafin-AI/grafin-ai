@@ -4,7 +4,7 @@ Grafin AI detects money laundering across Indonesian banks by scoring every inte
 transfer with a graph neural network. It also tells the analyst why a transfer is risky,
 in plain Bahasa Indonesia.
 
-- **Live prototype:** https://garda-ai-dev-01-52bc2.web.app (judge login is in the submission form)
+- **Live prototype:** https://grafin-ai.web.app (judge login is in the submission form)
 - **API:** https://grafin-api-43447121190.asia-southeast2.run.app (`/readyz`)
 - **Demo video:** see the submission
 
@@ -57,7 +57,7 @@ in plain Bahasa Indonesia.
 | **Cloud SQL** (PostgreSQL 16) | Transactions, accounts, banks, scores, alerts, users |
 | **Artifact Registry** | Container images |
 | **Vertex AI Workbench** (4× NVIDIA T4) | Multi-GNN training notebooks/runs; experiments tracked in **MLflow** (`training/docs/mlflow.md`) |
-| **Cloud Storage** | Datasets (HI-Small-ID), model run artifacts, test outputs and the MLflow store (`gs://garda-ai-dev-01-grafin-artifacts`) |
+| **Cloud Storage** | Datasets (HI-Small-ID), model run artifacts, test outputs and the MLflow store (`gs://grafin-ai-artifacts`) |
 | **Cloud Logging** | API, access and Insight Narrator tool-call logs from Cloud Run |
 | **Secret Manager + IAM** | App secrets (Gemini key, JWT, DB URL, service tokens) in Secret Manager; a dedicated least-privilege runtime service account |
 
