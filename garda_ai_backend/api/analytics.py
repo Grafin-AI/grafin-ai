@@ -5,6 +5,7 @@ from garda_ai_backend.api.deps import CurrentUserDep, NowDep, RedisDep, SessionD
 from garda_ai_backend.api.view_schemas import (
     DetectionMetrics,
     FraudAnalyticsResponse,
+    InstitutionsResponse,
     TypologyCount,
 )
 from garda_ai_backend.repositories.analytics import AnalyticsRepository
@@ -37,3 +38,18 @@ async def fraud(
         distribution=[TypologyCount(**d) for d in data["distribution"]],
         detection=DetectionMetrics(**data["detection"]),
     )
+
+
+@router.get("/institutions", response_model=InstitutionsResponse)
+async def institutions(
+    session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUserDep
+) -> InstitutionsResponse:
+    """Radar Regulator: per-institution aggregates (simulated federation; one central
+    model over data partitioned by bank)."""
+    repo = AnalyticsRepository(session)
+
+    async def compute() -> dict:
+        return await repo.institutions(now)
+
+    data = await cached_json(redis, f"institutions:{now.isoformat()}", ttl=30, compute=compute)
+    return InstitutionsResponse(**data)

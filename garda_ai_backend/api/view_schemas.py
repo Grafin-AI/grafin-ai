@@ -42,6 +42,26 @@ class FraudAnalyticsResponse(BaseModel):
     detection: DetectionMetrics
 
 
+class InstitutionStat(BaseModel):
+    bank: str
+    transactions: int
+    flagged: int
+    blocked: int
+    flagged_rate: float  # (flagged + blocked) / transactions
+
+
+class InstitutionFlow(BaseModel):
+    from_bank: str
+    to_bank: str
+    flagged_count: int  # flagged + blocked transactions
+    amount: float
+
+
+class InstitutionsResponse(BaseModel):
+    institutions: list[InstitutionStat]
+    flows: list[InstitutionFlow]
+
+
 class ProvinceFraud(BaseModel):
     name: str
     fraud_count: int
