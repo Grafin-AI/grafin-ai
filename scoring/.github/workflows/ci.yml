@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: pip install uv
+      - name: Sync
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Type-check
+        run: uv run mypy garda_ai_scoring
+      - name: Test
+        env:
+          GARDA_SCORING_TOKEN: ci-token
+        run: uv run pytest -q
