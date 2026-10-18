@@ -1,344 +1,229 @@
 import { useState, useMemo } from 'react';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import {
-  Building2,
-  User as UserIcon,
-  Search,
-  Filter,
-  Eye,
-  AlertTriangle
-} from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from './ui/table';
+import { cn } from './ui/utils';
+import { Search, Eye, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { UserProfileDetailsModal } from './UserProfileDetailsModal';
 import { useUserRisk } from '../api/queries';
+import { formatInt } from '../lib/format';
+import { CHART, RISK_META, riskMeta } from '../lib/status';
 import type { RiskProfile } from '../api/types';
 
-function getRiskLevelColor(level: string | null) {
-  switch (level) {
-    case 'High': return 'bg-red-100 text-red-800 border-red-200';
-    case 'Medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'Low': return 'bg-green-100 text-green-800 border-green-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
+/** Score is 0–100; color by band, independent of the stored level. */
+function scoreMeta(score: number) {
+  return score > 70 ? RISK_META.High : score > 40 ? RISK_META.Medium : RISK_META.Low;
 }
 
-function getRiskScoreTextColor(score: number) {
-  if (score > 70) return 'text-red-600';
-  if (score > 40) return 'text-amber-600';
-  return 'text-green-600';
-}
-
-function getRiskScoreBarColor(score: number) {
-  if (score > 70) return 'bg-red-500';
-  if (score > 40) return 'bg-amber-500';
-  return 'bg-green-500';
-}
+const CARD = 'rounded-xl border border-border bg-card';
 
 export function UserRiskProfiling() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRisk, setFilterRisk] = useState('all');
-  const [filterType] = useState('all');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Pass filterRisk to the hook (API supports ?risk=High/Medium/Low)
+  // API supports ?risk=High/Medium/Low
   const { data, isLoading, isError } = useUserRisk(filterRisk === 'all' ? undefined : filterRisk);
-  const profiles: RiskProfile[] = data?.profiles ?? [];
+  const profiles: RiskProfile[] = useMemo(() => data?.profiles ?? [], [data]);
 
   const filteredProfiles = useMemo(() => {
-    return profiles.filter(profile => {
-      const matchesSearch = !searchTerm ||
-        profile.entity_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        profile.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
-    });
+    const q = searchTerm.toLowerCase();
+    return profiles.filter((p) => !q || p.entity_id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
   }, [profiles, searchTerm]);
 
-  // Derive risk distribution from real data
   const riskDistributionData = useMemo(() => {
-    const counts = { Low: 0, Medium: 0, High: 0 };
-    profiles.forEach(p => {
+    const counts = { High: 0, Medium: 0, Low: 0 };
+    profiles.forEach((p) => {
       const level = p.risk_level as keyof typeof counts;
       if (level in counts) counts[level]++;
     });
-    return [
-      { name: 'Low', value: counts.Low, color: '#10B981' },
-      { name: 'Medium', value: counts.Medium, color: '#F59E0B' },
-      { name: 'High', value: counts.High, color: '#EF4444' },
-    ].filter(d => d.value > 0);
+    return (Object.keys(counts) as (keyof typeof counts)[])
+      .map((k) => ({ key: k, name: RISK_META[k].label, value: counts[k], color: RISK_META[k].hex }))
+      .filter((d) => d.value > 0);
   }, [profiles]);
 
   const handleViewProfile = (entityId: string) => {
     setSelectedEntityId(entityId);
     setIsModalOpen(true);
   };
-
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedEntityId(null);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">User Risk Profiling</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Comprehensive analysis of user and entity risk profiles
-        </p>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Risk Distribution Pie Chart */}
-        <Card className="p-4">
-          <h3 className="font-semibold text-gray-900 mb-1">Risk Level Distribution</h3>
+    <>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section data-animate aria-label="Distribusi tingkat risiko" className={cn(CARD, 'p-4')}>
+          <h2 className="mb-1 text-base font-semibold text-foreground">Distribusi Tingkat Risiko</h2>
           {isLoading ? (
-            <Skeleton className="h-40 w-full mt-2" />
+            <Skeleton className="mt-2 h-40 w-full" />
           ) : riskDistributionData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie
-                    data={riskDistributionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {riskDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
+                  <Pie data={riskDistributionData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" stroke="#0E1424">
+                    {riskDistributionData.map((entry) => <Cell key={entry.key} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={CHART.tooltip} itemStyle={CHART.tooltipItem} formatter={(v, n) => [formatInt(Number(v)), n]} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="mt-1 space-y-2">
-                {riskDistributionData.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                    <span className="flex-1">{item.name}</span>
-                    <span>{item.value}</span>
-                  </div>
+              <ul className="mt-1 space-y-2">
+                {riskDistributionData.map((item) => (
+                  <li key={item.key} className="flex items-center gap-2 text-sm">
+                    <span aria-hidden className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="flex-1 text-text-secondary">{item.name}</span>
+                    <span className="num text-foreground">{formatInt(item.value)}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </>
           ) : (
-            <p className="text-sm text-gray-400 mt-4 text-center">No data available</p>
+            <p className="mt-4 text-center text-sm text-muted-foreground">Belum ada data</p>
           )}
-        </Card>
+        </section>
 
-        {/* Risk Breakdown Bar Chart (derived from current profiles) */}
-        <Card className="p-4 lg:col-span-2">
-          <h3 className="font-semibold text-gray-900 mb-3">Risk Level Breakdown (Current Filter)</h3>
+        <section data-animate aria-label="Rincian tingkat risiko" className={cn(CARD, 'p-4 lg:col-span-2')}>
+          <h2 className="mb-3 text-base font-semibold text-foreground">Rincian Tingkat Risiko (filter aktif)</h2>
           {isLoading ? (
             <Skeleton className="h-64 w-full" />
           ) : riskDistributionData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={riskDistributionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" stroke="#6B7280" style={{ fontSize: '12px' }} />
-                  <YAxis stroke="#6B7280" style={{ fontSize: '12px' }} />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Profiles">
-                    {riskDistributionData.map((entry, index) => (
-                      <Cell key={`bar-cell-${index}`} fill={entry.color} />
-                    ))}
+                  <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" stroke={CHART.grid} tick={{ fontSize: 12, fill: CHART.axis }} />
+                  <YAxis stroke={CHART.grid} tick={{ fontSize: 12, fill: CHART.axis }} tickFormatter={(v) => formatInt(v)} />
+                  <Tooltip contentStyle={CHART.tooltip} labelStyle={CHART.tooltipLabel} itemStyle={CHART.tooltipItem} cursor={CHART.cursor} formatter={(v) => [formatInt(Number(v)), 'Profil']} />
+                  <Bar dataKey="value" name="Profil" radius={[4, 4, 0, 0]}>
+                    {riskDistributionData.map((entry) => <Cell key={entry.key} fill={entry.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-sm text-gray-400">
-              No data available for current filter
-            </div>
+            <div className="grid h-64 place-items-center text-sm text-muted-foreground">Belum ada data untuk filter ini</div>
           )}
-        </Card>
+        </section>
       </div>
 
-      {/* Filters and Search */}
-      <Card className="p-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search by name or Entity ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+      <section data-animate aria-label="Daftar profil risiko" className={cn(CARD, 'overflow-hidden')}>
+        <div className="flex flex-col gap-3 border-b border-border px-[18px] py-3.5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Daftar Profil Risiko</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {isLoading ? 'Memuat profil…' : `Menampilkan ${formatInt(filteredProfiles.length)} dari ${formatInt(profiles.length)} profil`}
+            </p>
           </div>
-          <Select value={filterRisk} onValueChange={setFilterRisk}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue placeholder="Risk Level" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Risk Levels</SelectItem>
-              <SelectItem value="High">High</SelectItem>
-              <SelectItem value="Medium">Medium</SelectItem>
-              <SelectItem value="Low">Low</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative block">
+              <span className="sr-only">Cari nama atau ID entitas</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                placeholder="Cari nama / ID entitas"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-11 pl-9 sm:w-64"
+              />
+            </label>
+            <Select value={filterRisk} onValueChange={setFilterRisk}>
+              <SelectTrigger className="h-11 w-full sm:w-44" aria-label="Filter tingkat risiko">
+                <SelectValue placeholder="Tingkat risiko" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua tingkat</SelectItem>
+                <SelectItem value="High">Tinggi</SelectItem>
+                <SelectItem value="Medium">Sedang</SelectItem>
+                <SelectItem value="Low">Rendah</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </Card>
 
-      {/* Profiles Table */}
-      <Card>
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Risk Profile List</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {isLoading
-                  ? 'Loading profiles...'
-                  : `Showing ${filteredProfiles.length} of ${profiles.length} profiles`}
-              </p>
-            </div>
-            <Button variant="outline" className="gap-2">
-              <Filter className="w-4 h-4" />
-              Advanced Filters
-            </Button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <ScrollArea className="h-[500px]">
-            <Table>
-              <TableHeader className="sticky top-0 bg-white border-b">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Entity ID / Name</TableHead>
-                  <TableHead>Province</TableHead>
-                  <TableHead>Risk Score</TableHead>
-                  <TableHead>Risk Status</TableHead>
-                  <TableHead>
-                    <div>Total</div>
-                    <div>Transactions</div>
-                  </TableHead>
-                  <TableHead>
-                    <div>Flagged</div>
-                    <div>Transactions</div>
-                  </TableHead>
-                  <TableHead className="pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading && Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="pl-6"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                    <TableCell className="pr-6"><Skeleton className="h-8 w-16" /></TableCell>
-                  </TableRow>
+        <div className="max-h-[520px] overflow-auto">
+          <table className="w-full min-w-[820px] border-collapse text-[13px]">
+            <thead>
+              <tr className="text-left text-muted-foreground">
+                {['Entitas', 'Provinsi', 'Skor risiko', 'Tingkat', 'Total transaksi', 'Ditandai', ''].map((h, i) => (
+                  <th key={i} scope="col" className={cn('sticky top-0 z-10 bg-card px-2 py-2.5 font-medium', i === 0 && 'pl-[18px]', i === 6 && 'pr-[18px]', (i === 4 || i === 5) && 'text-right')}>
+                    {h || <span className="sr-only">Aksi</span>}
+                  </th>
                 ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-t border-[#172138]">
+                  {Array.from({ length: 7 }).map((__, j) => (
+                    <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]')}><Skeleton className="h-4 w-full max-w-28" /></td>
+                  ))}
+                </tr>
+              ))}
 
-                {isError && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-red-500">
-                      <AlertTriangle className="w-6 h-6 mx-auto mb-2" />
-                      Gagal memuat data profil. Silakan refresh halaman.
-                    </TableCell>
-                  </TableRow>
-                )}
+              {isError && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-blocked">
+                    <AlertTriangle className="mx-auto mb-2 size-6" aria-hidden />
+                    Gagal memuat data profil. Silakan muat ulang halaman.
+                  </td>
+                </tr>
+              )}
 
-                {!isLoading && !isError && filteredProfiles.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-400">
-                      Tidak ada profil yang sesuai dengan filter.
-                    </TableCell>
-                  </TableRow>
-                )}
+              {!isLoading && !isError && filteredProfiles.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">Tidak ada profil yang sesuai dengan filter.</td>
+                </tr>
+              )}
 
-                {filteredProfiles.map((profile) => (
-                  <TableRow key={profile.entity_id} className="hover:bg-gray-50/50">
-                    <TableCell className="pl-6">
-                      <div className="flex flex-col gap-1">
-                        <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono text-gray-600">
-                          {profile.entity_id}
-                        </code>
-                        <span className="text-sm font-medium text-gray-900">{profile.name}</span>
+              {filteredProfiles.map((profile) => {
+                const lvl = riskMeta(profile.risk_level);
+                const sc = scoreMeta(profile.risk_score);
+                return (
+                  <tr key={profile.entity_id} className="border-t border-[#172138] transition-colors hover:bg-card-2">
+                    <td className="py-2 pl-[18px] pr-2">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium text-foreground">{profile.name}</span>
+                        <span className="num text-xs text-muted-foreground">{profile.entity_id}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-700">{profile.province ?? '—'}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3 min-w-[120px]">
-                        <span className={`text-sm font-medium ${getRiskScoreTextColor(profile.risk_score)} min-w-[35px]`}>
-                          {Math.round(profile.risk_score)}%
-                        </span>
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${getRiskScoreBarColor(profile.risk_score)}`}
-                            style={{ width: `${Math.max(Math.min(profile.risk_score, 100), 5)}%` }}
-                          />
+                    </td>
+                    <td className="px-2 py-2 text-text-secondary">{profile.province ?? '—'}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-border" aria-hidden>
+                          <div className={cn('h-1.5', sc.bar)} style={{ width: `${Math.max(Math.min(profile.risk_score, 100), 2)}%` }} />
                         </div>
+                        <span className={cn('num', sc.text)}>{Math.round(profile.risk_score)}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`text-xs capitalize ${getRiskLevelColor(profile.risk_level)}`}
-                      >
-                        {profile.risk_level ?? 'Unknown'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {profile.total_transactions.toLocaleString('id-ID')}
-                    </TableCell>
-                    <TableCell>
-                      <span className={profile.flagged_transactions > 0 ? 'text-red-600 font-medium' : ''}>
-                        {profile.flagged_transactions}
-                      </span>
-                    </TableCell>
-                    <TableCell className="pr-6">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-3 text-xs"
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', lvl.pill)}>{lvl.label}</span>
+                    </td>
+                    <td className="num px-2 py-2 text-right text-foreground">{formatInt(profile.total_transactions)}</td>
+                    <td className={cn('num px-2 py-2 text-right', profile.flagged_transactions > 0 ? 'font-medium text-flagged' : 'text-muted-foreground')}>
+                      {formatInt(profile.flagged_transactions)}
+                    </td>
+                    <td className="py-1 pl-2 pr-[18px]">
+                      <button
+                        type="button"
                         onClick={() => handleViewProfile(profile.entity_id)}
+                        aria-label={`Lihat profil ${profile.name}`}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-xs text-link transition-colors hover:bg-accent hover:text-[#B5DDFC]"
                       >
-                        <Eye className="w-3 h-3 mr-1" />
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
+                        <Eye className="size-3.5" aria-hidden />
+                        Detail
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      </Card>
+      </section>
 
-      {/* User Profile Details Modal */}
-      <UserProfileDetailsModal
-        entityId={selectedEntityId}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-      />
-    </div>
+      <UserProfileDetailsModal entityId={selectedEntityId} isOpen={isModalOpen} onClose={handleCloseModal} />
+    </>
   );
 }

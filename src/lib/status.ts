@@ -28,3 +28,13 @@ export const CHART = {
   tooltipItem: { color: '#E6EDF7' },
   cursor: { fill: 'rgba(124,196,250,0.08)' },
 } as const;
+
+/** Entity risk levels as stored by the API (High/Medium/Low). */
+export const RISK_META: Record<string, { label: string; pill: string; text: string; bar: string; hex: string }> = {
+  High: { label: 'Tinggi', pill: 'bg-blocked-bg text-blocked', text: 'text-blocked', bar: 'bg-blocked', hex: '#F2546B' },
+  Medium: { label: 'Sedang', pill: 'bg-flagged-bg text-flagged', text: 'text-flagged', bar: 'bg-flagged', hex: '#F5B14C' },
+  Low: { label: 'Rendah', pill: 'bg-approved-bg text-approved', text: 'text-approved', bar: 'bg-approved', hex: '#2FD3A0' },
+};
+const UNKNOWN = { label: 'Tidak diketahui', pill: 'bg-secondary text-text-secondary', text: 'text-text-secondary', bar: 'bg-muted-foreground', hex: '#93A3BC' };
+export const riskMeta = (level: string | null | undefined) => (level && RISK_META[level]) || UNKNOWN;
+
