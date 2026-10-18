@@ -85,7 +85,7 @@ export function ActiveModelCard() {
       </span>
       {f1 != null && (
         <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">F1 deteksi</span>
+          <span className="text-muted-foreground">F1 blokir (live)</span>
           <span className="num text-approved">{formatScore(f1, 3)}</span>
         </div>
       )}
