@@ -121,7 +121,7 @@ function MonitoringView({ onLatestEventTime }: { onLatestEventTime: (iso: string
         <TransactionVolume />
         <TransactionHeatmap />
       </div>
-      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <TypologyBars />
         <GeographicMap />
       </div>

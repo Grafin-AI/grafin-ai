@@ -33,7 +33,7 @@ const formatAmount = (amount: number, currency = 'IDR') =>
 
 const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
 
 type Side = 'from' | 'to';
@@ -112,7 +112,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
             </div>
             {txn && (
               <span className="num text-[13px] text-muted-foreground">
-                {formatDateTime(txn.event_time)} · {txn.type} · {formatAmount(txn.amount, txn.currency || 'IDR')}
+                {formatDateTime(txn.event_time)} UTC · {txn.type} · {formatAmount(txn.amount, txn.currency || 'IDR')}
               </span>
             )}
           </div>

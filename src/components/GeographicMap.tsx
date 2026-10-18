@@ -30,7 +30,7 @@ export function GeographicMap() {
       ) : provinces.length === 0 ? (
         <p className="text-sm text-muted-foreground">Belum ada data provinsi.</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="-mr-2 flex max-h-[340px] flex-col gap-2 overflow-y-auto pr-2">
           {provinces.map((p) => {
             const risk = RISK[p.risk_level] ?? { label: p.risk_level, pill: 'bg-secondary text-text-secondary' };
             const up = p.change_pct > 0;

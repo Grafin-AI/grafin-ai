@@ -108,16 +108,16 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
         </div>
 
         <div className="max-h-[520px] overflow-auto">
-          <table className="w-full min-w-[860px] border-collapse text-[13px]">
+          <table className="w-full min-w-[700px] border-collapse text-[13px]">
             <thead>
               <tr className="text-left text-muted-foreground">
-                {['ID', 'Waktu (UTC)', 'Bank', 'Kanal', 'Nominal', 'Skor model', 'Tipologi', 'Status', ''].map((h, i) => (
+                {['ID', 'Waktu (UTC)', 'Bank · kanal', 'Nominal', 'Skor', 'Tipologi', 'Status', ''].map((h, i) => (
                   <th
                     key={i}
                     scope="col"
                     className={cn(
                       'sticky top-0 z-10 bg-card px-2 py-2.5 font-medium',
-                      i === 0 && 'pl-[18px]', i === 8 && 'pr-[18px]', h === 'Nominal' && 'text-right',
+                      i === 0 && 'pl-[18px]', i === 7 && 'pr-[18px]', h === 'Nominal' && 'text-right', h === 'Tipologi' && 'hidden 2xl:table-cell',
                     )}
                   >
                     {h || <span className="sr-only">Aksi</span>}
@@ -128,14 +128,14 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
             <tbody ref={bodyRef}>
               {items.length === 0 && Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="border-t border-surface-inset">
-                  {Array.from({ length: 9 }).map((__, j) => (
-                    <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]')}><Skeleton className="h-4 w-full max-w-24" /></td>
+                  {Array.from({ length: 8 }).map((__, j) => (
+                    <td key={j} className={cn('px-2 py-3', j === 0 && 'pl-[18px]', j === 5 && 'hidden 2xl:table-cell')}><Skeleton className="h-4 w-full max-w-24" /></td>
                   ))}
                 </tr>
               ))}
               {items.length > 0 && rows.length === 0 && (
                 <tr className="border-t border-surface-inset">
-                  <td colSpan={9} className="px-[18px] py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-[18px] py-8 text-center text-muted-foreground">
                     Tidak ada transaksi dengan status ini di jendela live.
                   </td>
                 </tr>
@@ -144,10 +144,12 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
                 const s = statusMeta(item.status);
                 return (
                   <tr key={item.seq} data-seq={item.seq} className={cn('border-t border-surface-inset transition-colors hover:bg-card-2', s.row)}>
-                    <td className="num py-2 pl-[18px] pr-2 text-text-secondary">TXN-{item.transaction_id}</td>
+                    <td className="num whitespace-nowrap py-2 pl-[18px] pr-2 text-text-secondary">TXN-{item.transaction_id}</td>
                     <td className="num whitespace-nowrap px-2 py-2 text-muted-foreground">{formatTime(item.event_time)}</td>
-                    <td className="px-2 py-2 text-foreground">{item.bank || '—'}</td>
-                    <td className="px-2 py-2 text-text-secondary">{item.type || '—'}</td>
+                    <td className="max-w-[180px] px-2 py-2">
+                      <div className="truncate text-foreground" title={item.bank || undefined}>{item.bank || '—'}</div>
+                      <div className="truncate text-xs text-muted-foreground">{item.type || '—'}</div>
+                    </td>
                     <td className="num whitespace-nowrap px-2 py-2 text-right text-foreground">{formatIDR(item.amount)}</td>
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-2">
@@ -157,11 +159,11 @@ export function TransactionMonitor({ onLatestEventTime }: TransactionMonitorProp
                         <span className={cn('num', s.text)}>{formatScore(item.fraud_score)}</span>
                       </div>
                     </td>
-                    <td className="max-w-[200px] truncate px-2 py-2 text-text-secondary" title={item.typology ?? undefined}>
+                    <td className="hidden max-w-[160px] truncate px-2 py-2 text-text-secondary 2xl:table-cell" title={item.typology ?? undefined}>
                       {item.typology ?? <span className="text-text-faint">—</span>}
                     </td>
-                    <td className="px-2 py-2">
-                      <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', s.pill)}>{s.label}</span>
+                    <td className="whitespace-nowrap px-2 py-2">
+                      <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', s.pill)} title={item.typology ?? undefined}>{s.label}</span>
                     </td>
                     <td className="py-1 pl-2 pr-[18px]">
                       <button
