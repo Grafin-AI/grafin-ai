@@ -175,7 +175,7 @@ export function InsightNarrator({
           <div className="narr-reveal flex gap-2.5 flex-wrap">
             {explanation.reason_code && (
               <span
-                className="font-mono tabular-nums px-2.5 py-1 rounded-md bg-brand-soft text-link text-xs font-semibold"
+                className="num px-2.5 py-1 rounded-md bg-brand-soft text-link text-xs font-semibold"
                 title={REASON_CODE_LABELS[explanation.reason_code] ?? explanation.reason_code}
               >
                 {explanation.reason_code}

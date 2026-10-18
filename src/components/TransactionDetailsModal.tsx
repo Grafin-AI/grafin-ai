@@ -54,7 +54,7 @@ function PartyCard({ txn, side, onOpenUserProfile }: {
     <div className="bg-card border border-border rounded-xl px-4 py-3.5 flex flex-col gap-1.5 min-w-0">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-[15px] font-semibold truncate">{entityName || '—'}</span>
-      <span className="font-mono tabular-nums text-[13px] text-text-secondary truncate">
+      <span className="num text-[13px] text-text-secondary truncate">
         <span>{bank}</span> · <span>{account}</span>
       </span>
       {onOpenUserProfile && (
@@ -63,7 +63,7 @@ function PartyCard({ txn, side, onOpenUserProfile }: {
           aria-label={`Buka profil ${label.toLowerCase()}`}
           disabled={!entityId}
           onClick={() => entityId && onOpenUserProfile(entityId)}
-          className="self-start font-mono text-xs text-link hover:text-[#095A96] disabled:text-muted-foreground disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8] rounded"
+          className="self-start num text-xs text-link hover:text-[#095A96] disabled:text-muted-foreground disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8] rounded"
         >
           {entityId ? `Profil ${entityId}` : 'Profil tidak tersedia'}
         </button>
@@ -102,7 +102,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
             <div className="flex items-center gap-2.5 flex-wrap">
               <DialogTitle className="m-0 text-xl font-semibold">
                 {isLoading ? <Skeleton className="h-6 w-48" /> : isError ? 'Gagal memuat transaksi' : (
-                  <>Transaksi <span className="font-mono tabular-nums">#{txn?.id ?? transactionId}</span></>
+                  <>Transaksi <span className="num">#{txn?.id ?? transactionId}</span></>
                 )}
               </DialogTitle>
               {pill && <span className={`px-2.5 py-[3px] rounded-full text-xs font-semibold ${pill.cls}`}>{pill.label}</span>}
@@ -111,7 +111,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
               )}
             </div>
             {txn && (
-              <span className="font-mono tabular-nums text-[13px] text-muted-foreground">
+              <span className="num text-[13px] text-muted-foreground">
                 {formatDateTime(txn.event_time)} · {txn.type} · {formatAmount(txn.amount, txn.currency || 'IDR')}
               </span>
             )}
@@ -119,7 +119,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
           {txn && (
             <div className="flex flex-col items-end shrink-0">
               <span className="text-xs text-muted-foreground">Skor risiko</span>
-              <span className={`font-mono tabular-nums text-[30px] leading-tight font-semibold ${scoreColor(txn.fraud_score)}`}>
+              <span className={`num text-[30px] leading-tight font-semibold ${scoreColor(txn.fraud_score)}`}>
                 {txn.fraud_score.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>

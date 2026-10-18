@@ -64,7 +64,7 @@ function InstitutionCard({ inst, maxRate }: { inst: InstitutionStat; maxRate: nu
           node aktif
         </span>
       </div>
-      <span className="font-mono tabular-nums text-[22px] font-semibold" title="Jumlah transaksi">
+      <span className="num text-[22px] font-semibold" title="Jumlah transaksi">
         {fmtInt(inst.transactions)}
       </span>
       <div
@@ -77,7 +77,7 @@ function InstitutionCard({ inst, maxRate }: { inst: InstitutionStat; maxRate: nu
       >
         <div className="h-1.5 bg-flagged" style={{ width: `${width}%` }} />
       </div>
-      <div className="font-mono tabular-nums flex justify-between text-xs text-muted-foreground">
+      <div className="num flex justify-between text-xs text-muted-foreground">
         <span>ditandai {fmtPct(inst.flagged_rate)}</span>
         <span className="text-blocked">blokir {fmtInt(inst.blocked)}</span>
       </div>
@@ -95,7 +95,7 @@ function FlowMatrixTable({ matrix }: { matrix: FlowMatrix }) {
           <tr>
             <th scope="col" className="text-muted-foreground font-medium text-left px-2 py-1">dari \ ke</th>
             {matrix.banks.map((b) => (
-              <th key={b} scope="col" className="font-mono tabular-nums text-muted-foreground font-medium px-2 py-1" title={b}>
+              <th key={b} scope="col" className="num text-muted-foreground font-medium px-2 py-1" title={b}>
                 {short(b)}
               </th>
             ))}
@@ -104,7 +104,7 @@ function FlowMatrixTable({ matrix }: { matrix: FlowMatrix }) {
         <tbody>
           {matrix.banks.map((from, i) => (
             <tr key={from}>
-              <th scope="row" className="font-mono tabular-nums text-text-secondary font-medium text-left px-2 py-1 whitespace-nowrap" title={from}>
+              <th scope="row" className="num text-text-secondary font-medium text-left px-2 py-1 whitespace-nowrap" title={from}>
                 {short(from)}
               </th>
               {matrix.cells[i].map((v, j) => {
@@ -112,7 +112,7 @@ function FlowMatrixTable({ matrix }: { matrix: FlowMatrix }) {
                 return (
                   <td
                     key={matrix.banks[j]}
-                    className="font-mono tabular-nums w-14 h-9 text-center rounded-md"
+                    className="num w-14 h-9 text-center rounded-md"
                     style={{ background: c.bg, color: c.fg }}
                     title={`${from} → ${matrix.banks[j]}: ${fmtInt(v)} terflag · ${fmtIDR(matrix.amounts[i][j])}`}
                   >
@@ -147,7 +147,7 @@ function PrivacyShield() {
       </div>
       <pre
         aria-label="Contoh payload yang dikirim node"
-        className="font-mono tabular-nums m-0 p-3 rounded-lg bg-card-2 border border-border text-xs leading-relaxed text-text-secondary whitespace-pre-wrap"
+        className="num m-0 p-3 rounded-lg bg-card-2 border border-border text-xs leading-relaxed text-text-secondary whitespace-pre-wrap"
       >{`{
   "src": "sha256:9f2c…41ab",
   "dst": "sha256:07de…c3f0",

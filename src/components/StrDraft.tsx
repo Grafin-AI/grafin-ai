@@ -108,7 +108,7 @@ export function StrDraft({ draft, pending = false, error = null, canGenerate = f
           <FileText className="w-4 h-4 text-[#139EF6]" aria-hidden="true" />
           Draf LTKM
         </h3>
-        {draft && <span className="font-mono tabular-nums text-xs text-muted-foreground">{draft.nomor_draf}</span>}
+        {draft && <span className="num text-xs text-muted-foreground">{draft.nomor_draf}</span>}
       </div>
 
       {draft ? (
