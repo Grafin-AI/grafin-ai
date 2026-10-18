@@ -1,0 +1,4 @@
+Bank Name,Bank ID,Account Number,Entity ID,Entity Name,risk_score,risk_category
+Bank Rakyat Indonesia (BRI),10,8000EBD30,80062E240,Dody Sunyoto,1.0,Low
+Bank Mandiri,20,8000F4580,800C998A0,Nisa Maulidya,2.5,Medium
+Bank Negara Indonesia (BNI),10,8000F4670,800C47F50,Rani Jaya,8.0,High
