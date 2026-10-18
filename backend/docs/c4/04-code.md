@@ -908,7 +908,7 @@ class LoginRequest(BaseModel):
     password: str
 ```
 
-- **Description**: Request body for `POST /api/v1/auth/login`. `email` is plain `str` (not `EmailStr`) because login performs an exact database lookup; using `EmailStr` caused Pydantic to reject the seeded `admin@garda.local` address with a 422 due to the reserved `.local` TLD.
+- **Description**: Request body for `POST /api/v1/auth/login`. `email` is plain `str` (not `EmailStr`) because login performs an exact database lookup; using `EmailStr` caused Pydantic to reject the seeded `admin@grafin.ai` address with a 422 due to the reserved `.local` TLD.
 
 ### Class: `RefreshRequest`
 
@@ -1973,7 +1973,7 @@ async def ensure_admin(session: AsyncSession, email: str, password: str) -> User
 async def _main() -> None
 ```
 
-- **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@garda.local` / `admin`) and commits the transaction. There is no clock to seed: "now" is derived from the ingested data, so an empty database simply has no timeline yet.
+- **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@grafin.ai` / `admin`) and commits the transaction. There is no clock to seed: "now" is derived from the ingested data, so an empty database simply has no timeline yet.
 
 ---
 
@@ -2482,7 +2482,7 @@ flowchart TB
 **Updated 2026-06-23**
 
 - **`api/ws.py` rewritten**: Replaced the concurrent reader-task / writer-task / `asyncio.Queue` / `receive_text` disconnect-detector pattern with a single `while True: pubsub.get_message(timeout=15)` relay loop. The prior pattern worked under Starlette's in-process `TestClient` transport but silently dropped frames under uvicorn's real WebSocket transport; the single-loop approach works correctly under both. `_QUEUE_MAX` and the `{"type":"resync"}` sentinel are removed.
-- **`api/schemas.py`**: `LoginRequest.email` and `MeResponse.email` changed from `EmailStr` to plain `str`. `EmailStr` rejected the seeded `admin@garda.local` address (reserved `.local` TLD) with a 422 during login. Since login is an exact lookup, format validation adds no security benefit.
+- **`api/schemas.py`**: `LoginRequest.email` and `MeResponse.email` changed from `EmailStr` to plain `str`. `EmailStr` rejected the seeded `admin@grafin.ai` address (reserved `.local` TLD) with a 422 during login. Since login is an exact lookup, format validation adds no security benefit.
 - **`tests/test_ws_uvicorn.py` added**: New real-transport integration test suite. Starts the app under a subprocess uvicorn, connects a real `websockets` client, publishes to Redis, and asserts event delivery. This covers the transport bug that Starlette's in-process `TestClient` masked.
 
 ---

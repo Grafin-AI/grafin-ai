@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,8 +21,15 @@ async def ensure_admin(session: AsyncSession, email: str, password: str):
 
 
 async def _main() -> None:
+    # Dev convenience only: never create a default-password admin in production.
+    email = os.environ.get("GARDA_ADMIN_EMAIL", "admin@grafin.ai")
+    password = os.environ.get("GARDA_ADMIN_PASSWORD")
+    if password is None:
+        if os.environ.get("GARDA_ENV", "development") == "production":
+            return
+        password = "admin"
     async with _maker()() as session:
-        await ensure_admin(session, "admin@garda.local", "admin")
+        await ensure_admin(session, email, password)
         await session.commit()
 
 
