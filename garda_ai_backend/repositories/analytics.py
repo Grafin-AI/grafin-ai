@@ -34,7 +34,9 @@ class AnalyticsRepository:
         ]
 
     async def confusion_counts(self, now: datetime) -> dict:
-        predicted = TransactionEvent.status.in_(("flagged", "blocked"))
+        # "blocked" = the F1-optimal threshold, the same definition as the model's reported F1;
+        # "flagged" is a high-recall review queue and would understate precision.
+        predicted = TransactionEvent.status == "blocked"
         actual = Transaction.is_laundering.is_(True)
         tp = func.sum(case((predicted & actual, 1), else_=0))
         fp = func.sum(case((predicted & ~actual, 1), else_=0))
