@@ -462,3 +462,91 @@ def test_parse_narrative_extra_fields_best_effort():
 def test_parse_narrative_prefixes_missing_action_verb():
     out = parse_narrative(json.dumps({**LLM_NARRATIVE, "recommendation": "Tinjau ulang."}), "TINJAU")
     assert out["recommendation"] == "TINJAU: Tinjau ulang."
+
+
+# ---------------------------------------------------------------- LTKM draft
+
+STR_URL = f"/api/v1/transactions/{TARGET}/str-draft"
+STR_LLM = {
+    "kronologi": "Pihak Pengirim mentransfer dana ke Pihak Penerima melalui RTGS.",
+    "indikator": ["Fan-in tinggi pada rekening penerima", "  ", 7, "Nominal 10x median"],
+    "analisis": "Pola konsisten dengan rekening penampung.",
+    "rekomendasi": "Lanjutkan verifikasi dan pertimbangkan pelaporan.",
+}
+
+
+def _two_call_handler(calls: list, str_text: str):
+    """Explanation call -> LLM_NARRATIVE; LTKM call (its own system prompt) -> str_text."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        system = json.loads(request.content)["system"]
+        text = str_text if "LTKM" in system and "DRAF" in system else json.dumps(LLM_NARRATIVE)
+        return httpx.Response(200, json={"content": [{"type": "text", "text": text}]})
+    return handler
+
+
+async def test_str_draft_requires_persisted_explanation(make_client):
+    c = await make_client()
+    await c.post(URL, headers=_auth())  # rules fallback: not persisted
+    r = await c.post(STR_URL, headers=_auth())
+    assert r.status_code == 409 and r.json() == {"detail": "explanation_required"}
+    r = await c.post("/api/v1/transactions/999/str-draft", headers=_auth())
+    assert r.status_code == 404 and r.json() == {"detail": "transaction not found"}
+    assert (await c.post(STR_URL)).status_code in (401, 403)
+
+
+async def test_str_draft_generated_stored_and_masked(make_client, session):
+    calls: list[httpx.Request] = []
+    s = _settings(llm_provider="anthropic", llm_api_key="k")
+    c = await make_client(s, _two_call_handler(calls, json.dumps(STR_LLM)))
+    assert (await c.post(URL, headers=_auth())).json()["persisted"] is True
+    r = await c.post(STR_URL, headers=_auth())
+    assert r.status_code == 200
+    draft = r.json()
+    assert draft == {
+        "nomor_draf": f"LTKM-DRAFT-{TARGET}",
+        "pihak": {
+            "pengirim": {"nama": "N**** S****", "rekening": "SA", "bank": "Bank A"},
+            "penerima": {"nama": "N**** R****", "rekening": "RH", "bank": "Bank B"},
+        },
+        "kronologi": STR_LLM["kronologi"],
+        "indikator": ["Fan-in tinggi pada rekening penerima", "Nominal 10x median"],
+        "analisis": STR_LLM["analisis"],
+        "rekomendasi": STR_LLM["rekomendasi"],
+        "catatan": "DRAF — perlu verifikasi analis sebelum dilaporkan ke PPATK",
+    }
+    assert len(calls) == 2
+    prompt = json.loads(calls[1].content)
+    user_prompt = prompt["messages"][0]["content"]
+    assert "Nama SA" not in user_prompt and "Nama RH" not in user_prompt  # no names to LLM
+    assert "uu-tppu-pelaporan" in user_prompt and "HANYA" in prompt["system"]
+
+    row = await ExplanationsRepository(session).get(TARGET)
+    assert row.str_draft["pihak"]["pengirim"]["nama"] == "N**** S****"  # stored masked
+    assert row.str_generated_at is not None
+
+    # Stored: no second LLM call; GET explanation carries it.
+    assert (await c.post(STR_URL, headers=_auth())).json() == draft
+    assert len(calls) == 2
+    assert (await c.get(URL, headers=_auth())).json()["str_draft"] == draft
+    # Admin + ?unmasked=true sees raw names; analysts never do.
+    admin = (await c.post(f"{STR_URL}?unmasked=true", headers=_auth("admin"))).json()
+    assert admin["pihak"]["pengirim"]["nama"] == "Nama SA"
+    analyst = (await c.post(f"{STR_URL}?unmasked=true", headers=_auth())).json()
+    assert analyst["pihak"]["pengirim"]["nama"] == "N**** S****"
+    got = (await c.get(f"{URL}?unmasked=true", headers=_auth("admin"))).json()
+    assert got["str_draft"]["pihak"]["penerima"]["nama"] == "Nama RH"
+
+
+@pytest.mark.parametrize("bad", [
+    "bukan json",
+    json.dumps({**STR_LLM, "indikator": []}),
+    json.dumps({k: v for k, v in STR_LLM.items() if k != "analisis"}),
+])
+async def test_str_draft_llm_failure_is_502_and_not_stored(make_client, session, bad):
+    s = _settings(llm_provider="anthropic", llm_api_key="k")
+    c = await make_client(s, _two_call_handler([], bad))
+    assert (await c.post(URL, headers=_auth())).json()["persisted"] is True
+    r = await c.post(STR_URL, headers=_auth())
+    assert r.status_code == 502 and r.json() == {"detail": "str_generation_failed"}
+    assert (await ExplanationsRepository(session).get(TARGET)).str_draft is None

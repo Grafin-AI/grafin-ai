@@ -15,6 +15,7 @@ from garda_ai_backend.api.users_view import can_unmask
 from garda_ai_backend.api.view_schemas import (
     LiveItem,
     LiveResponse,
+    StrDraft,
     TransactionDetail,
     TransactionExplanation,
 )
@@ -22,6 +23,11 @@ from garda_ai_backend.repositories.explanations import ExplanationsRepository
 from garda_ai_backend.repositories.transactions import TransactionsRepository
 from garda_ai_backend.repositories.users import UserRepository
 from garda_ai_backend.services.explain import generate_explanation, load_explanation
+from garda_ai_backend.services.explain.str_draft import (
+    StrGenerationFailed,
+    generate_str_draft,
+    present_draft,
+)
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
@@ -67,9 +73,19 @@ async def _username(session: SessionDep, user: CurrentUser) -> str:
     return found.email if found is not None else f"user-{user.id}"
 
 
+async def _shape_explanation(
+    session: SessionDep, result: dict, user: CurrentUser, unmasked: bool
+) -> TransactionExplanation:
+    if result.get("str_draft") is not None:
+        result = {**result, "str_draft": await present_draft(
+            session, result["transaction_id"], result["str_draft"], can_unmask(user, unmasked)
+        )}
+    return TransactionExplanation(**result)
+
+
 @router.get("/{transaction_id}/explanation", response_model=TransactionExplanation)
 async def get_explanation(
-    transaction_id: int, session: SessionDep, _: CurrentUserDep
+    transaction_id: int, session: SessionDep, user: CurrentUserDep, unmasked: bool = False
 ) -> TransactionExplanation:
     """The stored (LLM) explanation. Nothing is generated here: 404
     ``explanation_not_generated`` tells the UI to offer the generate button."""
@@ -78,7 +94,7 @@ async def get_explanation(
         await _not_found_or(
             session, transaction_id, "explanation_not_generated", status.HTTP_404_NOT_FOUND
         )
-    return TransactionExplanation(**result)
+    return await _shape_explanation(session, result, user, unmasked)
 
 
 @router.post("/{transaction_id}/explanation", response_model=TransactionExplanation)
@@ -88,6 +104,7 @@ async def post_explanation(
     settings: SettingsDep,
     http_client: HttpClientDep,
     user: CurrentUserDep,
+    unmasked: bool = False,
 ) -> TransactionExplanation:
     """Generate (or return the stored) explanation. LLM results are persisted; a rules
     fallback comes back with ``persisted: false`` and is not stored."""
@@ -96,4 +113,31 @@ async def post_explanation(
     )
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
-    return TransactionExplanation(**result)
+    return await _shape_explanation(session, result, user, unmasked)
+
+
+@router.post("/{transaction_id}/str-draft", response_model=StrDraft)
+async def post_str_draft(
+    transaction_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    http_client: HttpClientDep,
+    user: CurrentUserDep,
+    unmasked: bool = False,
+) -> StrDraft:
+    """LTKM draft from the persisted explanation (409 ``explanation_required`` without
+    one). Returns the stored draft if any; LLM failure -> 502, nothing stored."""
+    row = await ExplanationsRepository(session).get(transaction_id)
+    if row is None:
+        await _not_found_or(
+            session, transaction_id, "explanation_required", status.HTTP_409_CONFLICT
+        )
+    try:
+        draft = await generate_str_draft(session, http_client, settings, row)
+    except StrGenerationFailed:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="str_generation_failed"
+        ) from None
+    return StrDraft(
+        **await present_draft(session, transaction_id, draft, can_unmask(user, unmasked))
+    )
