@@ -76,7 +76,7 @@ export function TransactionVolume() {
               iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: CHART.axis }}
               formatter={(v) => (v === 'safe' ? 'Disetujui' : 'Berisiko')}
             />
-            <Bar dataKey="safe" stackId="v" fill={CHART.brandDeep} />
+            <Bar dataKey="safe" stackId="v" fill={CHART.brandSoft} />
             <Bar dataKey="risky" stackId="v" fill={CHART.flagged} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
