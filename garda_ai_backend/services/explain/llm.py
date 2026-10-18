@@ -26,7 +26,7 @@ log = structlog.get_logger()
 
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5-5",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.8-flash",
     "ollama": "llama3.1:8b",
 }
 DEFAULT_BASE_URLS = {

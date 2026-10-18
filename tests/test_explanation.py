@@ -395,8 +395,8 @@ async def test_gemini_and_ollama_request_shape(make_client, session):
 
     c = await make_client(_settings(llm_provider="gemini", llm_api_key="g-key"), handler)
     body = (await c.post(URL, headers=_auth())).json()
-    assert body["source"] == "llm" and body["model"] == "gemini-2.5-flash"
-    assert seen[0].url.path == "/v1beta/models/gemini-2.5-flash:generateContent"
+    assert body["source"] == "llm" and body["model"] == "gemini-3.8-flash"
+    assert seen[0].url.path == "/v1beta/models/gemini-3.8-flash:generateContent"
     assert seen[0].headers["x-goog-api-key"] == "g-key" and "key" not in seen[0].url.params
     sent = json.loads(seen[0].content)
     assert sent["systemInstruction"]["parts"][0]["text"].startswith("Anda adalah analis")

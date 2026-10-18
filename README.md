@@ -38,6 +38,6 @@ Required: `DATABASE_URL`, `SCORING_URL`, `SCORING_TOKEN`, `INGEST_TOKEN` (>=16 c
 | `GARDA_MODEL_NAME` | empty | Real model behind scoring; when set, health reports `model_accuracy_simulated=false`. |
 | `GARDA_LLM_PROVIDER` | `none` | `none` \| `anthropic` \| `gemini` \| `ollama`. `none` = deterministic rules narrative. |
 | `GARDA_LLM_API_KEY` | empty | Provider key (anthropic, gemini). Never logged. |
-| `GARDA_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-2.5-flash` / `llama3.1:8b` |
+| `GARDA_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b` |
 | `GARDA_LLM_BASE_URL` | per provider | `https://api.anthropic.com` / `https://generativelanguage.googleapis.com` / `http://host.docker.internal:11434` |
 | `GARDA_LLM_TIMEOUT_S` | `20` | Per-call timeout; on timeout/error/invalid JSON the rules narrative is returned. |

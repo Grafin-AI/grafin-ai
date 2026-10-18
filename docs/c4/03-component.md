@@ -91,7 +91,7 @@ The only public symbol. Returns the singleton `Settings` instance.
 | `model_name` | `str` | `""` | `GARDA_MODEL_NAME` — set → system health reports `model_accuracy_simulated=false` + `model_name` |
 | `llm_provider` | `none\|anthropic\|gemini\|ollama` | `none` | `GARDA_LLM_PROVIDER` — explanation narrative source (`none` = rules only) |
 | `llm_api_key` | `SecretStr` | `""` | `GARDA_LLM_API_KEY` (never logged) |
-| `llm_model` | `str` | provider default | `GARDA_LLM_MODEL` (`claude-sonnet-5-5` / `gemini-2.5-flash` / `llama3.1:8b`) |
+| `llm_model` | `str` | provider default | `GARDA_LLM_MODEL` (`claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b`) |
 | `llm_base_url` | `str` | provider default | `GARDA_LLM_BASE_URL` |
 | `llm_timeout_s` | `float` | `20` | `GARDA_LLM_TIMEOUT_S` |
 
