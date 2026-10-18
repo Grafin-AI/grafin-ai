@@ -1,26 +1,15 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Badge } from './ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { ScrollArea } from './ui/scroll-area';
-import { Button } from './ui/button';
+import { useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { Skeleton } from './ui/skeleton';
 import {
-  Building,
-  CreditCard,
-  Clock,
-  AlertTriangle,
-  Shield,
-  Eye,
-  TrendingUp,
-  Users,
-  Activity,
-  X,
-  Download,
-  Flag,
-  ArrowRight
-} from 'lucide-react';
-import { useTransactionDetail, useTransactionExplanation } from '../api/queries';
-import type { TransactionDetail } from '../api/types';
+  apiErrorMessage, useGenerateExplanation, useGenerateStrDraft, useTransactionDetail,
+  useTransactionExplanation,
+} from '../api/queries';
+import type { Status, TransactionDetail } from '../api/types';
+import { InsightNarrator } from './InsightNarrator';
+import { NetworkGraph } from './NetworkGraph';
+import { StrDraft } from './StrDraft';
 
 interface TransactionDetailsModalProps {
   transactionId: number | null;
@@ -29,355 +18,167 @@ interface TransactionDetailsModalProps {
   onOpenUserProfile?: (entityId: string) => void;
 }
 
+const STATUS_PILL: Record<Status, { label: string; cls: string }> = {
+  blocked: { label: 'DIBLOKIR', cls: 'bg-[#3A1420] text-[#F2546B]' },
+  flagged: { label: 'DITANDAI', cls: 'bg-[#33250D] text-[#F5B14C]' },
+  approved: { label: 'DISETUJUI', cls: 'bg-[#0F2E25] text-[#2FD3A0]' },
+};
+
+const scoreColor = (s: number) => (s >= 0.85 ? 'text-[#F2546B]' : s >= 0.6 ? 'text-[#F5B14C]' : 'text-[#2FD3A0]');
+
+const formatAmount = (amount: number, currency = 'IDR') =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(amount);
+
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+
 type Side = 'from' | 'to';
 
-function PartyBlock({ txn, side, onOpenUserProfile }: {
+function PartyCard({ txn, side, onOpenUserProfile }: {
   txn: TransactionDetail;
   side: Side;
   onOpenUserProfile?: (entityId: string) => void;
 }) {
   const isFrom = side === 'from';
-  const bankCode = isFrom ? txn.from_bank : txn.to_bank;
-  const bankName = isFrom ? txn.from_bank_name : txn.to_bank_name;
-  const account = isFrom ? txn.from_account : txn.to_account;
+  const bank = (isFrom ? txn.from_bank_name || txn.from_bank : txn.to_bank_name || txn.to_bank) || '—';
+  const account = (isFrom ? txn.from_account : txn.to_account) || '—';
   const entityId = isFrom ? txn.from_entity_id : txn.to_entity_id;
   const entityName = isFrom ? txn.from_entity_name : txn.to_entity_name;
   const label = isFrom ? 'Pengirim' : 'Penerima';
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-4">
-        <div className={`w-2 h-2 rounded-full ${isFrom ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
-        <h4 className="font-medium text-gray-900">{label}</h4>
-      </div>
-      <div className={`grid grid-cols-2 gap-4 p-4 rounded-lg border ${
-        isFrom ? 'bg-blue-50/50 border-blue-100' : 'bg-purple-50/50 border-purple-100'
-      }`}>
-        <div>
-          <p className="text-sm text-gray-500 mb-1">Bank</p>
-          <div className="flex items-center gap-2">
-            <Building className="w-4 h-4 text-gray-400" />
-            <p className="font-medium">{bankName || bankCode || '—'}</p>
-          </div>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500 mb-1">Rekening</p>
-          <p className="font-medium font-mono">{account || '—'}</p>
-        </div>
-        <div className="col-span-2">
-          <p className="text-sm text-gray-500 mb-1">Nama Entitas</p>
-          <p className="font-medium">{entityName || '—'}</p>
-        </div>
-        {onOpenUserProfile && (
-          <div className="col-span-2">
-            <p className="text-sm text-gray-500 mb-1">Entity ID</p>
-            <button
-              type="button"
-              aria-label={`Buka profil ${label.toLowerCase()}`}
-              disabled={!entityId}
-              onClick={() => entityId && onOpenUserProfile(entityId)}
-              className="font-medium font-mono text-[#139EF6] hover:text-[#0f7ec4] disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-2 group transition-colors text-sm"
-            >
-              {entityId ?? 'Tidak tersedia'}
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="bg-card border border-border rounded-xl px-4 py-3.5 flex flex-col gap-1.5 min-w-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-[15px] font-semibold truncate">{entityName || '—'}</span>
+      <span className="font-mono tabular-nums text-[13px] text-[#B4C1D6] truncate">
+        <span>{bank}</span> · <span>{account}</span>
+      </span>
+      {onOpenUserProfile && (
+        <button
+          type="button"
+          aria-label={`Buka profil ${label.toLowerCase()}`}
+          disabled={!entityId}
+          onClick={() => entityId && onOpenUserProfile(entityId)}
+          className="self-start font-mono text-xs text-[#7CC4FA] hover:text-[#B5DDFC] disabled:text-[#93A3BC] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#139EF6] rounded"
+        >
+          {entityId ? `Profil ${entityId}` : 'Profil tidak tersedia'}
+        </button>
+      )}
     </div>
   );
 }
 
 export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpenUserProfile }: TransactionDetailsModalProps) {
   const { data: txn, isLoading, isError } = useTransactionDetail(transactionId);
+  // GET only reads the stored explanation (null = not generated). No LLM call until the user asks.
+  const explanationQuery = useTransactionExplanation(transactionId, isOpen);
+  const generate = useGenerateExplanation(transactionId);
+  const draft = useGenerateStrDraft(transactionId);
+  const { reset: resetGenerate } = generate;
+  const { reset: resetDraft } = draft;
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
-      case 'flagged': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'blocked': return 'bg-red-100 text-red-800 border-red-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  // Mutation state belongs to one transaction: clear it when another one is opened.
+  useEffect(() => {
+    resetGenerate();
+    resetDraft();
+  }, [transactionId, resetGenerate, resetDraft]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved': return <Shield className="w-4 h-4 text-green-600" />;
-      case 'flagged': return <AlertTriangle className="w-4 h-4 text-yellow-600" />;
-      case 'blocked': return <X className="w-4 h-4 text-red-600" />;
-      default: return <Activity className="w-4 h-4 text-gray-600" />;
-    }
-  };
-
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const {
-    data: explanation,
-    isLoading: explanationLoading,
-    isError: explanationError,
-  } = useTransactionExplanation(transactionId, isOpen);
+  const explanation = explanationQuery.data;
+  const pill = txn ? STATUS_PILL[txn.status] ?? STATUS_PILL.flagged : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl sm:max-w-7xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            {isLoading ? (
-              <Skeleton className="h-6 w-48" />
-            ) : isError ? (
-              <span className="text-red-600">Failed to load transaction</span>
-            ) : txn ? (
-              <>
-                <div className="flex items-center gap-2">
-                  {getStatusIcon(txn.status)}
-                  Detail Transaksi TXN-{txn.id}
-                </div>
-                <Badge className={`text-xs capitalize ${getStatusColor(txn.status)}`}>
-                  {txn.status}
-                </Badge>
-              </>
-            ) : null}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-[1200px] sm:max-w-[1200px] w-[calc(100%-2rem)] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden rounded-2xl border-[#23304A] bg-[#0B1120] text-[#E6EDF7]"
+      >
+        {/* Header */}
+        <div className="flex justify-between items-start gap-4 px-[26px] py-[22px] pr-14 border-b border-[#1C2740]">
+          <div className="flex flex-col gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <DialogTitle className="m-0 text-xl font-semibold">
+                {isLoading ? <Skeleton className="h-6 w-48" /> : isError ? 'Gagal memuat transaksi' : (
+                  <>Transaksi <span className="font-mono tabular-nums">#{txn?.id ?? transactionId}</span></>
+                )}
+              </DialogTitle>
+              {pill && <span className={`px-2.5 py-[3px] rounded-full text-xs font-semibold ${pill.cls}`}>{pill.label}</span>}
+              {txn?.typology && (
+                <span className="px-2.5 py-[3px] rounded-full text-xs bg-[#142238] text-[#7CC4FA]">{txn.typology}</span>
+              )}
+            </div>
+            {txn && (
+              <span className="font-mono tabular-nums text-[13px] text-[#93A3BC]">
+                {formatDateTime(txn.event_time)} · {txn.type} · {formatAmount(txn.amount, txn.currency || 'IDR')}
+              </span>
+            )}
+          </div>
+          {txn && (
+            <div className="flex flex-col items-end shrink-0">
+              <span className="text-xs text-[#93A3BC]">Skor risiko</span>
+              <span className={`font-mono tabular-nums text-[30px] leading-tight font-semibold ${scoreColor(txn.fraud_score)}`}>
+                {txn.fraud_score.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
+        </div>
 
-        <ScrollArea className="max-h-[calc(90vh-80px)]">
+        <div className="overflow-y-auto min-h-0">
           {isLoading && (
-            <div className="space-y-6 pr-4 p-4">
-              <Skeleton className="h-40 w-full" />
-              <Skeleton className="h-40 w-full" />
-              <Skeleton className="h-32 w-full" />
+            <div className="p-[26px] grid gap-4" aria-label="Memuat transaksi">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-4">
+                <Skeleton className="h-96 w-full" />
+                <Skeleton className="h-96 w-full" />
+              </div>
             </div>
           )}
 
           {isError && (
-            <div className="p-8 text-center text-red-600">
-              <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
+            <div className="p-8 text-center text-[#F2546B]" role="alert">
+              <AlertTriangle className="w-8 h-8 mx-auto mb-2" aria-hidden="true" />
               <p>Gagal memuat data transaksi. Silakan coba lagi.</p>
             </div>
           )}
 
           {txn && (
-            <div className="space-y-6 pr-4">
-              {/* Transaction Overview and Fraud Risk Assessment - Side by Side */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Transaction Overview */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CreditCard className="w-5 h-5 text-blue-600" />
-                      Informasi Transaksi
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <div>
-                      <p className="text-sm text-gray-500">ID Transaksi</p>
-                      <p className="font-medium">TXN-{txn.id}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Jenis Transaksi</p>
-                      <p className="font-medium">{txn.type}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Nominal</p>
-                      <p className="font-medium text-lg">{formatAmount(txn.amount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Mata Uang</p>
-                      <p className="font-medium">{txn.currency}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Waktu Transaksi</p>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        <p className="font-medium">{new Date(txn.event_time).toLocaleString('id-ID')}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Fraud Risk Assessment */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-red-600" />
-                      Penilaian Risiko Fraud
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-2xl font-bold min-w-[60px] ${
-                        txn.fraud_score > 0.7
-                          ? 'text-red-600'
-                          : txn.fraud_score > 0.4
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}>
-                        {Math.round(txn.fraud_score * 100)}%
-                      </span>
-                      <div className="flex-1">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div
-                            className={`h-2.5 rounded-full ${
-                              txn.fraud_score > 0.7
-                                ? 'bg-red-500'
-                                : txn.fraud_score > 0.4
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{ width: `${txn.fraud_score * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {txn.typology && (
-                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className="w-5 h-5 text-red-600" />
-                          <span className="font-medium text-red-800">Jenis Fraud Terdeteksi</span>
-                        </div>
-                        <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
-                          {txn.typology}
-                        </Badge>
-                      </div>
-                    )}
-
-                    <div>
-                      <p className="text-sm text-gray-500 mb-2">Faktor Risiko</p>
-                      <div className="flex flex-wrap gap-2">
-                        {explanationLoading ? (
-                          <Skeleton className="h-5 w-40" />
-                        ) : explanationError ? (
-                          <span className="text-xs text-gray-500">Faktor risiko tidak tersedia</span>
-                        ) : explanation && explanation.risk_factors.length > 0 ? (
-                          explanation.risk_factors.map((factor) => (
-                            <Badge key={factor.code} variant="secondary" className="text-xs" title={factor.detail}>
-                              {factor.label}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-xs text-gray-500">Tidak ada faktor risiko menonjol</span>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 px-[26px] py-[18px]">
+                <PartyCard txn={txn} side="from" onOpenUserProfile={onOpenUserProfile} />
+                <PartyCard txn={txn} side="to" onOpenUserProfile={onOpenUserProfile} />
               </div>
 
-              {/* Sender / Receiver */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ArrowRight className="w-5 h-5 text-[#139EF6]" />
-                    Detail Pengirim &amp; Penerima
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <PartyBlock txn={txn} side="from" onOpenUserProfile={onOpenUserProfile} />
-                    <PartyBlock txn={txn} side="to" onOpenUserProfile={onOpenUserProfile} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Detailed Analysis */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-blue-600" />
-                    Analisis Fraud Detail
-                  </CardTitle>
-                  {explanation && (
-                    <p className="text-xs text-gray-500">
-                      {explanation.source === 'llm'
-                        ? `Dihasilkan oleh ${explanation.model ?? 'LLM'}`
-                        : 'Ringkasan berbasis aturan'}
-                      {explanation.generated_at && ` · ${new Date(explanation.generated_at).toLocaleString('id-ID')}`}
-                    </p>
-                  )}
-                </CardHeader>
-                {explanationLoading ? (
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-gray-500">Menganalisis transaksi…</p>
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </CardContent>
-                ) : explanationError || !explanation ? (
-                  <CardContent>
-                    <p className="text-sm text-gray-500">Analisis belum tersedia untuk transaksi ini.</p>
-                  </CardContent>
-                ) : (
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <Activity className="w-4 h-4" />
-                      Pattern Matching
-                    </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {explanation.pattern_matching}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Analisis Perilaku
-                    </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {explanation.behavior_analysis}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <Eye className="w-4 h-4" />
-                      Analisis Jaringan
-                    </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
-                      {explanation.network_analysis}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <Flag className="w-4 h-4" />
-                      Rekomendasi Tindakan
-                    </h4>
-                    <div className={`p-4 rounded-lg border-l-4 ${
-                      txn.status === 'blocked'
-                        ? 'bg-red-50 border-red-500'
-                        : txn.status === 'flagged'
-                        ? 'bg-yellow-50 border-yellow-500'
-                        : 'bg-green-50 border-green-500'
-                    }`}>
-                      <p className="text-sm text-gray-700 font-medium leading-relaxed">
-                        {explanation.recommendation}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-                )}
-              </Card>
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  Export Report
-                </Button>
-                <Button variant="outline" onClick={onClose}>
-                  Tutup
-                </Button>
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-4 px-[26px] pb-6">
+                <InsightNarrator
+                  explanation={explanation}
+                  status={txn.status}
+                  isLoading={explanationQuery.isLoading}
+                  loadError={explanationQuery.isError}
+                  generating={generate.isPending}
+                  generateError={generate.isError ? apiErrorMessage(generate.error) : null}
+                  onGenerate={() => generate.mutate()}
+                  draftPending={draft.isPending}
+                  onGenerateDraft={() => draft.mutate()}
+                />
+                <div className="flex flex-col gap-4 min-w-0">
+                  <NetworkGraph transactionId={transactionId} enabled={isOpen} />
+                  <StrDraft
+                    draft={explanation?.str_draft}
+                    pending={draft.isPending}
+                    error={draft.isError ? apiErrorMessage(draft.error) : null}
+                    canGenerate={!!explanation?.persisted}
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
