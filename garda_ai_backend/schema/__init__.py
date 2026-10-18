@@ -3,8 +3,9 @@ from garda_ai_backend.schema.reference import Account, Bank, Entity
 from garda_ai_backend.schema.transactions import Transaction, TransactionEvent
 from garda_ai_backend.schema.alerts import Alert
 from garda_ai_backend.schema.users import User
+from garda_ai_backend.schema.explanations import StoredExplanation
 
 __all__ = [
     "Base", "Bank", "Entity", "Account", "Transaction",
-    "TransactionEvent", "Alert", "User",
+    "TransactionEvent", "Alert", "User", "StoredExplanation",
 ]

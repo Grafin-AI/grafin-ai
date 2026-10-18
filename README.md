@@ -16,7 +16,8 @@ uv run ruff check garda_ai_backend
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/transactions/{id}` | Detail with `from_*`/`to_*` bank, account, entity. Entity names masked unless admin + `?unmasked=true`. No `is_laundering`. |
-| GET | `/api/v1/transactions/{id}/explanation` | `TransactionExplanation`: `source` (`llm`\|`rules`), `model`, `pattern_matching`, `behavior_analysis`, `network_analysis`, `recommendation` (starts with PROSES/TINJAU/TUNDA/BLOKIR), `risk_factors[{code,label,detail}]`, `evidence{}`, `generated_at`. Cached in Redis `expl:{id}` for 24h. |
+| GET | `/api/v1/transactions/{id}/explanation` | Stored `TransactionExplanation` (Postgres `transaction_explanations`). 404 `explanation_not_generated` if the transaction has none yet; 404 `transaction not found` otherwise. Never calls the LLM. |
+| POST | `/api/v1/transactions/{id}/explanation` | Generate: returns the stored row if any (no LLM call); else LLM -> stored (`persisted: true`, first concurrent writer wins) or rules fallback (`source: "rules"`, `persisted: false`, not stored). Fields: `source`, `model`, `pattern_matching`, `behavior_analysis`, `network_analysis`, `recommendation` (starts with PROSES/TINJAU/TUNDA/BLOKIR), `reason_code` (`GA-*`), `confidence` (`Tinggi`/`Sedang`/`Rendah`), `references[{id,title}]` (curated KB in `services/explain/knowledge.py`), `risk_factors[{code,label,detail}]`, `evidence{}`, `generated_at`, `persisted`, `str_draft`. |
 | GET | `/api/v1/users/{entity_id}/profile` | Direct lookup by entity id. |
 | GET | `/api/v1/system/health` | `model_accuracy_simulated`, `model_name`. |
 

@@ -14,6 +14,12 @@ import httpx
 import structlog
 
 from garda_ai_backend.config import Settings
+from garda_ai_backend.services.explain.knowledge import (
+    REASON_CODES,
+    KnowledgeEntry,
+    normalize_confidence,
+    normalize_reason_code,
+)
 from garda_ai_backend.services.explain.rules import ACTION_VERBS, NARRATIVE_FIELDS
 
 log = structlog.get_logger()
@@ -33,31 +39,49 @@ SYSTEM_PROMPT = (
     "Anda adalah analis Anti Pencucian Uang (APU) senior yang menyusun penjelasan "
     "transaksi untuk konteks regulator Indonesia (OJK, Bank Indonesia, PPATK). "
     "Tulis dalam Bahasa Indonesia baku dan formal. "
-    "Gunakan HANYA data pada JSON bukti (evidence) dan daftar faktor risiko yang "
-    "diberikan. Jangan pernah mengarang perangkat, alamat IP, lokasi, nama, nominal, "
-    "atau fakta lain yang tidak tercantum. "
+    "Gunakan HANYA data pada JSON bukti (evidence), daftar faktor risiko, dan daftar "
+    "rujukan (references) yang diberikan. Jangan pernah mengarang perangkat, alamat IP, "
+    "lokasi, nama, nominal, nomor pasal, tenggat waktu, peraturan, atau fakta lain yang "
+    "tidak tercantum. Jika mengacu pada regulasi, gunakan hanya isi rujukan yang diberikan. "
     "Skor berasal dari model graph neural network (GNN) yang menilai transaksi dalam "
     "graf rekening; jelaskan sinyal pola dan jaringan dengan istilah tersebut "
     "(keterhubungan rekening, fan-in, fan-out, velositas). "
     "Jangan menjadikan jam transaksi sebagai indikator risiko (data ini tidak memiliki "
     "pola harian yang bermakna). "
-    "Setiap bidang terdiri dari 2-4 kalimat. "
-    "Balas HANYA dengan satu objek JSON valid tanpa teks lain, dengan tepat empat kunci "
-    "string: \"pattern_matching\", \"behavior_analysis\", \"network_analysis\", "
-    "\"recommendation\". Bidang \"recommendation\" WAJIB diawali kata kerja tindakan "
+    "Setiap bidang naratif terdiri dari 2-4 kalimat. "
+    "Balas HANYA dengan satu objek JSON valid tanpa teks lain, dengan kunci: "
+    "\"pattern_matching\", \"behavior_analysis\", \"network_analysis\", "
+    "\"recommendation\" (string), \"reason_code\" (salah satu kode alasan yang "
+    "diberikan), \"confidence\" (\"Tinggi\", \"Sedang\", atau \"Rendah\"), dan "
+    "\"references\" (array berisi id rujukan yang benar-benar Anda gunakan). "
+    "Bidang \"recommendation\" WAJIB diawali kata kerja tindakan "
     "dalam huruf kapital yang diberikan (PROSES, TINJAU, TUNDA, atau BLOKIR)."
 )
 
 
-def build_user_prompt(evidence: dict[str, Any], factors: list[dict], action: str) -> str:
+def _reference_payload(references: list[KnowledgeEntry]) -> list[dict[str, str]]:
+    return [{"id": e["id"], "title": e["title"], "text": e["text"]} for e in references]
+
+
+def build_user_prompt(
+    evidence: dict[str, Any],
+    factors: list[dict],
+    action: str,
+    references: list[KnowledgeEntry] | None = None,
+) -> str:
     payload = {"evidence": evidence, "risk_factors": factors}
+    refs = _reference_payload(references or [])
     return (
         "Data transaksi (JSON):\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
+        "Rujukan yang boleh digunakan (JSON):\n"
+        f"{json.dumps(refs, ensure_ascii=False, indent=2)}\n\n"
+        "Kode alasan yang tersedia (JSON):\n"
+        f"{json.dumps(REASON_CODES, ensure_ascii=False)}\n\n"
         f"Tindakan sistem berdasarkan status: {action}. Awali \"recommendation\" dengan "
         f"kata \"{action}\".\n"
         "Kembalikan objek JSON dengan kunci pattern_matching, behavior_analysis, "
-        "network_analysis, recommendation."
+        "network_analysis, recommendation, reason_code, confidence, references."
     )
 
 
@@ -139,8 +163,8 @@ async def _ollama(client: httpx.AsyncClient, s: Settings, system: str, user: str
 _PROVIDERS = {"anthropic": _anthropic, "gemini": _gemini, "ollama": _ollama}
 
 
-def parse_narrative(text: str, action: str) -> dict[str, str] | None:
-    """Strict-ish parse: one JSON object with the 4 non-empty string fields."""
+def extract_json_object(text: str) -> dict[str, Any] | None:
+    """One JSON object from model output, tolerating ``` fences and surrounding prose."""
     t = text.strip()
     if t.startswith("```"):
         t = t.strip("`")
@@ -155,9 +179,17 @@ def parse_narrative(text: str, action: str) -> dict[str, str] | None:
             obj = json.loads(t[start:end + 1])
         except ValueError:
             return None
-    if not isinstance(obj, dict):
+    return obj if isinstance(obj, dict) else None
+
+
+def parse_narrative(text: str, action: str) -> dict[str, Any] | None:
+    """The 4 narrative fields are mandatory (else None -> rules fallback). The extra
+    fields are best-effort: ``reason_code``/``confidence`` are None when invalid and
+    ``references`` is the raw list (or None); the service fills deterministic fallbacks."""
+    obj = extract_json_object(text)
+    if obj is None:
         return None
-    out: dict[str, str] = {}
+    out: dict[str, Any] = {}
     for key in NARRATIVE_FIELDS:
         value = obj.get(key)
         if not isinstance(value, str) or not value.strip():
@@ -166,7 +198,28 @@ def parse_narrative(text: str, action: str) -> dict[str, str] | None:
     first = out["recommendation"].split(maxsplit=1)[0].strip(".,:;-")
     if first not in ACTION_VERBS:
         out["recommendation"] = f"{action}: {out['recommendation']}"
+    out["reason_code"] = normalize_reason_code(obj.get("reason_code"))
+    out["confidence"] = normalize_confidence(obj.get("confidence"))
+    refs = obj.get("references")
+    out["references"] = refs if isinstance(refs, list) else None
     return out
+
+
+async def complete(
+    client: httpx.AsyncClient, settings: Settings, system: str, user: str, purpose: str
+) -> str | None:
+    """Raw model text, or None on any provider failure (logged by exception type only)."""
+    provider = _PROVIDERS.get(settings.llm_provider)
+    if provider is None:
+        return None
+    try:
+        return await provider(client, settings, system, user)
+    except Exception as exc:  # noqa: BLE001 — any provider failure means fallback
+        log.warning(
+            f"{purpose}.llm_failed", provider=settings.llm_provider,
+            model=resolve_model(settings), error=type(exc).__name__,
+        )
+        return None
 
 
 async def llm_narrative(
@@ -175,19 +228,13 @@ async def llm_narrative(
     evidence: dict[str, Any],
     factors: list[dict],
     action: str,
-) -> dict[str, str] | None:
-    provider = _PROVIDERS.get(settings.llm_provider)
-    if provider is None:
-        return None
-    try:
-        text = await provider(
-            client, settings, SYSTEM_PROMPT, build_user_prompt(evidence, factors, action)
-        )
-    except Exception as exc:  # noqa: BLE001 — any provider failure means rules fallback
-        log.warning(
-            "explain.llm_failed", provider=settings.llm_provider,
-            model=resolve_model(settings), error=type(exc).__name__,
-        )
+    references: list[KnowledgeEntry] | None = None,
+) -> dict[str, Any] | None:
+    text = await complete(
+        client, settings, SYSTEM_PROMPT,
+        build_user_prompt(evidence, factors, action, references), "explain",
+    )
+    if text is None:
         return None
     parsed = parse_narrative(text, action)
     if parsed is None:

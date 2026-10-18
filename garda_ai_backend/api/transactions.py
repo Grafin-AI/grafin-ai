@@ -1,10 +1,12 @@
+from typing import NoReturn
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from garda_ai_backend.api.deps import (
+    CurrentUser,
     CurrentUserDep,
     HttpClientDep,
     NowDep,
-    RedisDep,
     SessionDep,
     SettingsDep,
 )
@@ -16,8 +18,10 @@ from garda_ai_backend.api.view_schemas import (
     TransactionDetail,
     TransactionExplanation,
 )
+from garda_ai_backend.repositories.explanations import ExplanationsRepository
 from garda_ai_backend.repositories.transactions import TransactionsRepository
-from garda_ai_backend.services.explain import explain_transaction
+from garda_ai_backend.repositories.users import UserRepository
+from garda_ai_backend.services.explain import generate_explanation, load_explanation
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
@@ -49,16 +53,47 @@ async def detail(
     return TransactionDetail(**row)
 
 
+async def _not_found_or(
+    session: SessionDep, transaction_id: int, detail: str, code: int
+) -> NoReturn:
+    """Raise ``detail``/``code`` when the transaction exists, else 404 transaction not found."""
+    if await ExplanationsRepository(session).transaction_exists(transaction_id):
+        raise HTTPException(status_code=code, detail=detail)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
+
+
+async def _username(session: SessionDep, user: CurrentUser) -> str:
+    found = await UserRepository(session).get_by_id(user.id)
+    return found.email if found is not None else f"user-{user.id}"
+
+
 @router.get("/{transaction_id}/explanation", response_model=TransactionExplanation)
-async def explanation(
+async def get_explanation(
+    transaction_id: int, session: SessionDep, _: CurrentUserDep
+) -> TransactionExplanation:
+    """The stored (LLM) explanation. Nothing is generated here: 404
+    ``explanation_not_generated`` tells the UI to offer the generate button."""
+    result = await load_explanation(session, transaction_id)
+    if result is None:
+        await _not_found_or(
+            session, transaction_id, "explanation_not_generated", status.HTTP_404_NOT_FOUND
+        )
+    return TransactionExplanation(**result)
+
+
+@router.post("/{transaction_id}/explanation", response_model=TransactionExplanation)
+async def post_explanation(
     transaction_id: int,
     session: SessionDep,
-    redis: RedisDep,
     settings: SettingsDep,
     http_client: HttpClientDep,
-    _: CurrentUserDep,
+    user: CurrentUserDep,
 ) -> TransactionExplanation:
-    result = await explain_transaction(session, redis, http_client, settings, transaction_id)
+    """Generate (or return the stored) explanation. LLM results are persisted; a rules
+    fallback comes back with ``persisted: false`` and is not stored."""
+    result = await generate_explanation(
+        session, http_client, settings, transaction_id, await _username(session, user)
+    )
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
     return TransactionExplanation(**result)

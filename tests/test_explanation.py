@@ -7,14 +7,28 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from garda_ai_backend.api import deps
 from garda_ai_backend.config import get_settings
 from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
+from garda_ai_backend.repositories.explanations import ExplanationsRepository
+from garda_ai_backend.schema import (
+    Account,
+    Bank,
+    Entity,
+    StoredExplanation,
+    Transaction,
+    TransactionEvent,
+    User,
+)
 from garda_ai_backend.security.tokens import create_access_token
 from garda_ai_backend.services.explain.evidence import compute_evidence
+from garda_ai_backend.services.explain import knowledge as kb
 from garda_ai_backend.services.explain.llm import parse_narrative
+from garda_ai_backend.services.explain.rules import NARRATIVE_FIELDS
 
 T_TIME = datetime(2025, 9, 1, 3, 0, tzinfo=UTC)  # 03:00 -> night
 TARGET = 100
@@ -24,6 +38,9 @@ LLM_NARRATIVE = {
     "behavior_analysis": "Nominal jauh di atas median. Terjadi dini hari.",
     "network_analysis": "Penerima menerima dari banyak pengirim. Lintas bank.",
     "recommendation": "TUNDA transaksi. Lakukan EDD.",
+    "reason_code": "ga-gather",
+    "confidence": "sedang",
+    "references": ["tipologi-fan-in", "bogus-id", "faktor-velositas"],
 }
 
 
@@ -121,7 +138,6 @@ async def make_client(session, redis_url, explain_dataset, monkeypatch):
         opened.append(c)
         return c
 
-    _make.redis = test_redis
     yield _make
     app.dependency_overrides.clear()
     for c in opened:
@@ -176,18 +192,48 @@ async def test_evidence_unknown_is_none(session, explain_dataset):
 
 # ---------------------------------------------------------------- endpoint
 
+URL = f"/api/v1/transactions/{TARGET}/explanation"
+FULL_KEYS = {
+    "transaction_id", "source", "model", "pattern_matching", "behavior_analysis",
+    "network_analysis", "recommendation", "reason_code", "confidence", "references",
+    "risk_factors", "evidence", "generated_at", "persisted", "str_draft",
+}
 
-async def test_rules_when_provider_none(make_client):
+
+async def _stored(session, tid=TARGET):
+    return await ExplanationsRepository(session).get(tid)
+
+
+async def test_get_before_generation_is_not_generated(make_client):
     c = await make_client()
-    r = await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())
+    r = await c.get(URL, headers=_auth())
+    assert r.status_code == 404
+    assert r.json() == {"detail": "explanation_not_generated"}
+
+
+async def test_get_and_post_unknown_transaction(make_client):
+    c = await make_client()
+    for method in (c.get, c.post):
+        r = await method("/api/v1/transactions/999/explanation", headers=_auth())
+        assert r.status_code == 404
+        assert r.json() == {"detail": "transaction not found"}
+
+
+async def test_rules_when_provider_none_not_persisted(make_client, session):
+    c = await make_client()
+    r = await c.post(URL, headers=_auth())
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {
-        "transaction_id", "source", "model", "pattern_matching", "behavior_analysis",
-        "network_analysis", "recommendation", "risk_factors", "evidence", "generated_at",
-    }
+    assert set(body) == FULL_KEYS
     assert body["transaction_id"] == TARGET
     assert body["source"] == "rules" and body["model"] is None
+    assert body["persisted"] is False and body["str_draft"] is None
+    assert body["reason_code"] == "GA-FANIN"  # typology Fan-In
+    assert body["confidence"] == "Tinggi"  # score 0.92 >= 0.85
+    ref_ids = [ref["id"] for ref in body["references"]]
+    assert {"uu-tppu-umum", "ppatk-ltkm-indikator"} <= set(ref_ids)
+    assert "tipologi-fan-in" in ref_ids
+    assert all(ref["title"] for ref in body["references"])
     assert body["recommendation"].startswith("TUNDA")  # flagged, score >= 0.85
     for k in ("pattern_matching", "behavior_analysis", "network_analysis"):
         assert body[k].strip()
@@ -200,17 +246,27 @@ async def test_rules_when_provider_none(make_client):
     assert "high_velocity" not in codes  # 5 out / 6 in < 10
     assert body["evidence"]["receiver_distinct_senders_24h"] == 6
     assert body["generated_at"].endswith("Z")
+    # Not stored: GET still says not generated, so a retry stays possible.
+    assert await _stored(session) is None
+    assert (await c.get(URL, headers=_auth())).json() == {"detail": "explanation_not_generated"}
 
 
-async def test_llm_anthropic_valid_json(make_client):
+async def test_llm_anthropic_valid_json_persisted(make_client, session):
     calls: list[httpx.Request] = []
     s = _settings(llm_provider="anthropic", llm_api_key="sk-test-key")
     c = await make_client(s, _anthropic_handler(calls, json.dumps(LLM_NARRATIVE)))
-    r = await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())
+    r = await c.post(URL, headers=_auth())
+    assert r.status_code == 200
     body = r.json()
-    assert body["source"] == "llm"
+    assert set(body) == FULL_KEYS
+    assert body["source"] == "llm" and body["persisted"] is True
     assert body["model"] == "claude-sonnet-5-5"
     assert body["recommendation"] == LLM_NARRATIVE["recommendation"]
+    assert body["reason_code"] == "GA-GATHER" and body["confidence"] == "Sedang"
+    # bogus + not-provided ids dropped, titles filled server-side
+    assert body["references"] == [
+        {"id": "tipologi-fan-in", "title": kb.BY_ID["tipologi-fan-in"]["title"]},
+    ]
     assert body["risk_factors"]  # rules-derived factors still attached
     req = calls[0]
     assert req.url == "https://api.anthropic.com/v1/messages"
@@ -218,62 +274,114 @@ async def test_llm_anthropic_valid_json(make_client):
     assert req.headers["anthropic-version"] == "2023-06-01"
     sent = json.loads(req.content)
     assert sent["model"] == "claude-sonnet-5-5"
-    assert "PPATK" in sent["system"]
-    assert "receiver_distinct_senders_24h" in sent["messages"][0]["content"]
+    assert "PPATK" in sent["system"] and "HANYA" in sent["system"]
+    user_prompt = sent["messages"][0]["content"]
+    assert "receiver_distinct_senders_24h" in user_prompt
+    assert "tipologi-fan-in" in user_prompt and "GA-FANIN" in user_prompt
+
+    row = await _stored(session)
+    assert row is not None and row.generated_by == "user-1" and row.str_draft is None
+    got = await c.get(URL, headers=_auth())
+    assert got.status_code == 200 and got.json() == body
+    # Stored: a second POST returns the row without calling the provider.
+    again = await c.post(URL, headers=_auth())
+    assert again.json() == body and len(calls) == 1
 
 
-async def test_llm_invalid_json_falls_back_to_rules(make_client):
+async def test_generated_by_uses_user_email(make_client, session):
+    session.add(User(
+        id=1, email="analis@ojk.go.id", password_hash="x", role="analyst",
+        created_at=datetime.now(UTC),
+    ))
+    await session.commit()
+    s = _settings(llm_provider="anthropic", llm_api_key="k")
+    c = await make_client(s, _anthropic_handler([], json.dumps(LLM_NARRATIVE)))
+    assert (await c.post(URL, headers=_auth())).status_code == 200
+    assert (await _stored(session)).generated_by == "analis@ojk.go.id"
+
+
+async def test_llm_invalid_extra_fields_fall_back_deterministically(make_client):
+    bad = {**LLM_NARRATIVE, "reason_code": "GA-BOGUS", "confidence": "very high"}
+    bad.pop("references")
+    s = _settings(llm_provider="anthropic", llm_api_key="k")
+    c = await make_client(s, _anthropic_handler([], json.dumps(bad)))
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "llm" and body["persisted"] is True
+    assert body["reason_code"] == "GA-FANIN" and body["confidence"] == "Tinggi"
+    ids = [ref["id"] for ref in body["references"]]
+    assert ids == [e["id"] for e in kb.retrieve(
+        [f["code"] for f in body["risk_factors"]], "Fan-In"
+    )]
+
+
+async def test_llm_invalid_json_falls_back_to_rules(make_client, session):
     calls: list = []
     s = _settings(llm_provider="anthropic", llm_api_key="k")
     c = await make_client(s, _anthropic_handler(calls, "maaf, saya tidak bisa"))
-    body = (await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())).json()
+    body = (await c.post(URL, headers=_auth())).json()
     assert calls and body["source"] == "rules" and body["model"] is None
+    assert body["persisted"] is False
     assert body["recommendation"].startswith("TUNDA")
+    assert await _stored(session) is None
 
 
 async def test_llm_missing_field_falls_back(make_client):
     partial = {k: v for k, v in LLM_NARRATIVE.items() if k != "network_analysis"}
     s = _settings(llm_provider="anthropic", llm_api_key="k")
     c = await make_client(s, _anthropic_handler([], json.dumps(partial)))
-    body = (await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())).json()
-    assert body["source"] == "rules"
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "rules" and body["persisted"] is False
 
 
-async def test_llm_timeout_falls_back(make_client):
+async def test_llm_timeout_falls_back_then_retry_persists(make_client, session):
+    state = {"fail": True}
+
     def handler(request):
-        raise httpx.ReadTimeout("slow", request=request)
+        if state["fail"]:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(
+            200, json={"content": [{"type": "text", "text": json.dumps(LLM_NARRATIVE)}]}
+        )
 
     s = _settings(llm_provider="anthropic", llm_api_key="k")
     c = await make_client(s, handler)
-    body = (await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())).json()
-    assert body["source"] == "rules"
-    # Degraded answer is cached only briefly.
-    assert 0 < await make_client.redis.ttl(f"expl:{TARGET}") <= 300
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "rules" and body["persisted"] is False
+    state["fail"] = False
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "llm" and body["persisted"] is True
+    assert await _stored(session) is not None
 
 
-async def test_cache_hit_skips_provider(make_client):
-    calls: list = []
+async def test_concurrent_generate_returns_first_row(make_client, session, pg_url):
+    """A competing request commits its row while our LLM call is in flight: our insert
+    must not fail or overwrite, and we return the row that won."""
+    other = create_async_engine(pg_url)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        async with other.begin() as conn:
+            await conn.execute(insert(StoredExplanation).values(
+                transaction_id=TARGET, source="llm", model="first-model",
+                pattern_matching="P", behavior_analysis="B", network_analysis="N",
+                recommendation="TUNDA dulu.", reason_code="GA-FANIN", confidence="Tinggi",
+                references=[], risk_factors=[], evidence={}, generated_by="other",
+                generated_at=datetime(2026, 10, 18, tzinfo=UTC),
+            ))
+        return httpx.Response(
+            200, json={"content": [{"type": "text", "text": json.dumps(LLM_NARRATIVE)}]}
+        )
+
     s = _settings(llm_provider="anthropic", llm_api_key="k")
-    c = await make_client(s, _anthropic_handler(calls, json.dumps(LLM_NARRATIVE)))
-    url = f"/api/v1/transactions/{TARGET}/explanation"
-    first = (await c.get(url, headers=_auth())).json()
-    second = (await c.get(url, headers=_auth())).json()
-    assert len(calls) == 1
-    assert first == second
-    ttl = await make_client.redis.ttl(f"expl:{TARGET}")
-    assert 23 * 3600 < ttl <= 24 * 3600
+    c = await make_client(s, handler)
+    r = await c.post(URL, headers=_auth())
+    await other.dispose()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model"] == "first-model" and body["recommendation"] == "TUNDA dulu."
+    assert body["persisted"] is True
 
 
-async def test_redis_down_still_computes(make_client, monkeypatch):
-    c = await make_client()
-    dead = build_redis("redis://127.0.0.1:1/0")
-    monkeypatch.setattr(deps, "get_redis", lambda: dead)
-    r = await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())
-    assert r.status_code == 200 and r.json()["source"] == "rules"
-    await dead.aclose()
-
-
-async def test_gemini_and_ollama_request_shape(make_client):
+async def test_gemini_and_ollama_request_shape(make_client, session):
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -285,9 +393,8 @@ async def test_gemini_and_ollama_request_shape(make_client):
             )
         return httpx.Response(200, json={"message": {"content": text}})
 
-    url = f"/api/v1/transactions/{TARGET}/explanation"
     c = await make_client(_settings(llm_provider="gemini", llm_api_key="g-key"), handler)
-    body = (await c.get(url, headers=_auth())).json()
+    body = (await c.post(URL, headers=_auth())).json()
     assert body["source"] == "llm" and body["model"] == "gemini-2.5-flash"
     assert seen[0].url.path == "/v1beta/models/gemini-2.5-flash:generateContent"
     assert seen[0].headers["x-goog-api-key"] == "g-key" and "key" not in seen[0].url.params
@@ -295,9 +402,10 @@ async def test_gemini_and_ollama_request_shape(make_client):
     assert sent["systemInstruction"]["parts"][0]["text"].startswith("Anda adalah analis")
     assert sent["generationConfig"]["responseMimeType"] == "application/json"
 
-    await make_client.redis.flushdb()
+    await session.execute(delete(StoredExplanation))
+    await session.commit()
     c = await make_client(_settings(llm_provider="ollama"), handler)
-    body = (await c.get(url, headers=_auth())).json()
+    body = (await c.post(URL, headers=_auth())).json()
     assert body["source"] == "llm" and body["model"] == "llama3.1:8b"
     assert str(seen[1].url) == "http://host.docker.internal:11434/api/chat"
     sent = json.loads(seen[1].content)
@@ -316,7 +424,7 @@ async def test_gemma_folds_system_prompt_and_skips_json_mode(make_client):
 
     s = _settings(llm_provider="gemini", llm_api_key="g", llm_model="gemma-3-27b-it")
     c = await make_client(s, handler)
-    body = (await c.get(f"/api/v1/transactions/{TARGET}/explanation", headers=_auth())).json()
+    body = (await c.post(URL, headers=_auth())).json()
     assert body["source"] == "llm" and body["model"] == "gemma-3-27b-it"
     assert seen[0].url.path == "/v1beta/models/gemma-3-27b-it:generateContent"
     sent = json.loads(seen[0].content)
@@ -326,16 +434,10 @@ async def test_gemma_folds_system_prompt_and_skips_json_mode(make_client):
     assert prompt.startswith("Anda adalah analis") and "Data transaksi (JSON)" in prompt
 
 
-async def test_explanation_404(make_client):
-    c = await make_client()
-    r = await c.get("/api/v1/transactions/999/explanation", headers=_auth())
-    assert r.status_code == 404
-
-
 async def test_explanation_requires_auth(make_client):
     c = await make_client()
-    r = await c.get(f"/api/v1/transactions/{TARGET}/explanation")
-    assert r.status_code in (401, 403)
+    assert (await c.get(URL)).status_code in (401, 403)
+    assert (await c.post(URL)).status_code in (401, 403)
 
 
 # ---------------------------------------------------------------- parsing
@@ -344,7 +446,17 @@ async def test_explanation_requires_auth(make_client):
 @pytest.mark.parametrize("wrap", ["{}", "```json\n{}\n```", "Berikut hasilnya:\n{}\nSelesai."])
 def test_parse_narrative_tolerates_wrapping(wrap):
     text = wrap.replace("{}", json.dumps(LLM_NARRATIVE))
-    assert parse_narrative(text, "TUNDA") == LLM_NARRATIVE
+    out = parse_narrative(text, "TUNDA")
+    assert out == {**LLM_NARRATIVE, "reason_code": "GA-GATHER", "confidence": "Sedang"}
+
+
+def test_parse_narrative_extra_fields_best_effort():
+    base = {k: LLM_NARRATIVE[k] for k in NARRATIVE_FIELDS}
+    out = parse_narrative(json.dumps(base), "TUNDA")
+    assert out["reason_code"] is None and out["confidence"] is None
+    assert out["references"] is None
+    out = parse_narrative(json.dumps({**base, "references": "x", "confidence": 1}), "TUNDA")
+    assert out["references"] is None and out["confidence"] is None
 
 
 def test_parse_narrative_prefixes_missing_action_verb():

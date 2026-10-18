@@ -98,6 +98,32 @@ class RiskFactor(BaseModel):
     detail: str
 
 
+class Reference(BaseModel):
+    id: str
+    title: str
+
+
+class StrParty(BaseModel):
+    nama: str | None  # masked unless admin + ?unmasked=true
+    rekening: str
+    bank: str | None
+
+
+class StrParties(BaseModel):
+    pengirim: StrParty
+    penerima: StrParty
+
+
+class StrDraft(BaseModel):
+    nomor_draf: str
+    pihak: StrParties
+    kronologi: str
+    indikator: list[str]
+    analisis: str
+    rekomendasi: str
+    catatan: str
+
+
 class TransactionExplanation(BaseModel):
     transaction_id: int
     source: Literal["llm", "rules"]
@@ -106,9 +132,14 @@ class TransactionExplanation(BaseModel):
     behavior_analysis: str
     network_analysis: str
     recommendation: str
+    reason_code: str
+    confidence: Literal["Tinggi", "Sedang", "Rendah"]
+    references: list[Reference]
     risk_factors: list[RiskFactor]
     evidence: dict[str, bool | int | float | str | None]
     generated_at: str
+    persisted: bool
+    str_draft: StrDraft | None = None
 
 
 class RiskProfile(BaseModel):
