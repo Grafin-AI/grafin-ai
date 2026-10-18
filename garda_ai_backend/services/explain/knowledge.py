@@ -247,6 +247,19 @@ REASON_CODES: dict[str, str] = {
     "GA-NORMAL": "Tidak ada indikator signifikan",
 }
 
+# Reason code -> KB tags, for the get_policy_references tool.
+REASON_TAGS: dict[str, tuple[str, ...]] = {
+    "GA-FANIN": ("typ:fan_in", "high_fan_in"),
+    "GA-FANOUT": ("typ:fan_out", "high_fan_out"),
+    "GA-CYCLE": ("typ:cycle",),
+    "GA-GATHER": ("typ:gather_scatter", "typ:layering"),
+    "GA-VELOCITY": ("high_velocity",),
+    "GA-AMOUNT": ("unusual_amount",),
+    "GA-NETWORK": ("flagged_counterparty", "typology_detected", "typ:network",
+                   "high_risk_profile", "high_model_score"),
+    "GA-NORMAL": (),
+}
+
 _TYPOLOGY_REASON = {
     "fan_in": "GA-FANIN", "fan_out": "GA-FANOUT", "cycle": "GA-CYCLE",
     "gather_scatter": "GA-GATHER", "layering": "GA-GATHER",

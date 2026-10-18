@@ -41,6 +41,7 @@ Required: `DATABASE_URL`, `SCORING_URL`, `SCORING_TOKEN`, `INGEST_TOKEN` (>=16 c
 | `GARDA_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b` |
 | `GARDA_LLM_BASE_URL` | per provider | `https://api.anthropic.com` / `https://generativelanguage.googleapis.com` / `http://host.docker.internal:11434` |
 | `GARDA_LLM_TIMEOUT_S` | `20` | Per-call timeout; on timeout/error/invalid JSON the rules narrative is returned. |
+| `GARDA_LLM_TOOLS` | `true` | Gemini only: the model may call `get_policy_references(reason_code)` / `get_transaction_evidence(transaction_id)` (served locally from the KB and the already-computed evidence, max 3 rounds) before answering in JSON; any tool-loop failure falls back to the single call. Tool names logged as `explain_tool_calls`. |
 | `GARDA_EXPLANATION_STORE` | `postgres` | `postgres` \| `firestore`. Where LLM explanations and LTKM drafts are stored (see Firestore). |
 | `GARDA_FIRESTORE_PROJECT` | empty | GCP project for Firestore; empty = the ADC/environment default. |
 | `GARDA_FIRESTORE_DATABASE` | `(default)` | Firestore database id. |

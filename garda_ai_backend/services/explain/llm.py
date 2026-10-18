@@ -15,7 +15,10 @@ import structlog
 
 from garda_ai_backend.config import Settings
 from garda_ai_backend.services.explain.knowledge import (
+    ENTRIES,
+    GENERAL_IDS,
     REASON_CODES,
+    REASON_TAGS,
     KnowledgeEntry,
     normalize_confidence,
     normalize_reason_code,
@@ -114,31 +117,146 @@ async def _anthropic(client: httpx.AsyncClient, s: Settings, system: str, user: 
     return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
 
 
-async def _gemini(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
-    model = resolve_model(s)
-    body: dict[str, Any]
+def _gemini_body(model: str, system: str, user: str) -> dict[str, Any]:
     if model.startswith("gemma"):
         # Gemma on the Gemini API rejects systemInstruction and JSON mode: fold the system
         # prompt into the user turn and rely on parse_narrative to pull out the JSON.
-        body = {
+        return {
             "contents": [{"role": "user", "parts": [{"text": f"{system}\n\n{user}"}]}],
             "generationConfig": {"temperature": 0.2},
         }
-    else:
-        body = {
-            "systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
-        }
+    return {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": user}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
+    }
+
+
+async def _gemini_post(client: httpx.AsyncClient, s: Settings, body: dict) -> list[dict]:
+    """POST generateContent; returns the first candidate's parts."""
     resp = await client.post(
-        f"{_base_url(s)}/v1beta/models/{model}:generateContent",
+        f"{_base_url(s)}/v1beta/models/{resolve_model(s)}:generateContent",
         headers={"x-goog-api-key": s.llm_api_key.get_secret_value()},
         json=body,
         timeout=s.llm_timeout_s,
     )
     resp.raise_for_status()
-    parts = resp.json()["candidates"][0]["content"]["parts"]
+    return resp.json()["candidates"][0]["content"].get("parts") or []
+
+
+def _gemini_text(parts: list[dict]) -> str:
+    # Thought parts are skipped; extra fields such as thoughtSignature are ignored.
     return "".join(p.get("text", "") for p in parts if not p.get("thought"))
+
+
+async def _gemini(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
+    return _gemini_text(await _gemini_post(client, s, _gemini_body(resolve_model(s), system, user)))
+
+
+# --- Gemini function calling: ground the narrative in our own data -----------------------
+
+MAX_TOOL_ROUNDS = 3
+TOOL_DECLARATIONS = [{"functionDeclarations": [
+    {
+        "name": "get_policy_references",
+        "description": (
+            "Ambil entri basis pengetahuan APU-PPT (judul, rujukan, ringkasan) yang relevan "
+            "untuk satu kode alasan GA-*. Gunakan untuk mendasarkan rujukan regulasi."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"reason_code": {
+                "type": "string", "enum": list(REASON_CODES),
+                "description": "Kode alasan, mis. GA-FANIN.",
+            }},
+            "required": ["reason_code"],
+        },
+    },
+    {
+        "name": "get_transaction_evidence",
+        "description": (
+            "Ambil fakta transaksi yang dimiliki sistem: nominal, bank, status, skor GNN, "
+            "tipologi, faktor risiko, serta statistik pihak lawan dan jaringan 24 jam."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"transaction_id": {"type": "integer"}},
+            "required": ["transaction_id"],
+        },
+    },
+]}]
+
+
+def policy_references(reason_code: Any) -> list[KnowledgeEntry]:
+    code = normalize_reason_code(reason_code)
+    if code is None:
+        return []
+    tags = REASON_TAGS.get(code, ())
+    hits = [e for e in ENTRIES if set(e["tags"]) & set(tags)]
+    return hits + [e for e in ENTRIES if e["id"] in GENERAL_IDS and e not in hits]
+
+
+class _ToolRunner:
+    """Executes tool calls locally against data the service already gathered."""
+
+    def __init__(
+        self, evidence: dict[str, Any], factors: list[dict], action: str,
+        transaction_id: int | None,
+    ) -> None:
+        self.evidence, self.factors, self.action = evidence, factors, action
+        self.transaction_id = transaction_id
+        self.called: list[str] = []
+        self.shown: list[KnowledgeEntry] = []
+
+    def run(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        self.called.append(name)
+        if name == "get_policy_references":
+            entries = policy_references(args.get("reason_code"))
+            self.shown.extend(e for e in entries if e not in self.shown)
+            return {"references": [
+                {"id": e["id"], "title": e["title"], "summary": e["text"]} for e in entries
+            ]} if entries else {"error": "kode alasan tidak dikenal", "valid": list(REASON_CODES)}
+        if name == "get_transaction_evidence":
+            tid, known = args.get("transaction_id"), self.transaction_id
+            if known is not None and tid is not None and int(tid) != known:
+                return {"error": "transaction_id tidak dikenal"}
+            return {"transaction_id": known, "evidence": self.evidence, "risk_factors": self.factors,
+                    "system_action": self.action}
+        return {"error": f"fungsi tidak dikenal: {name}"}
+
+
+async def gemini_tool_narrative(
+    client: httpx.AsyncClient, s: Settings, system: str, user: str, runner: _ToolRunner,
+    action: str,
+) -> dict[str, Any] | None:
+    """Tool rounds without JSON mode, then (if needed) a final JSON-mode call with tool
+    calling disabled. Raises/returns None on any problem; the caller falls back."""
+    contents: list[dict[str, Any]] = [{"role": "user", "parts": [{"text": user}]}]
+    base = {"systemInstruction": {"parts": [{"text": system}]}, "tools": TOOL_DECLARATIONS}
+    for _ in range(MAX_TOOL_ROUNDS):
+        parts = await _gemini_post(client, s, {
+            **base, "contents": contents, "generationConfig": {"temperature": 0.2},
+        })
+        calls = [p["functionCall"] for p in parts if isinstance(p.get("functionCall"), dict)]
+        if not calls:
+            parsed = parse_narrative(_gemini_text(parts), action)
+            if parsed is not None:
+                return parsed
+            break
+        # Model turn echoed verbatim (keeps thoughtSignature, which Gemini 3 requires).
+        contents.append({"role": "model", "parts": parts})
+        contents.append({"role": "user", "parts": [
+            {"functionResponse": {
+                "name": c.get("name", ""),
+                "response": runner.run(c.get("name", ""), c.get("args") or {}),
+            }} for c in calls
+        ]})
+    parts = await _gemini_post(client, s, {
+        **base, "contents": contents,
+        "toolConfig": {"functionCallingConfig": {"mode": "NONE"}},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
+    })
+    return parse_narrative(_gemini_text(parts), action)
 
 
 async def _ollama(client: httpx.AsyncClient, s: Settings, system: str, user: str) -> str:
@@ -229,11 +347,35 @@ async def llm_narrative(
     factors: list[dict],
     action: str,
     references: list[KnowledgeEntry] | None = None,
+    transaction_id: int | None = None,
 ) -> dict[str, Any] | None:
-    text = await complete(
-        client, settings, SYSTEM_PROMPT,
-        build_user_prompt(evidence, factors, action, references), "explain",
-    )
+    """When tool rounds add KB entries, they are appended to ``references`` in place so
+    the caller's reference filter also accepts the entries the model was shown."""
+    user = build_user_prompt(evidence, factors, action, references)
+    if (
+        settings.llm_provider == "gemini" and settings.llm_tools
+        and not resolve_model(settings).startswith("gemma")
+    ):
+        runner = _ToolRunner(evidence, factors, action, transaction_id)
+        tool_user = (
+            f"{user}\nID transaksi: {transaction_id}. Sebelum menjawab, panggil "
+            "get_transaction_evidence dan get_policy_references (untuk kode alasan yang "
+            "paling sesuai) agar narasi berdasar pada data sistem."
+        )
+        try:
+            parsed = await gemini_tool_narrative(
+                client, settings, SYSTEM_PROMPT, tool_user, runner, action
+            )
+        except Exception as exc:  # noqa: BLE001 — tool path failure -> single call
+            log.warning("explain.tool_loop_failed", error=type(exc).__name__)
+            parsed = None
+        log.info("explain_tool_calls", tools=runner.called, ok=parsed is not None)
+        if parsed is not None:
+            if references is not None:
+                references.extend(e for e in runner.shown if e not in references)
+            parsed["tools_used"] = runner.called
+            return parsed
+    text = await complete(client, settings, SYSTEM_PROMPT, user, "explain")
     if text is None:
         return None
     parsed = parse_narrative(text, action)

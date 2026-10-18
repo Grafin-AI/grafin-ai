@@ -61,12 +61,12 @@ async def load_explanation(
 
 async def _narrate(
     client: httpx.AsyncClient | None, settings: Settings, ev: dict, factors: list,
-    action: str, refs: list,
+    action: str, refs: list, transaction_id: int,
 ) -> dict[str, Any] | None:
     if client is not None:
-        return await llm_narrative(client, settings, ev, factors, action, refs)
+        return await llm_narrative(client, settings, ev, factors, action, refs, transaction_id)
     async with httpx.AsyncClient() as own:
-        return await llm_narrative(own, settings, ev, factors, action, refs)
+        return await llm_narrative(own, settings, ev, factors, action, refs, transaction_id)
 
 
 async def generate_explanation(
@@ -94,7 +94,9 @@ async def generate_explanation(
 
     narrative = None
     if settings.llm_provider != "none":
-        narrative = await _narrate(client, settings, evidence, factors, action, refs)
+        narrative = await _narrate(
+            client, settings, evidence, factors, action, refs, transaction_id
+        )
 
     if narrative is None:
         return {
