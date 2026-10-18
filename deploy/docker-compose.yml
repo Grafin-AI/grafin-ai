@@ -1,0 +1,135 @@
+name: garda-ai
+
+x-db-url: &db_url postgresql+asyncpg://${POSTGRES_USER:-garda}:${POSTGRES_PASSWORD:-garda}@postgres:5432/${POSTGRES_DB:-garda}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-garda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garda}
+      POSTGRES_DB: ${POSTGRES_DB:-garda}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garda}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  scoring:
+    build: { context: ../garda-ai-scoring }
+    environment:
+      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      # label_replay (default) | precomputed (model scores from garda-train export-scores)
+      GARDA_SCORER: ${GARDA_SCORER:-label_replay}
+      GARDA_SCORES_PATH: /scores/scores.csv
+    volumes:
+      # Only read when GARDA_SCORER=precomputed; a missing host dir is created empty.
+      - ${GARDA_SCORES_HOST_DIR:-../garda-ai-training/runs/current/scores}:/scores:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # internal only — not published to the host
+
+  backend:
+    build: { context: ../garda-ai-backend }
+    environment:
+      GARDA_DATABASE_URL: *db_url
+      GARDA_REDIS_URL: redis://redis:6379/0
+      GARDA_JWT_SECRET: ${GARDA_JWT_SECRET:?set a >=32 char secret}
+      GARDA_ENV: ${GARDA_ENV:-production}
+      GARDA_SCORING_URL: http://scoring:8000
+      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      # LLM explanations: none | anthropic | gemini | ollama
+      GARDA_LLM_PROVIDER: ${GARDA_LLM_PROVIDER:-none}
+      GARDA_LLM_API_KEY: ${GARDA_LLM_API_KEY:-}
+      GARDA_LLM_MODEL: ${GARDA_LLM_MODEL:-}
+      GARDA_LLM_BASE_URL: ${GARDA_LLM_BASE_URL:-}
+      GARDA_LLM_TIMEOUT_S: ${GARDA_LLM_TIMEOUT_S:-20}
+      # Model card: set when real model scores are served (empty = "Simulated (Phase 1)")
+      GARDA_MODEL_NAME: ${GARDA_MODEL_NAME:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      scoring: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    # Host port is configurable to avoid clashing with other local stacks.
+    ports: ["${BACKEND_HOST_PORT:-8000}:8000"]
+
+  ingest:
+    build: { context: ../garda-ai-ingest }
+    environment:
+      GARDA_DATABASE_URL: *db_url
+      GARDA_DATA_DIR: /data
+    volumes:
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small-ID}:/data:ro
+    depends_on:
+      backend: { condition: service_healthy }   # backend entrypoint ran alembic upgrade -> schema exists
+    restart: "no"
+
+  frontend:
+    build: { context: ../garda-ai-dashboard-web }
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend: { condition: service_healthy }
+    ports: ["${FRONTEND_HOST_PORT:-8080}:8080"]
+
+  sim:
+    build: { context: ../garda-ai-sim }
+    profiles: ["sim"]
+    environment:
+      GARDA_INGEST_URL: http://backend:8000/api/v1/ingest
+      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      GARDA_DATA_DIR: /data
+      # Replay knobs — override in .env or with `docker compose run -e ...`.
+      # GARDA_LIMIT is deliberately NOT defaulted here: an empty value would be
+      # passed as "" and fail int|None parsing. Pass it with -e when you want it.
+      GARDA_SKIP: ${GARDA_SKIP:-0}
+      GARDA_BATCH_SIZE: ${GARDA_BATCH_SIZE:-100}
+      GARDA_SPEED: ${GARDA_SPEED:-60}
+      GARDA_MAX_GAP_S: ${GARDA_MAX_GAP_S:-2.0}
+    volumes:
+      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small-ID}:/data:ro
+    depends_on:
+      backend: { condition: service_healthy }
+      scoring: { condition: service_started }
+      ingest: { condition: service_completed_successfully }
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on: [prometheus]
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,18 @@
+{
+  "title": "Garda API Health",
+  "uid": "garda-api",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP requests (rate)",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(garda_http_requests_total[1m])", "legendFormat": "{{method}} {{path}}" }
+      ]
+    }
+  ]
+}

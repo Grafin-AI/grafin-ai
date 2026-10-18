@@ -1,0 +1,19 @@
+project_id = "your-gcp-project"
+region     = "asia-southeast1"
+domain     = "" # e.g. "garda.example.com" to enable app./api. mappings
+
+deploy_observability = false
+
+backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/backend:latest"
+scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/scoring:latest"
+frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/frontend:latest"
+ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/ingest:latest"
+
+# Secrets — provide via a *.auto.tfvars that is gitignored, or -var / TF_VAR_ env, NEVER commit real values.
+jwt_secret    = "CHANGE-ME-32+chars"
+ingest_token  = "CHANGE-ME-16+chars"
+scoring_token = "CHANGE-ME"
+db_password   = "CHANGE-ME"
+
+# Only used when deploy_observability = true; sets the Grafana admin password.
+grafana_admin_password = "" # e.g. "CHANGE-ME" when enabling observability
