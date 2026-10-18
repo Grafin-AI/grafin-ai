@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from garda_ai_backend.schema import Bank, Transaction, TransactionEvent
 
@@ -51,26 +52,32 @@ class AnalyticsRepository:
         return {"tp": int(tp_v), "fp": int(fp_v), "fn": int(fn_v)}
 
     async def institutions(self, now: datetime) -> dict:
-        """Per sending bank: volume, flagged, blocked for the top TOP_BANKS by volume (the
-        rest folded into "Lainnya"), plus flagged/blocked flows between those groups."""
+        """Per sending institution (grouped by bank NAME: the localized data maps many source
+        bank codes to one Indonesian bank): volume, flagged, blocked for the top TOP_BANKS by
+        volume (the rest folded into "Lainnya"), plus flagged/blocked flows between groups."""
+        src_bank, dst_bank = aliased(Bank), aliased(Bank)
+        src_name = func.coalesce(src_bank.name, Transaction.from_bank_id)
+        dst_name = func.coalesce(dst_bank.name, Transaction.to_bank_id)
         flagged = func.sum(case((TransactionEvent.status == "flagged", 1), else_=0))
         blocked = func.sum(case((TransactionEvent.status == "blocked", 1), else_=0))
         base = (
             select()
             .select_from(TransactionEvent)
             .join(Transaction, Transaction.id == TransactionEvent.transaction_id)
+            .outerjoin(src_bank, src_bank.id == Transaction.from_bank_id)
+            .outerjoin(dst_bank, dst_bank.id == Transaction.to_bank_id)
             .where(TransactionEvent.event_time <= now)
         )
         top_rows = (
             await self._session.execute(
                 base.add_columns(
-                    Transaction.from_bank_id.label("bank_id"),
+                    src_name.label("bank"),
                     func.count().label("n"),
                     func.coalesce(flagged, 0).label("flagged"),
                     func.coalesce(blocked, 0).label("blocked"),
                 )
-                .group_by(Transaction.from_bank_id)
-                .order_by(func.count().desc(), Transaction.from_bank_id)
+                .group_by(src_name)
+                .order_by(func.count().desc(), src_name)
                 .limit(TOP_BANKS)
             )
         ).all()
@@ -81,12 +88,7 @@ class AnalyticsRepository:
                 )
             )
         ).one()
-        top_ids = [r.bank_id for r in top_rows]
-        names = dict(
-            (await self._session.execute(
-                select(Bank.id, Bank.name).where(Bank.id.in_(top_ids))
-            )).all()
-        ) if top_ids else {}
+        top_names = [r.bank for r in top_rows]
 
         def _inst(bank: str, n: int, f: int, b: int) -> dict:
             return {
@@ -95,8 +97,7 @@ class AnalyticsRepository:
             }
 
         institutions = [
-            _inst(names.get(r.bank_id) or r.bank_id, int(r.n), int(r.flagged), int(r.blocked))
-            for r in top_rows
+            _inst(r.bank, int(r.n), int(r.flagged), int(r.blocked)) for r in top_rows
         ]
         rest = [int(total[0]), int(total[1]), int(total[2])]
         for r in top_rows:
@@ -104,35 +105,39 @@ class AnalyticsRepository:
         if rest[0] > 0:
             institutions.append(_inst(OTHERS, *rest))
 
-        def _group(col):  # type: ignore[no-untyped-def]
-            return case((col.in_(top_ids), col), else_=literal(OTHERS)) if top_ids else literal(
-                OTHERS
-            )
-
-        # Group on a subquery's columns: grouping by the CASE expression itself would bind
-        # the IN-list twice ($n vs $m) and Postgres would not see the two as identical.
-        flagged_tx = (
+        # Names first (inner subquery), then fold non-top names into "Lainnya" (outer
+        # subquery), then group on the outer columns: grouping by the CASE expression itself
+        # would bind the IN-list twice and Postgres would not see the two as identical.
+        raw = (
             base.add_columns(
-                _group(Transaction.from_bank_id).label("src"),
-                _group(Transaction.to_bank_id).label("dst"),
+                src_name.label("src"), dst_name.label("dst"),
                 Transaction.amount_paid.label("amount"),
             )
             .where(TransactionEvent.status.in_(("flagged", "blocked")))
             .subquery()
         )
+
+        def _group(col):  # type: ignore[no-untyped-def]
+            return case((col.in_(top_names), col), else_=literal(OTHERS)) if top_names else (
+                literal(OTHERS)
+            )
+
+        grouped = select(
+            _group(raw.c.src).label("src"), _group(raw.c.dst).label("dst"), raw.c.amount
+        ).subquery()
         flow_rows = (
             await self._session.execute(
                 select(
-                    flagged_tx.c.src, flagged_tx.c.dst, func.count().label("n"),
-                    func.coalesce(func.sum(flagged_tx.c.amount), 0).label("amount"),
+                    grouped.c.src, grouped.c.dst, func.count().label("n"),
+                    func.coalesce(func.sum(grouped.c.amount), 0).label("amount"),
                 )
-                .group_by(flagged_tx.c.src, flagged_tx.c.dst)
-                .order_by(func.count().desc(), flagged_tx.c.src, flagged_tx.c.dst)
+                .group_by(grouped.c.src, grouped.c.dst)
+                .order_by(func.count().desc(), grouped.c.src, grouped.c.dst)
             )
         ).all()
         flows = [
             {
-                "from_bank": names.get(r.src) or r.src, "to_bank": names.get(r.dst) or r.dst,
+                "from_bank": r.src, "to_bank": r.dst,
                 "flagged_count": int(r.n), "amount": float(r.amount),
             }
             for r in flow_rows
