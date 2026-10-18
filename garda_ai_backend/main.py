@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -15,13 +16,26 @@ from garda_ai_backend.api.system import router as system_router
 from garda_ai_backend.api.transactions import router as transactions_router
 from garda_ai_backend.api.users_view import router as users_view_router
 from garda_ai_backend.api.ws import router as ws_router
-from garda_ai_backend.config import get_settings
+from garda_ai_backend.config import Settings, get_settings
 from garda_ai_backend.db import _maker
 from garda_ai_backend.observability import REGISTRY, configure_logging
 from garda_ai_backend.redis_client import get_redis
 
 settings = get_settings()
 configure_logging(settings.log_level)
+
+
+def configure_cors(app: FastAPI, settings: Settings) -> None:
+    """GARDA_CORS_ORIGINS (comma-separated); empty = no CORS middleware (same-origin only).
+    Bearer tokens, no cookies, so credentials stay off. WebSockets are not subject to
+    CORS; /api/v1/ws/live authenticates with ?token=<access JWT>."""
+    if settings.cors_origin_list:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origin_list,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
 
 @asynccontextmanager
@@ -35,6 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Grafin AI Backend", version="0.1.0", lifespan=lifespan)
+configure_cors(app, settings)
 app.include_router(auth_router)
 app.include_router(metrics_router)
 app.include_router(analytics_router)

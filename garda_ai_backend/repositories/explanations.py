@@ -1,11 +1,17 @@
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from garda_ai_backend.config import Settings
 from garda_ai_backend.schema import StoredExplanation, Transaction
+
+if TYPE_CHECKING:
+    from garda_ai_backend.repositories.explanations_firestore import (
+        FirestoreExplanationsRepository,
+    )
 
 
 class ExplanationsRepository:
@@ -53,3 +59,20 @@ class ExplanationsRepository:
         row = await self.get(transaction_id)
         assert row is not None
         return row
+
+
+def explanations_repository(
+    session: AsyncSession, settings: Settings | None = None
+) -> "ExplanationsRepository | FirestoreExplanationsRepository":
+    """Pick the explanation store by ``GARDA_EXPLANATION_STORE`` (default postgres)."""
+    if settings is not None and settings.explanation_store == "firestore":
+        from garda_ai_backend.repositories.explanations_firestore import (
+            FirestoreExplanationsRepository,
+            get_firestore_client,
+        )
+        from garda_ai_backend.services.explain.llm import resolve_model
+
+        return FirestoreExplanationsRepository(
+            session, get_firestore_client(settings), resolve_model(settings)
+        )
+    return ExplanationsRepository(session)

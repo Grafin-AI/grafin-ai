@@ -41,3 +41,20 @@ Required: `DATABASE_URL`, `SCORING_URL`, `SCORING_TOKEN`, `INGEST_TOKEN` (>=16 c
 | `GARDA_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b` |
 | `GARDA_LLM_BASE_URL` | per provider | `https://api.anthropic.com` / `https://generativelanguage.googleapis.com` / `http://host.docker.internal:11434` |
 | `GARDA_LLM_TIMEOUT_S` | `20` | Per-call timeout; on timeout/error/invalid JSON the rules narrative is returned. |
+| `GARDA_EXPLANATION_STORE` | `postgres` | `postgres` \| `firestore`. Where LLM explanations and LTKM drafts are stored (see Firestore). |
+| `GARDA_FIRESTORE_PROJECT` | empty | GCP project for Firestore; empty = the ADC/environment default. |
+| `GARDA_FIRESTORE_DATABASE` | `(default)` | Firestore database id. |
+| `GARDA_CORS_ORIGINS` | empty | Comma-separated allowed browser origins (e.g. `https://<project>.web.app`). Empty = no CORS headers. |
+
+## Firestore
+
+With `GARDA_EXPLANATION_STORE=firestore` the Insight Narrator explanations are stored in
+Google Cloud Firestore instead of Postgres: collection `transaction_explanations`, document
+id = transaction id, same fields as the Postgres row plus `created_at`. Inserts use
+`create()`, so concurrent "generate" clicks keep the first document (same as
+`ON CONFLICT DO NOTHING`). Each generated LTKM draft is also written to collection
+`str_drafts` (doc id = transaction id, with `generated_at` and `model`); a failure of that
+write is logged and does not fail the request. Rules fallbacks are never stored.
+Transactions, alerts and users stay in Postgres. Credentials come from Application
+Default Credentials (on Cloud Run: the service account needs `roles/datastore.user`;
+locally: `gcloud auth application-default login`).

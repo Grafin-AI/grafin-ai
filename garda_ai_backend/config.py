@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     llm_base_url: str = ""  # empty = provider default
     llm_timeout_s: float = 20.0
 
+    # --- Explanation / LTKM draft store ("firestore" = Google Cloud Firestore via ADC) ---
+    explanation_store: Literal["postgres", "firestore"] = "postgres"
+    firestore_project: str | None = None  # None = ADC / environment default project
+    firestore_database: str = "(default)"
+
+    # --- CORS: comma-separated allowed origins; empty = no CORS middleware ---
+    cors_origins: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_dev(self) -> "Settings":
         # Fail closed: never run a non-development env with the default or a

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from garda_ai_backend.api.masking import mask_name
 from garda_ai_backend.config import Settings
-from garda_ai_backend.repositories.explanations import ExplanationsRepository
+from garda_ai_backend.repositories.explanations import explanations_repository
 from garda_ai_backend.repositories.transactions import TransactionsRepository
 from garda_ai_backend.schema import StoredExplanation
 from garda_ai_backend.services.explain.knowledge import BY_ID, REPORTING_ID, KnowledgeEntry
@@ -160,7 +160,7 @@ async def generate_str_draft(
         "rekomendasi": parsed["rekomendasi"],
         "catatan": CATATAN,
     }
-    stored = await ExplanationsRepository(session).set_str_draft_if_absent(
+    stored = await explanations_repository(session, settings).set_str_draft_if_absent(
         row.transaction_id, draft, datetime.now(UTC)
     )
     assert stored.str_draft is not None

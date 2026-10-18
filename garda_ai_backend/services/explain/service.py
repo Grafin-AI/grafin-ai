@@ -12,7 +12,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from garda_ai_backend.config import Settings
-from garda_ai_backend.repositories.explanations import ExplanationsRepository
+from garda_ai_backend.repositories.explanations import explanations_repository
 from garda_ai_backend.schema import StoredExplanation
 from garda_ai_backend.services.explain.evidence import compute_evidence
 from garda_ai_backend.services.explain.knowledge import (
@@ -52,8 +52,10 @@ def row_payload(row: StoredExplanation) -> dict[str, Any]:
     }
 
 
-async def load_explanation(session: AsyncSession, transaction_id: int) -> dict[str, Any] | None:
-    row = await ExplanationsRepository(session).get(transaction_id)
+async def load_explanation(
+    session: AsyncSession, transaction_id: int, settings: Settings | None = None
+) -> dict[str, Any] | None:
+    row = await explanations_repository(session, settings).get(transaction_id)
     return row_payload(row) if row is not None else None
 
 
@@ -75,7 +77,7 @@ async def generate_explanation(
     generated_by: str,
 ) -> dict[str, Any] | None:
     """Stored explanation if any (no LLM call); else generate. None = unknown transaction."""
-    repo = ExplanationsRepository(session)
+    repo = explanations_repository(session, settings)
     existing = await repo.get(transaction_id)
     if existing is not None:
         return row_payload(existing)

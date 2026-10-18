@@ -22,7 +22,7 @@ from garda_ai_backend.api.view_schemas import (
     TransactionDetail,
     TransactionExplanation,
 )
-from garda_ai_backend.repositories.explanations import ExplanationsRepository
+from garda_ai_backend.repositories.explanations import explanations_repository
 from garda_ai_backend.repositories.network import WINDOW, NetworkRepository
 from garda_ai_backend.repositories.transactions import TransactionsRepository
 from garda_ai_backend.repositories.users import UserRepository
@@ -67,7 +67,7 @@ async def _not_found_or(
     session: SessionDep, transaction_id: int, detail: str, code: int
 ) -> NoReturn:
     """Raise ``detail``/``code`` when the transaction exists, else 404 transaction not found."""
-    if await ExplanationsRepository(session).transaction_exists(transaction_id):
+    if await explanations_repository(session).transaction_exists(transaction_id):
         raise HTTPException(status_code=code, detail=detail)
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
@@ -110,11 +110,15 @@ async def network(
 
 @router.get("/{transaction_id}/explanation", response_model=TransactionExplanation)
 async def get_explanation(
-    transaction_id: int, session: SessionDep, user: CurrentUserDep, unmasked: bool = False
+    transaction_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: CurrentUserDep,
+    unmasked: bool = False,
 ) -> TransactionExplanation:
     """The stored (LLM) explanation. Nothing is generated here: 404
     ``explanation_not_generated`` tells the UI to offer the generate button."""
-    result = await load_explanation(session, transaction_id)
+    result = await load_explanation(session, transaction_id, settings)
     if result is None:
         await _not_found_or(
             session, transaction_id, "explanation_not_generated", status.HTTP_404_NOT_FOUND
@@ -152,7 +156,7 @@ async def post_str_draft(
 ) -> StrDraft:
     """LTKM draft from the persisted explanation (409 ``explanation_required`` without
     one). Returns the stored draft if any; LLM failure -> 502, nothing stored."""
-    row = await ExplanationsRepository(session).get(transaction_id)
+    row = await explanations_repository(session, settings).get(transaction_id)
     if row is None:
         await _not_found_or(
             session, transaction_id, "explanation_required", status.HTTP_409_CONFLICT
