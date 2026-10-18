@@ -7,22 +7,22 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 from testcontainers.redis import RedisContainer
 
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.schema import Base
 
 # Disable Ryuk reaper sidecar — not needed for local test runs and
 # causes port-mapping errors when the Ryuk container cannot bind.
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 os.environ.setdefault(
-    "GARDA_DATABASE_URL", "postgresql+asyncpg://garda:garda@localhost:5432/garda"
+    "GRAFIN_DATABASE_URL", "postgresql+asyncpg://grafin:grafin@localhost:5432/grafin"
 )
-os.environ.setdefault("GARDA_REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault("GARDA_JWT_SECRET", "test-secret")
+os.environ.setdefault("GRAFIN_REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("GRAFIN_JWT_SECRET", "test-secret")
 # Ingest write-path (Phase 2) — required at startup, mirrors the fail-closed
-# posture of GARDA_JWT_SECRET. Provided here so the app/get_settings() can boot
+# posture of GRAFIN_JWT_SECRET. Provided here so the app/get_settings() can boot
 # across the suite. test_config_ingest.py clears these to assert they're required.
-os.environ.setdefault("GARDA_SCORING_URL", "http://scoring:8000")
-os.environ.setdefault("GARDA_SCORING_TOKEN", "test-scoring-token")
-os.environ.setdefault("GARDA_INGEST_TOKEN", "test-ingest-token")
+os.environ.setdefault("GRAFIN_SCORING_URL", "http://scoring:8000")
+os.environ.setdefault("GRAFIN_SCORING_TOKEN", "test-scoring-token")
+os.environ.setdefault("GRAFIN_INGEST_TOKEN", "test-ingest-token")
 
 
 @pytest.fixture(scope="session")
@@ -64,7 +64,7 @@ from decimal import Decimal
 
 import pytest_asyncio as _pytest_asyncio
 
-from garda_ai_backend.schema import (
+from grafin_ai_backend.schema import (
     Account,
     Alert,
     Bank,

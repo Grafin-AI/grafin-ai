@@ -1,14 +1,14 @@
-# garda-ai-backend
+# grafin-ai-backend
 
-FastAPI + SQLAlchemy (async) + Postgres + Redis backend for the Garda AI AML dashboard.
+FastAPI + SQLAlchemy (async) + Postgres + Redis backend for the Grafin AI AML dashboard.
 Architecture docs: [`docs/c4/`](docs/c4/).
 
 ```bash
 uv sync
 uv run alembic upgrade head
-uv run uvicorn garda_ai_backend.main:app --reload
+uv run uvicorn grafin_ai_backend.main:app --reload
 uv run pytest -q          # needs Docker (testcontainers: Postgres 16, Redis 7)
-uv run ruff check garda_ai_backend
+uv run ruff check grafin_ai_backend
 ```
 
 ## Key endpoints (all require a user bearer token)
@@ -28,28 +28,28 @@ Explanation evidence only uses data in the 24h window ending at the transaction'
 `event_time` and never reads the ground-truth label. The LLM is never called on the
 ingest path.
 
-## Environment (prefix `GARDA_`)
+## Environment (prefix `GRAFIN_`)
 
 Required: `DATABASE_URL`, `SCORING_URL`, `SCORING_TOKEN`, `INGEST_TOKEN` (>=16 chars);
 `JWT_SECRET` (>=32 chars outside development). Optional:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GARDA_MODEL_NAME` | empty | Real model behind scoring; when set, health reports `model_accuracy_simulated=false`. |
-| `GARDA_LLM_PROVIDER` | `none` | `none` \| `anthropic` \| `gemini` \| `ollama`. `none` = deterministic rules narrative. |
-| `GARDA_LLM_API_KEY` | empty | Provider key (anthropic, gemini). Never logged. |
-| `GARDA_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b` |
-| `GARDA_LLM_BASE_URL` | per provider | `https://api.anthropic.com` / `https://generativelanguage.googleapis.com` / `http://host.docker.internal:11434` |
-| `GARDA_LLM_TIMEOUT_S` | `20` | Per-call timeout; on timeout/error/invalid JSON the rules narrative is returned. |
-| `GARDA_LLM_TOOLS` | `true` | Gemini only: the model may call `get_policy_references(reason_code)` / `get_transaction_evidence(transaction_id)` (served locally from the KB and the already-computed evidence, max 3 rounds) before answering in JSON; any tool-loop failure falls back to the single call. Tool names logged as `explain_tool_calls`. |
-| `GARDA_EXPLANATION_STORE` | `postgres` | `postgres` \| `firestore`. Where LLM explanations and LTKM drafts are stored (see Firestore). |
-| `GARDA_FIRESTORE_PROJECT` | empty | GCP project for Firestore; empty = the ADC/environment default. |
-| `GARDA_FIRESTORE_DATABASE` | `(default)` | Firestore database id. |
-| `GARDA_CORS_ORIGINS` | empty | Comma-separated allowed browser origins (e.g. `https://<project>.web.app`). Empty = no CORS headers. |
+| `GRAFIN_MODEL_NAME` | empty | Real model behind scoring; when set, health reports `model_accuracy_simulated=false`. |
+| `GRAFIN_LLM_PROVIDER` | `none` | `none` \| `anthropic` \| `gemini` \| `ollama`. `none` = deterministic rules narrative. |
+| `GRAFIN_LLM_API_KEY` | empty | Provider key (anthropic, gemini). Never logged. |
+| `GRAFIN_LLM_MODEL` | per provider | `claude-sonnet-5-5` / `gemini-3.8-flash` / `llama3.1:8b` |
+| `GRAFIN_LLM_BASE_URL` | per provider | `https://api.anthropic.com` / `https://generativelanguage.googleapis.com` / `http://host.docker.internal:11434` |
+| `GRAFIN_LLM_TIMEOUT_S` | `20` | Per-call timeout; on timeout/error/invalid JSON the rules narrative is returned. |
+| `GRAFIN_LLM_TOOLS` | `true` | Gemini only: the model may call `get_policy_references(reason_code)` / `get_transaction_evidence(transaction_id)` (served locally from the KB and the already-computed evidence, max 3 rounds) before answering in JSON; any tool-loop failure falls back to the single call. Tool names logged as `explain_tool_calls`. |
+| `GRAFIN_EXPLANATION_STORE` | `postgres` | `postgres` \| `firestore`. Where LLM explanations and LTKM drafts are stored (see Firestore). |
+| `GRAFIN_FIRESTORE_PROJECT` | empty | GCP project for Firestore; empty = the ADC/environment default. |
+| `GRAFIN_FIRESTORE_DATABASE` | `(default)` | Firestore database id. |
+| `GRAFIN_CORS_ORIGINS` | empty | Comma-separated allowed browser origins (e.g. `https://<project>.web.app`). Empty = no CORS headers. |
 
 ## Firestore
 
-With `GARDA_EXPLANATION_STORE=firestore` the Insight Narrator explanations are stored in
+With `GRAFIN_EXPLANATION_STORE=firestore` the Insight Narrator explanations are stored in
 Google Cloud Firestore instead of Postgres: collection `transaction_explanations`, document
 id = transaction id, same fields as the Postgres row plus `created_at`. Inserts use
 `create()`, so concurrent "generate" clicks keep the first document (same as

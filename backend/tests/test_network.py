@@ -4,8 +4,8 @@ from decimal import Decimal
 import pytest_asyncio
 from test_explanation import TARGET, _auth, explain_dataset, make_client  # noqa: F401
 
-from garda_ai_backend.repositories import network as net
-from garda_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
+from grafin_ai_backend.repositories import network as net
+from grafin_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
 
 NET_URL = f"/api/v1/transactions/{TARGET}/network"
 

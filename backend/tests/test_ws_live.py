@@ -5,14 +5,14 @@ import redis as sync_redis
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _app(redis_url):
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_redis_dep] = lambda: build_redis(redis_url)
     return app
 

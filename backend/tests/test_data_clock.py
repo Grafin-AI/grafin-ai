@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from garda_ai_backend.api import deps
+from grafin_ai_backend.api import deps
 
 
 @pytest.mark.asyncio

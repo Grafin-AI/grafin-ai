@@ -1,6 +1,6 @@
 import pytest
 
-from garda_ai_backend.security.tokens import (
+from grafin_ai_backend.security.tokens import (
     InvalidToken,
     create_access_token,
     create_refresh_token,

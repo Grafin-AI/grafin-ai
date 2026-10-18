@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from garda_ai_backend.services.explain import knowledge as kb
+from grafin_ai_backend.services.explain import knowledge as kb
 
 
 def test_entries_shape_and_no_article_citations():

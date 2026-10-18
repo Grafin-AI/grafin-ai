@@ -1,4 +1,4 @@
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
 
 
 async def test_save_validate_revoke(redis_client):

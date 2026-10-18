@@ -1,4 +1,4 @@
-from garda_ai_backend.security.passwords import hash_password, verify_password
+from grafin_ai_backend.security.passwords import hash_password, verify_password
 
 
 def test_hash_and_verify():

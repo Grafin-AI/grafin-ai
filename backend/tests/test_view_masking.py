@@ -1,4 +1,4 @@
-from garda_ai_backend.api.masking import mask_account_id, mask_name
+from grafin_ai_backend.api.masking import mask_account_id, mask_name
 
 
 def test_mask_name_keeps_initials():

@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 # Cache dependencies without the editable project (source not copied yet).
 RUN uv sync --frozen --no-dev --no-install-project
-COPY garda_ai_backend ./garda_ai_backend
+COPY grafin_ai_backend ./grafin_ai_backend
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 COPY docker-entrypoint.sh ./docker-entrypoint.sh

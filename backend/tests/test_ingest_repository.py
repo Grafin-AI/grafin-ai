@@ -4,8 +4,8 @@ from decimal import Decimal
 import pytest_asyncio
 from sqlalchemy import func, select
 
-from garda_ai_backend.repositories.ingest import IngestRepository
-from garda_ai_backend.schema import Account, Alert, Bank, Entity, TransactionEvent
+from grafin_ai_backend.repositories.ingest import IngestRepository
+from grafin_ai_backend.schema import Account, Alert, Bank, Entity, TransactionEvent
 
 NOW = datetime(2026, 6, 25, 9, 30, tzinfo=UTC)
 

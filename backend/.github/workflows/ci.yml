@@ -14,11 +14,11 @@ jobs:
       - name: Sync
         run: uv sync --frozen
       - name: Lint (changed scope)
-        run: uv run ruff check garda_ai_backend || true   # repo has known pre-existing ruff debt; do not fail CI on it
+        run: uv run ruff check grafin_ai_backend || true   # repo has known pre-existing ruff debt; do not fail CI on it
       - name: Test
         env:
-          GARDA_JWT_SECRET: ci-secret-at-least-32-chars-long-xxxx
-          GARDA_SCORING_URL: http://scoring:8000
-          GARDA_SCORING_TOKEN: ci-scoring
-          GARDA_INGEST_TOKEN: ci-ingest-token-16chars
+          GRAFIN_JWT_SECRET: ci-secret-at-least-32-chars-long-xxxx
+          GRAFIN_SCORING_URL: http://scoring:8000
+          GRAFIN_SCORING_TOKEN: ci-scoring
+          GRAFIN_INGEST_TOKEN: ci-ingest-token-16chars
         run: uv run pytest -q

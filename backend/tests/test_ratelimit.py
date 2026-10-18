@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.ratelimit import RateLimiter
+from grafin_ai_backend.api.ratelimit import RateLimiter
 
 
 async def test_allows_under_limit(redis_client):

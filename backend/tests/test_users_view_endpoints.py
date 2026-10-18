@@ -1,9 +1,9 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth(role: str = "analyst") -> dict:
@@ -18,7 +18,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     app.dependency_overrides[deps.get_data_now] = lambda: seeded_dataset
     transport = ASGITransport(app=app)
@@ -66,7 +66,7 @@ async def test_user_profile_found_beyond_top_1000(client, session):
 
     from sqlalchemy import insert
 
-    from garda_ai_backend.schema import Account, Entity
+    from grafin_ai_backend.schema import Account, Entity
 
     await session.execute(
         insert(Entity),

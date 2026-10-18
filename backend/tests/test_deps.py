@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.deps import CurrentUser, require_role
+from grafin_ai_backend.api.deps import CurrentUser, require_role
 
 
 def _user(role: str) -> CurrentUser:

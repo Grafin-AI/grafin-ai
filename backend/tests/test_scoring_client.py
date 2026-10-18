@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from garda_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
+from grafin_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
 
 _TXN = {"transaction_id": 1, "from_account": "a", "to_account": "b", "amount": "1.00",
         "payment_format": "ACH", "is_laundering": False, "event_time": "2026-06-25T09:00:00Z"}

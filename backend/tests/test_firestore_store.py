@@ -8,10 +8,10 @@ from fastapi import FastAPI
 from google.api_core.exceptions import AlreadyExists
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.config import Settings
-from garda_ai_backend.main import configure_cors
-from garda_ai_backend.repositories import explanations_firestore as fs
-from garda_ai_backend.repositories.explanations import (
+from grafin_ai_backend.config import Settings
+from grafin_ai_backend.main import configure_cors
+from grafin_ai_backend.repositories import explanations_firestore as fs
+from grafin_ai_backend.repositories.explanations import (
     ExplanationsRepository,
     explanations_repository,
 )
@@ -178,10 +178,10 @@ def test_firestore_client_created_lazily_once(monkeypatch):
 
 
 def test_settings_read_store_env(monkeypatch):
-    monkeypatch.setenv("GARDA_EXPLANATION_STORE", "firestore")
-    monkeypatch.setenv("GARDA_FIRESTORE_PROJECT", "garda-ai-dev-01")
-    monkeypatch.setenv("GARDA_FIRESTORE_DATABASE", "grafin")
-    monkeypatch.setenv("GARDA_CORS_ORIGINS", "https://a.web.app, https://b.firebaseapp.com,")
+    monkeypatch.setenv("GRAFIN_EXPLANATION_STORE", "firestore")
+    monkeypatch.setenv("GRAFIN_FIRESTORE_PROJECT", "garda-ai-dev-01")
+    monkeypatch.setenv("GRAFIN_FIRESTORE_DATABASE", "grafin")
+    monkeypatch.setenv("GRAFIN_CORS_ORIGINS", "https://a.web.app, https://b.firebaseapp.com,")
     s = _settings()
     assert (s.explanation_store, s.firestore_project, s.firestore_database) == (
         "firestore", "garda-ai-dev-01", "grafin",

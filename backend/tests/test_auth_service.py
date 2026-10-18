@@ -2,11 +2,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import hash_password
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
-from garda_ai_backend.security.tokens import decode_token
-from garda_ai_backend.services.auth import AuthError, AuthService
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.tokens import decode_token
+from grafin_ai_backend.services.auth import AuthError, AuthService
 
 SECRET = "test-secret"
 

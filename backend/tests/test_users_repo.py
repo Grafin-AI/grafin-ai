@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from garda_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.repositories.users import UserRepository
 
 
 async def test_create_and_fetch_user(session):

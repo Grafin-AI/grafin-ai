@@ -1,4 +1,4 @@
-from garda_ai_backend.api.cache import cached_json
+from grafin_ai_backend.api.cache import cached_json
 
 
 async def test_cached_json_computes_once(redis_client):

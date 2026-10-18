@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from garda_ai_backend.config import Settings
+from grafin_ai_backend.config import Settings
 
 _BASE = {
     "database_url": "postgresql+asyncpg://u:p@localhost/db",
@@ -13,11 +13,11 @@ _BASE = {
 
 @pytest.fixture(autouse=True)
 def _clear_ingest_env(monkeypatch):
-    # conftest injects GARDA_* into os.environ (setdefault) so the app can boot
+    # conftest injects GRAFIN_* into os.environ (setdefault) so the app can boot
     # in the full suite. For THIS module we must observe an absent environment
     # so the "required field raises" assertions are meaningful — the values here
     # come exclusively from the kwargs passed to Settings(**...).
-    for key in ("GARDA_SCORING_URL", "GARDA_SCORING_TOKEN", "GARDA_INGEST_TOKEN"):
+    for key in ("GRAFIN_SCORING_URL", "GRAFIN_SCORING_TOKEN", "GRAFIN_INGEST_TOKEN"):
         monkeypatch.delenv(key, raising=False)
 
 

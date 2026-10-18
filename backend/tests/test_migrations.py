@@ -1,7 +1,7 @@
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.schema import Base
 
 
 def test_migration_covers_all_tables():

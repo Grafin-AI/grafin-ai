@@ -1,12 +1,12 @@
-from garda_ai_backend.api.ws_auth import authenticate_ws_token
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.security.tokens import create_access_token, create_refresh_token
+from grafin_ai_backend.api.ws_auth import authenticate_ws_token
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.security.tokens import create_access_token, create_refresh_token
 
 S = "test-secret"
 
 
 def test_channel_constant_is_stable():
-    assert LIVE_EVENTS_CHANNEL == "garda:events:live"
+    assert LIVE_EVENTS_CHANNEL == "grafin:events:live"
 
 
 def test_valid_access_token():

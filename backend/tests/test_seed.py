@@ -1,5 +1,5 @@
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.seed import ensure_admin
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.seed import ensure_admin
 
 
 async def test_ensure_admin_is_idempotent(session):

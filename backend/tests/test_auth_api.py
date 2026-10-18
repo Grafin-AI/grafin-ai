@@ -3,10 +3,10 @@ from datetime import UTC, datetime
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.passwords import hash_password
 
 
 @pytest_asyncio.fixture
@@ -25,7 +25,7 @@ async def client(session, redis_url, monkeypatch):
     )
     await session.commit()
 
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
 
     transport = ASGITransport(app=app)

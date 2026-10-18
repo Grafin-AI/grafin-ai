@@ -1,9 +1,9 @@
-# Garda AI — Backend API Design
+# Grafin AI — Backend API Design
 
 **Date:** 2026-06-22
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-backend`
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
+**Repo:** `grafin-ai-backend`
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
 
 The backend is the API gateway. It owns the canonical database schema + migrations, serves every dashboard view via server-side aggregation, relays the live feed over WebSocket, and enforces auth/RBAC + PII masking. It does **not** score transactions (pipeline does) and never ships raw 5M-row result sets.
 
@@ -20,7 +20,7 @@ The backend is the API gateway. It owns the canonical database schema + migratio
 
 ## 2. Canonical database schema (owned here)
 
-Migrations live in `garda-ai-backend/migrations` (Alembic) and **create the schema at init time** (an Alembic upgrade step run before ETL). Pipeline ETL assumes the tables exist and only loads data into them. The pipeline keeps its own committed DDL snapshot (`tests/schema.sql`) for its tests and no longer imports the backend's `garda_ai_backend.schema` package; the backend remains the single schema source of truth via its Alembic migrations (the pipeline's snapshot must be regenerated from those migrations when the schema changes).
+Migrations live in `grafin-ai-backend/migrations` (Alembic) and **create the schema at init time** (an Alembic upgrade step run before ETL). Pipeline ETL assumes the tables exist and only loads data into them. The pipeline keeps its own committed DDL snapshot (`tests/schema.sql`) for its tests and no longer imports the backend's `grafin_ai_backend.schema` package; the backend remains the single schema source of truth via its Alembic migrations (the pipeline's snapshot must be regenerated from those migrations when the schema changes).
 
 ```
 banks(
@@ -142,9 +142,9 @@ All responses are Pydantic models → typed OpenAPI. Aggregates are Redis-cached
 
 ## 10. C4 documentation (deliverable)
 
-After implementation, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `garda-ai-backend/docs/c4/`. System-wide Context + Container live in `garda-ai-deploy/docs/c4/`.
+After implementation, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `grafin-ai-backend/docs/c4/`. System-wide Context + Container live in `grafin-ai-deploy/docs/c4/`.
 
 ## 11. Out of scope here
 
-- Scoring logic and replay loop → `garda-ai-pipeline`.
-- Deployment manifests, Prometheus/Grafana provisioning → `garda-ai-deploy`.
+- Scoring logic and replay loop → `grafin-ai-pipeline`.
+- Deployment manifests, Prometheus/Grafana provisioning → `grafin-ai-deploy`.

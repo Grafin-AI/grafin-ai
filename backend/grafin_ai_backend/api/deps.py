@@ -1,0 +1,116 @@
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Annotated, Callable
+
+import httpx
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from grafin_ai_backend.config import Settings, get_settings
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.redis_client import get_redis
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.schema import TransactionEvent
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.tokens import InvalidToken, decode_token
+from grafin_ai_backend.services.auth import AuthService
+
+
+@dataclass(frozen=True)
+class CurrentUser:
+    id: int
+    role: str
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    async with _maker()() as session:
+        yield session
+
+
+def get_redis_dep() -> Redis:
+    return get_redis()
+
+
+def get_settings_dep() -> Settings:
+    return get_settings()
+
+
+def get_http_client(request: Request) -> httpx.AsyncClient | None:
+    """The app-wide pooled client (None when lifespan didn't run, e.g. bare ASGI tests)."""
+    return getattr(request.app.state, "http_client", None)
+
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+HttpClientDep = Annotated[httpx.AsyncClient | None, Depends(get_http_client)]
+RedisDep = Annotated[Redis, Depends(get_redis_dep)]
+SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
+
+
+def get_auth_service(
+    session: SessionDep, redis: RedisDep, settings: SettingsDep
+) -> AuthService:
+    return AuthService(
+        users=UserRepository(session),
+        refresh_store=RefreshTokenStore(redis),
+        secret=settings.jwt_secret,
+        access_ttl_min=settings.jwt_access_ttl_min,
+        refresh_ttl_days=settings.jwt_refresh_ttl_days,
+    )
+
+
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+_bearer = HTTPBearer(auto_error=True)
+
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    settings: SettingsDep,
+) -> CurrentUser:
+    try:
+        claims = decode_token(credentials.credentials, secret=settings.jwt_secret)
+    except InvalidToken:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token"
+        ) from None
+    if claims.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="not an access token"
+        )
+    return CurrentUser(id=int(claims["sub"]), role=claims["role"])
+
+
+CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+async def get_data_now(session: SessionDep) -> datetime:
+    """'Now' on the dataset's timeline: the latest event_time we have ingested.
+
+    The views replay a historical dataset, so anchoring their windows to the wall
+    clock would leave every window empty. Falls back to wall-clock now() on an empty
+    database so a fresh install shows an empty dashboard rather than erroring.
+
+    NOTE: auth/token expiry must NEVER use this clock — see security/tokens.py.
+    """
+    latest = await session.scalar(select(func.max(TransactionEvent.event_time)))
+    if latest is None:
+        return datetime.now(UTC)
+    return latest
+
+
+NowDep = Annotated[datetime, Depends(get_data_now)]
+
+
+def require_role(*roles: str) -> Callable[[CurrentUser], CurrentUser]:
+    def guard(user: CurrentUserDep) -> CurrentUser:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role"
+            )
+        return user
+
+    return guard

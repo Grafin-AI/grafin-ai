@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the security layer to `garda-ai-backend` — Redis integration, Argon2id passwords, JWT access/refresh with a revocable Redis-backed refresh store, the `/auth` endpoints, RBAC dependencies (`get_current_user`, `require_role`), auth-endpoint rate limiting, and a seed script (bootstrap admin + `sim_state` row). This unblocks all protected view endpoints (Plan 2B) and the WS relay (Plan 2C).
+**Goal:** Add the security layer to `grafin-ai-backend` — Redis integration, Argon2id passwords, JWT access/refresh with a revocable Redis-backed refresh store, the `/auth` endpoints, RBAC dependencies (`get_current_user`, `require_role`), auth-endpoint rate limiting, and a seed script (bootstrap admin + `sim_state` row). This unblocks all protected view endpoints (Plan 2B) and the WS relay (Plan 2C).
 
 **Architecture:** Layered per the spec — `api/` (routers + deps) → `services/` (use cases) → `repositories/` (DB access) → `security/` (passwords, tokens, refresh store) → `schema/` (existing models). No business logic in routers; no raw SQL outside repositories. Builds on Plan 1's `config.get_settings`, `db._maker/get_session`, and `schema.User`.
 
@@ -13,7 +13,7 @@
 ## File structure (created/modified by this plan)
 
 ```
-garda_ai_backend/
+grafin_ai_backend/
 ├── config.py                      # MODIFY: add redis_url, jwt_secret, jwt_access_ttl_min, jwt_refresh_ttl_days
 ├── redis_client.py                # CREATE: build_redis + lazy get_redis()
 ├── main.py                        # MODIFY: include auth router; /readyz also pings Redis
@@ -53,7 +53,7 @@ tests/
 
 **Files:**
 - Modify: `pyproject.toml`
-- Modify: `garda_ai_backend/config.py`
+- Modify: `grafin_ai_backend/config.py`
 - Test: `tests/test_config.py` (add case)
 
 - [ ] **Step 1: Add runtime deps**
@@ -72,10 +72,10 @@ Add to `[dependency-groups].dev` (keep existing): `"testcontainers[postgres,redi
 Append to `tests/test_config.py`:
 ```python
 def test_settings_auth_fields(monkeypatch):
-    monkeypatch.setenv("GARDA_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d")
-    monkeypatch.setenv("GARDA_REDIS_URL", "redis://localhost:6379/0")
-    monkeypatch.setenv("GARDA_JWT_SECRET", "test-secret")
-    from garda_ai_backend.config import Settings
+    monkeypatch.setenv("GRAFIN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d")
+    monkeypatch.setenv("GRAFIN_REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("GRAFIN_JWT_SECRET", "test-secret")
+    from grafin_ai_backend.config import Settings
     s = Settings()
     assert s.redis_url == "redis://localhost:6379/0"
     assert s.jwt_secret == "test-secret"
@@ -91,7 +91,7 @@ Expected: FAIL (`AttributeError`/validation error — fields not defined).
 
 - [ ] **Step 4: Extend `Settings`**
 
-In `garda_ai_backend/config.py`, add fields to the `Settings` class (after `log_level`):
+In `grafin_ai_backend/config.py`, add fields to the `Settings` class (after `log_level`):
 ```python
     redis_url: str = "redis://localhost:6379/0"
     jwt_secret: str = "change-me-in-prod"
@@ -108,7 +108,7 @@ Expected: PASS (all config tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml uv.lock garda_ai_backend/config.py tests/test_config.py
+git add pyproject.toml uv.lock grafin_ai_backend/config.py tests/test_config.py
 git commit -m "feat: add redis + jwt settings and auth dependencies"
 ```
 
@@ -117,16 +117,16 @@ git commit -m "feat: add redis + jwt settings and auth dependencies"
 ### Task 2: Redis client + conftest fixtures
 
 **Files:**
-- Create: `garda_ai_backend/redis_client.py`
+- Create: `grafin_ai_backend/redis_client.py`
 - Modify: `tests/conftest.py`
 - Test: `tests/test_redis_client.py`
 
 - [ ] **Step 1: Extend conftest with a Redis container + env defaults**
 
-In `tests/conftest.py`, add the two env defaults right after the existing `GARDA_DATABASE_URL` setdefault:
+In `tests/conftest.py`, add the two env defaults right after the existing `GRAFIN_DATABASE_URL` setdefault:
 ```python
-os.environ.setdefault("GARDA_REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault("GARDA_JWT_SECRET", "test-secret")
+os.environ.setdefault("GRAFIN_REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("GRAFIN_JWT_SECRET", "test-secret")
 ```
 Add these imports near the top (with the existing imports):
 ```python
@@ -155,7 +155,7 @@ async def redis_client(redis_url):
 
 `tests/test_redis_client.py`:
 ```python
-from garda_ai_backend.redis_client import build_redis
+from grafin_ai_backend.redis_client import build_redis
 
 
 async def test_build_redis_pings(redis_url):
@@ -167,15 +167,15 @@ async def test_build_redis_pings(redis_url):
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_redis_client.py -v`
-Expected: FAIL (`ModuleNotFoundError: garda_ai_backend.redis_client`).
+Expected: FAIL (`ModuleNotFoundError: grafin_ai_backend.redis_client`).
 
 - [ ] **Step 4: Implement the client**
 
-`garda_ai_backend/redis_client.py`:
+`grafin_ai_backend/redis_client.py`:
 ```python
 from redis.asyncio import Redis
 
-from garda_ai_backend.config import get_settings
+from grafin_ai_backend.config import get_settings
 
 
 def build_redis(url: str) -> Redis:
@@ -200,7 +200,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/redis_client.py tests/conftest.py tests/test_redis_client.py
+git add grafin_ai_backend/redis_client.py tests/conftest.py tests/test_redis_client.py
 git commit -m "feat: async redis client + testcontainers redis fixture"
 ```
 
@@ -209,14 +209,14 @@ git commit -m "feat: async redis client + testcontainers redis fixture"
 ### Task 3: Password hashing (Argon2id)
 
 **Files:**
-- Create: `garda_ai_backend/security/__init__.py`, `garda_ai_backend/security/passwords.py`
+- Create: `grafin_ai_backend/security/__init__.py`, `grafin_ai_backend/security/passwords.py`
 - Test: `tests/test_passwords.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_passwords.py`:
 ```python
-from garda_ai_backend.security.passwords import hash_password, verify_password
+from grafin_ai_backend.security.passwords import hash_password, verify_password
 
 
 def test_hash_and_verify():
@@ -234,12 +234,12 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/security/__init__.py`:
+`grafin_ai_backend/security/__init__.py`:
 ```python
 ```
 (empty file)
 
-`garda_ai_backend/security/passwords.py`:
+`grafin_ai_backend/security/passwords.py`:
 ```python
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -266,7 +266,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/security/ tests/test_passwords.py
+git add grafin_ai_backend/security/ tests/test_passwords.py
 git commit -m "feat: argon2id password hashing"
 ```
 
@@ -275,7 +275,7 @@ git commit -m "feat: argon2id password hashing"
 ### Task 4: JWT tokens
 
 **Files:**
-- Create: `garda_ai_backend/security/tokens.py`
+- Create: `grafin_ai_backend/security/tokens.py`
 - Test: `tests/test_tokens.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -284,7 +284,7 @@ git commit -m "feat: argon2id password hashing"
 ```python
 import pytest
 
-from garda_ai_backend.security.tokens import (
+from grafin_ai_backend.security.tokens import (
     InvalidToken,
     create_access_token,
     create_refresh_token,
@@ -328,7 +328,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/security/tokens.py`:
+`grafin_ai_backend/security/tokens.py`:
 ```python
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -387,7 +387,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/security/tokens.py tests/test_tokens.py
+git add grafin_ai_backend/security/tokens.py tests/test_tokens.py
 git commit -m "feat: jwt access/refresh token creation + validation"
 ```
 
@@ -396,7 +396,7 @@ git commit -m "feat: jwt access/refresh token creation + validation"
 ### Task 5: Users repository
 
 **Files:**
-- Create: `garda_ai_backend/repositories/__init__.py`, `garda_ai_backend/repositories/users.py`
+- Create: `grafin_ai_backend/repositories/__init__.py`, `grafin_ai_backend/repositories/users.py`
 - Test: `tests/test_users_repo.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -405,7 +405,7 @@ git commit -m "feat: jwt access/refresh token creation + validation"
 ```python
 from datetime import UTC, datetime
 
-from garda_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.repositories.users import UserRepository
 
 
 async def test_create_and_fetch_user(session):
@@ -438,19 +438,19 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/repositories/__init__.py`:
+`grafin_ai_backend/repositories/__init__.py`:
 ```python
 ```
 (empty file)
 
-`garda_ai_backend/repositories/users.py`:
+`grafin_ai_backend/repositories/users.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import User
+from grafin_ai_backend.schema import User
 
 
 class UserRepository:
@@ -483,7 +483,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/ tests/test_users_repo.py
+git add grafin_ai_backend/repositories/ tests/test_users_repo.py
 git commit -m "feat: users repository (get_by_email/get_by_id/create)"
 ```
 
@@ -492,14 +492,14 @@ git commit -m "feat: users repository (get_by_email/get_by_id/create)"
 ### Task 6: Refresh-token store (Redis, revocable)
 
 **Files:**
-- Create: `garda_ai_backend/security/refresh_store.py`
+- Create: `grafin_ai_backend/security/refresh_store.py`
 - Test: `tests/test_refresh_store.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_refresh_store.py`:
 ```python
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
 
 
 async def test_save_validate_revoke(redis_client):
@@ -521,7 +521,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/security/refresh_store.py`:
+`grafin_ai_backend/security/refresh_store.py`:
 ```python
 from redis.asyncio import Redis
 
@@ -555,7 +555,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/security/refresh_store.py tests/test_refresh_store.py
+git add grafin_ai_backend/security/refresh_store.py tests/test_refresh_store.py
 git commit -m "feat: redis-backed revocable refresh-token store"
 ```
 
@@ -564,7 +564,7 @@ git commit -m "feat: redis-backed revocable refresh-token store"
 ### Task 7: Auth service
 
 **Files:**
-- Create: `garda_ai_backend/services/__init__.py`, `garda_ai_backend/services/auth.py`
+- Create: `grafin_ai_backend/services/__init__.py`, `grafin_ai_backend/services/auth.py`
 - Test: `tests/test_auth_service.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -575,11 +575,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import hash_password
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
-from garda_ai_backend.security.tokens import decode_token
-from garda_ai_backend.services.auth import AuthError, AuthService
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.tokens import decode_token
+from grafin_ai_backend.services.auth import AuthError, AuthService
 
 SECRET = "test-secret"
 
@@ -648,19 +648,19 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/services/__init__.py`:
+`grafin_ai_backend/services/__init__.py`:
 ```python
 ```
 (empty file)
 
-`garda_ai_backend/services/auth.py`:
+`grafin_ai_backend/services/auth.py`:
 ```python
 from dataclasses import dataclass
 
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import verify_password
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
-from garda_ai_backend.security.tokens import (
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.passwords import verify_password
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.tokens import (
     InvalidToken,
     create_access_token,
     create_refresh_token,
@@ -745,7 +745,7 @@ Expected: PASS (4 tests). (Seeded user gets `id=1`, hence the `"1"` assertions.)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/services/ tests/test_auth_service.py
+git add grafin_ai_backend/services/ tests/test_auth_service.py
 git commit -m "feat: auth service (authenticate, refresh rotation, logout)"
 ```
 
@@ -754,7 +754,7 @@ git commit -m "feat: auth service (authenticate, refresh rotation, logout)"
 ### Task 8: API schemas + dependencies (current user, RBAC)
 
 **Files:**
-- Create: `garda_ai_backend/api/__init__.py`, `garda_ai_backend/api/schemas.py`, `garda_ai_backend/api/deps.py`
+- Create: `grafin_ai_backend/api/__init__.py`, `grafin_ai_backend/api/schemas.py`, `grafin_ai_backend/api/deps.py`
 - Test: `tests/test_deps.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -764,7 +764,7 @@ git commit -m "feat: auth service (authenticate, refresh rotation, logout)"
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.deps import CurrentUser, require_role
+from grafin_ai_backend.api.deps import CurrentUser, require_role
 
 
 def _user(role: str) -> CurrentUser:
@@ -791,12 +791,12 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement schemas**
 
-`garda_ai_backend/api/__init__.py`:
+`grafin_ai_backend/api/__init__.py`:
 ```python
 ```
 (empty file)
 
-`garda_ai_backend/api/schemas.py`:
+`grafin_ai_backend/api/schemas.py`:
 ```python
 from pydantic import BaseModel, EmailStr
 
@@ -824,7 +824,7 @@ class MeResponse(BaseModel):
 
 - [ ] **Step 4: Implement dependencies**
 
-`garda_ai_backend/api/deps.py`:
+`grafin_ai_backend/api/deps.py`:
 ```python
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -835,13 +835,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.config import Settings, get_settings
-from garda_ai_backend.db import _maker
-from garda_ai_backend.redis_client import get_redis
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.refresh_store import RefreshTokenStore
-from garda_ai_backend.security.tokens import InvalidToken, decode_token
-from garda_ai_backend.services.auth import AuthService
+from grafin_ai_backend.config import Settings, get_settings
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.redis_client import get_redis
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.refresh_store import RefreshTokenStore
+from grafin_ai_backend.security.tokens import InvalidToken, decode_token
+from grafin_ai_backend.services.auth import AuthService
 
 
 @dataclass(frozen=True)
@@ -924,7 +924,7 @@ Expected: PASS. (The unit test calls the inner `guard` with a `CurrentUser` dire
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/api/__init__.py garda_ai_backend/api/schemas.py garda_ai_backend/api/deps.py tests/test_deps.py
+git add grafin_ai_backend/api/__init__.py grafin_ai_backend/api/schemas.py grafin_ai_backend/api/deps.py tests/test_deps.py
 git commit -m "feat: api schemas + DI providers + get_current_user/require_role"
 ```
 
@@ -933,7 +933,7 @@ git commit -m "feat: api schemas + DI providers + get_current_user/require_role"
 ### Task 9: Rate-limit dependency (Redis fixed window)
 
 **Files:**
-- Create: `garda_ai_backend/api/ratelimit.py`
+- Create: `grafin_ai_backend/api/ratelimit.py`
 - Test: `tests/test_ratelimit.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -943,7 +943,7 @@ git commit -m "feat: api schemas + DI providers + get_current_user/require_role"
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.ratelimit import RateLimiter
+from grafin_ai_backend.api.ratelimit import RateLimiter
 
 
 async def test_allows_under_limit(redis_client):
@@ -974,7 +974,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/api/ratelimit.py`:
+`grafin_ai_backend/api/ratelimit.py`:
 ```python
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
@@ -1008,7 +1008,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/api/ratelimit.py tests/test_ratelimit.py
+git add grafin_ai_backend/api/ratelimit.py tests/test_ratelimit.py
 git commit -m "feat: redis fixed-window rate limiter"
 ```
 
@@ -1017,8 +1017,8 @@ git commit -m "feat: redis fixed-window rate limiter"
 ### Task 10: Auth router wired into the app
 
 **Files:**
-- Create: `garda_ai_backend/api/auth.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/api/auth.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_auth_api.py`
 
 - [ ] **Step 1: Write the failing integration test**
@@ -1031,10 +1031,10 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.security.passwords import hash_password
 
 
 @pytest_asyncio.fixture
@@ -1054,7 +1054,7 @@ async def client(session, redis_url, monkeypatch):
     )
     await session.commit()
 
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
 
     transport = ASGITransport(app=app)
@@ -1111,19 +1111,19 @@ Expected: FAIL (router not present → 404, or import error).
 
 - [ ] **Step 3: Implement the router**
 
-`garda_ai_backend/api/auth.py`:
+`grafin_ai_backend/api/auth.py`:
 ```python
 from fastapi import APIRouter, HTTPException, Response, status
 
-from garda_ai_backend.api.deps import AuthServiceDep, CurrentUserDep, SessionDep
-from garda_ai_backend.api.schemas import (
+from grafin_ai_backend.api.deps import AuthServiceDep, CurrentUserDep, SessionDep
+from grafin_ai_backend.api.schemas import (
     LoginRequest,
     MeResponse,
     RefreshRequest,
     TokenResponse,
 )
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.services.auth import AuthError
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.services.auth import AuthError
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -1166,22 +1166,22 @@ async def me(user: CurrentUserDep, session: SessionDep) -> MeResponse:
 
 - [ ] **Step 4: Wire the router + Redis readiness into `main.py`**
 
-In `garda_ai_backend/main.py`, add the import and `include_router`, and extend `/readyz` to also ping Redis. Replace the file body with:
+In `grafin_ai_backend/main.py`, add the import and `include_router`, and extend `/readyz` to also ping Redis. Replace the file body with:
 ```python
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
-from garda_ai_backend.api.auth import router as auth_router
-from garda_ai_backend.config import get_settings
-from garda_ai_backend.db import _maker
-from garda_ai_backend.observability import REGISTRY, configure_logging
-from garda_ai_backend.redis_client import get_redis
+from grafin_ai_backend.api.auth import router as auth_router
+from grafin_ai_backend.config import get_settings
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.observability import REGISTRY, configure_logging
+from grafin_ai_backend.redis_client import get_redis
 
 settings = get_settings()
 configure_logging(settings.log_level)
 
-app = FastAPI(title="Garda AI Backend", version="0.1.0")
+app = FastAPI(title="Grafin AI Backend", version="0.1.0")
 app.include_router(auth_router)
 
 
@@ -1216,7 +1216,7 @@ Expected: PASS (both tests). Then run `uv run pytest -v` (full suite green).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/api/auth.py garda_ai_backend/main.py tests/test_auth_api.py
+git add grafin_ai_backend/api/auth.py grafin_ai_backend/main.py tests/test_auth_api.py
 git commit -m "feat: /api/v1/auth router (login/refresh/logout/me); redis readiness"
 ```
 
@@ -1225,7 +1225,7 @@ git commit -m "feat: /api/v1/auth router (login/refresh/logout/me); redis readin
 ### Task 11: Seed script (bootstrap admin + sim_state)
 
 **Files:**
-- Create: `garda_ai_backend/seed.py`
+- Create: `grafin_ai_backend/seed.py`
 - Test: `tests/test_seed.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1236,9 +1236,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.schema import SimState
-from garda_ai_backend.seed import ensure_admin, ensure_sim_state
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.schema import SimState
+from grafin_ai_backend.seed import ensure_admin, ensure_sim_state
 
 
 async def test_ensure_admin_is_idempotent(session):
@@ -1270,17 +1270,17 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/seed.py`:
+`grafin_ai_backend/seed.py`:
 ```python
 import asyncio
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.db import _maker
-from garda_ai_backend.repositories.users import UserRepository
-from garda_ai_backend.schema import SimState
-from garda_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.repositories.users import UserRepository
+from grafin_ai_backend.schema import SimState
+from grafin_ai_backend.security.passwords import hash_password
 
 
 async def ensure_admin(session: AsyncSession, email: str, password: str):
@@ -1306,7 +1306,7 @@ async def ensure_sim_state(session: AsyncSession, start: datetime, speed: float)
 
 async def _main() -> None:
     async with _maker()() as session:
-        await ensure_admin(session, "admin@garda.local", "admin")
+        await ensure_admin(session, "admin@grafin.local", "admin")
         await ensure_sim_state(
             session, start=datetime(2025, 9, 1, tzinfo=UTC), speed=60.0
         )
@@ -1324,13 +1324,13 @@ Expected: PASS. Then full suite: `uv run pytest -v` (all green).
 
 - [ ] **Step 5: Lint**
 
-Run: `uv run ruff check garda_ai_backend/`
+Run: `uv run ruff check grafin_ai_backend/`
 Expected: All checks passed (fix any reported issues).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/seed.py tests/test_seed.py
+git add grafin_ai_backend/seed.py tests/test_seed.py
 git commit -m "feat: seed script (bootstrap admin user + sim_state singleton)"
 ```
 
@@ -1339,11 +1339,11 @@ git commit -m "feat: seed script (bootstrap admin user + sim_state singleton)"
 ### Task 12: Regenerate C4 Component + Code docs
 
 **Files:**
-- Modify: `garda-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
+- Modify: `grafin-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
 
 - [ ] **Step 1: Regenerate Code-level C4**
 
-Use the c4-architecture `c4-code` agent against `garda_ai_backend/` to add the new modules (redis_client, security/*, repositories/*, services/*, api/*, seed) to `docs/c4/04-code.md`.
+Use the c4-architecture `c4-code` agent against `grafin_ai_backend/` to add the new modules (redis_client, security/*, repositories/*, services/*, api/*, seed) to `docs/c4/04-code.md`.
 
 - [ ] **Step 2: Regenerate Component-level C4**
 

@@ -1,4 +1,4 @@
-from garda_ai_backend.schema import Base, Bank, Entity, Account
+from grafin_ai_backend.schema import Base, Bank, Entity, Account
 
 
 def test_reference_tables_registered():
@@ -12,7 +12,7 @@ def test_reference_tables_registered():
 
 
 def test_transaction_tables_registered():
-    from garda_ai_backend.schema import Transaction, TransactionEvent
+    from grafin_ai_backend.schema import Transaction, TransactionEvent
     tables = Base.metadata.tables
     txn_cols = {c.name for c in tables["transactions"].columns}
     assert {"id", "event_time", "from_account", "to_account",
@@ -23,7 +23,7 @@ def test_transaction_tables_registered():
 
 
 def test_ops_tables_registered():
-    from garda_ai_backend.schema import Alert, User
+    from grafin_ai_backend.schema import Alert, User
     tables = Base.metadata.tables
     assert {"id", "event_seq", "severity", "typology"} <= {c.name for c in tables["alerts"].columns}
     assert {"id", "email", "password_hash", "role"} <= {c.name for c in tables["users"].columns}

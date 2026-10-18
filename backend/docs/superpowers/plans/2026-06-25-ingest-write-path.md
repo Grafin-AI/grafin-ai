@@ -2,20 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a token-gated `POST /api/v1/ingest` to `garda-ai-backend` that scores transaction batches via the scoring service and persists + publishes them (commit-then-notify), idempotent on a producer-provided `transaction_id`.
+**Goal:** Add a token-gated `POST /api/v1/ingest` to `grafin-ai-backend` that scores transaction batches via the scoring service and persists + publishes them (commit-then-notify), idempotent on a producer-provided `transaction_id`.
 
 **Architecture:** A pooled httpx scoring client (timeout + bounded retries → `ScoringUnavailable` → 503); an ingest repository doing SQLAlchemy `pg_insert(...).on_conflict_do_nothing().returning()` batch inserts of transactions/events/alerts in one transaction; a route that enriches `from_risk_category`, scores, persists only-new rows, and publishes the WS relay's exact message shape. Purely additive — replay worker, `sim_state`, and read endpoints untouched (Phase 5 removes them).
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0 async (asyncpg), pydantic v2, httpx, redis.asyncio, structlog, prometheus-client, pytest + testcontainers. Mirrors existing backend conventions.
 
-**Spec:** `docs/superpowers/specs/2026-06-25-ingest-write-path-design.md`. **Anchor:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`.
+**Spec:** `docs/superpowers/specs/2026-06-25-ingest-write-path-design.md`. **Anchor:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`.
 
 ---
 
 ## File structure
 
 ```
-garda_ai_backend/
+grafin_ai_backend/
 ├── config.py                        # MODIFY: scoring_url/token, ingest_token, timeout/retries
 ├── services/scoring_client.py       # CREATE: httpx client + ScoringUnavailable + retries
 ├── api/ingest_auth.py               # CREATE: pure _verify_ingest + require_ingest_token dep
@@ -35,7 +35,7 @@ tests/
 
 ### Task 1: Configuration
 
-**Files:** Modify `garda_ai_backend/config.py`; Test `tests/test_config_ingest.py` (create).
+**Files:** Modify `grafin_ai_backend/config.py`; Test `tests/test_config_ingest.py` (create).
 
 - [ ] **Step 1: Write the failing test** `tests/test_config_ingest.py`:
 
@@ -43,7 +43,7 @@ tests/
 import pytest
 from pydantic import ValidationError
 
-from garda_ai_backend.config import Settings
+from grafin_ai_backend.config import Settings
 
 _BASE = {
     "database_url": "postgresql+asyncpg://u:p@localhost/db",
@@ -74,7 +74,7 @@ def test_ingest_settings_required(missing):
 Run: `uv run pytest tests/test_config_ingest.py -q`
 Expected: FAIL (fields don't exist / not required yet).
 
-- [ ] **Step 3: Add the fields to `garda_ai_backend/config.py`**
+- [ ] **Step 3: Add the fields to `grafin_ai_backend/config.py`**
 
 In `class Settings`, after the existing fields, add:
 ```python
@@ -95,12 +95,12 @@ NOTE: adding required fields means every `Settings()` construction now needs the
 - [ ] **Step 5: Run the full suite; fix any missing-env fallout**
 
 Run: `uv run pytest -q`
-Expected: green. If tests that boot the app/settings now fail for missing `GARDA_SCORING_URL`/`GARDA_SCORING_TOKEN`/`GARDA_INGEST_TOKEN`, add them to the test env (e.g. the test `.env` or a conftest `monkeypatch.setenv`/autouse fixture) — do NOT give the fields insecure defaults. Report exactly what you changed.
+Expected: green. If tests that boot the app/settings now fail for missing `GRAFIN_SCORING_URL`/`GRAFIN_SCORING_TOKEN`/`GRAFIN_INGEST_TOKEN`, add them to the test env (e.g. the test `.env` or a conftest `monkeypatch.setenv`/autouse fixture) — do NOT give the fields insecure defaults. Report exactly what you changed.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/config.py tests/test_config_ingest.py
+git add grafin_ai_backend/config.py tests/test_config_ingest.py
 git commit -m "feat(ingest): config for scoring client + ingest token"
 ```
 
@@ -108,9 +108,9 @@ git commit -m "feat(ingest): config for scoring client + ingest token"
 
 ### Task 2: Scoring client
 
-**Files:** Create `garda_ai_backend/services/scoring_client.py`; Test `tests/test_scoring_client.py`.
+**Files:** Create `grafin_ai_backend/services/scoring_client.py`; Test `tests/test_scoring_client.py`.
 
-- [ ] **Step 1: Implement `garda_ai_backend/services/scoring_client.py`**
+- [ ] **Step 1: Implement `grafin_ai_backend/services/scoring_client.py`**
 
 ```python
 import asyncio
@@ -126,7 +126,7 @@ class ScoringUnavailable(Exception):
 
 
 class ScoringClient:
-    """Thin client for garda-ai-scoring's POST /v1/score. Retries transient failures."""
+    """Thin client for grafin-ai-scoring's POST /v1/score. Retries transient failures."""
 
     def __init__(
         self,
@@ -182,7 +182,7 @@ class ScoringClient:
 import httpx
 import pytest
 
-from garda_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
+from grafin_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
 
 _TXN = {"transaction_id": 1, "from_account": "a", "to_account": "b", "amount": "1.00",
         "payment_format": "ACH", "is_laundering": False, "event_time": "2026-06-25T09:00:00Z"}
@@ -236,12 +236,12 @@ async def test_score_4xx_not_retried():
 - [ ] **Step 3: Run + type-check**
 
 Run: `uv run pytest tests/test_scoring_client.py -q` → PASS (3 tests).
-Run: `uv run ruff check garda_ai_backend/services/scoring_client.py tests/test_scoring_client.py` → clean.
+Run: `uv run ruff check grafin_ai_backend/services/scoring_client.py tests/test_scoring_client.py` → clean.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add garda_ai_backend/services/scoring_client.py tests/test_scoring_client.py
+git add grafin_ai_backend/services/scoring_client.py tests/test_scoring_client.py
 git commit -m "feat(ingest): resilient scoring HTTP client (retries -> ScoringUnavailable)"
 ```
 
@@ -249,7 +249,7 @@ git commit -m "feat(ingest): resilient scoring HTTP client (retries -> ScoringUn
 
 ### Task 3: Ingest-token auth dependency
 
-**Files:** Create `garda_ai_backend/api/ingest_auth.py`; Test `tests/test_ingest_auth.py`.
+**Files:** Create `grafin_ai_backend/api/ingest_auth.py`; Test `tests/test_ingest_auth.py`.
 
 - [ ] **Step 1: Write the failing test** `tests/test_ingest_auth.py`:
 
@@ -257,7 +257,7 @@ git commit -m "feat(ingest): resilient scoring HTTP client (retries -> ScoringUn
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.ingest_auth import _verify_ingest
+from grafin_ai_backend.api.ingest_auth import _verify_ingest
 
 
 def test_verify_ingest_accepts_matching():
@@ -275,14 +275,14 @@ def test_verify_ingest_rejects(header):
 
 Run: `uv run pytest tests/test_ingest_auth.py -q` → FAIL (`ModuleNotFoundError`).
 
-- [ ] **Step 3: Implement `garda_ai_backend/api/ingest_auth.py`**
+- [ ] **Step 3: Implement `grafin_ai_backend/api/ingest_auth.py`**
 
 ```python
 import hmac
 
 from fastapi import Header, HTTPException, status
 
-from garda_ai_backend.config import get_settings
+from grafin_ai_backend.config import get_settings
 
 
 def _verify_ingest(authorization: str | None, token: str) -> None:
@@ -304,12 +304,12 @@ def require_ingest_token(authorization: str | None = Header(default=None)) -> No
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `uv run pytest tests/test_ingest_auth.py -q` → PASS (5 cases). `uv run ruff check garda_ai_backend/api/ingest_auth.py` → clean.
+Run: `uv run pytest tests/test_ingest_auth.py -q` → PASS (5 cases). `uv run ruff check grafin_ai_backend/api/ingest_auth.py` → clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/api/ingest_auth.py tests/test_ingest_auth.py
+git add grafin_ai_backend/api/ingest_auth.py tests/test_ingest_auth.py
 git commit -m "feat(ingest): bearer ingest-token dependency (settings-only, constant-time)"
 ```
 
@@ -317,9 +317,9 @@ git commit -m "feat(ingest): bearer ingest-token dependency (settings-only, cons
 
 ### Task 4: Ingest repository
 
-**Files:** Create `garda_ai_backend/repositories/ingest.py`; Test `tests/test_ingest_repository.py`.
+**Files:** Create `grafin_ai_backend/repositories/ingest.py`; Test `tests/test_ingest_repository.py`.
 
-- [ ] **Step 1: Implement `garda_ai_backend/repositories/ingest.py`**
+- [ ] **Step 1: Implement `grafin_ai_backend/repositories/ingest.py`**
 
 ```python
 from dataclasses import dataclass
@@ -329,7 +329,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Account, Alert, Bank, Transaction, TransactionEvent
+from grafin_ai_backend.schema import Account, Alert, Bank, Transaction, TransactionEvent
 
 
 @dataclass(frozen=True)
@@ -427,7 +427,7 @@ class IngestRepository:
                 await self._session.execute(pg_insert(Alert).values(alerts))
             return events
 ```
-NOTE: confirm the model import names against `garda_ai_backend/schema/__init__.py` (`Account`, `Bank`, `Alert`, `Transaction`, `TransactionEvent`). If a name differs (e.g. `Alert` is exported under another name), adjust the import and report. `Alert` columns used: `event_seq`, `severity`, `typology`, `created_at` — verify against the schema; if the alert model has additional non-null columns without defaults, set them here.
+NOTE: confirm the model import names against `grafin_ai_backend/schema/__init__.py` (`Account`, `Bank`, `Alert`, `Transaction`, `TransactionEvent`). If a name differs (e.g. `Alert` is exported under another name), adjust the import and report. `Alert` columns used: `event_seq`, `severity`, `typology`, `created_at` — verify against the schema; if the alert model has additional non-null columns without defaults, set them here.
 
 - [ ] **Step 2: Write `tests/test_ingest_repository.py`**
 
@@ -438,7 +438,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from garda_ai_backend.repositories.ingest import IngestRepository
+from grafin_ai_backend.repositories.ingest import IngestRepository
 
 # Assumes a `session` fixture (AsyncSession on a fresh schema) and a helper to seed a bank +
 # accounts. Follow the existing repository-test pattern in this repo for those fixtures.
@@ -463,7 +463,7 @@ async def test_persist_inserts_events_and_alert(session, seed_reference):
     assert len(events) == 1 and events[0].status == "blocked"
     # blocked -> an alert row exists
     from sqlalchemy import func, select
-    from garda_ai_backend.schema import Alert
+    from grafin_ai_backend.schema import Alert
     assert (await session.execute(select(func.count()).select_from(Alert))).scalar() == 1
 
 
@@ -486,13 +486,13 @@ NOTE: create the `session` and `seed_reference` fixtures (or reuse existing ones
 
 - [ ] **Step 3: Run + type-check**
 
-Run: `uv run pytest tests/test_ingest_repository.py -q` → PASS. `uv run ruff check garda_ai_backend/repositories/ingest.py` → clean.
+Run: `uv run pytest tests/test_ingest_repository.py -q` → PASS. `uv run ruff check grafin_ai_backend/repositories/ingest.py` → clean.
 If a test can't get a DB session, inspect an existing DB-backed test in `tests/` and copy its fixture setup exactly. Report the fixture approach you used.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/ingest.py tests/test_ingest_repository.py
+git add grafin_ai_backend/repositories/ingest.py tests/test_ingest_repository.py
 git commit -m "feat(ingest): repository — enrich lookups + idempotent batch persist"
 ```
 
@@ -500,9 +500,9 @@ git commit -m "feat(ingest): repository — enrich lookups + idempotent batch pe
 
 ### Task 5: Ingest schemas + route + app wiring
 
-**Files:** Create `garda_ai_backend/api/ingest_schemas.py`, `garda_ai_backend/api/ingest.py`; Modify `garda_ai_backend/main.py`; Test `tests/test_ingest_api.py`.
+**Files:** Create `grafin_ai_backend/api/ingest_schemas.py`, `grafin_ai_backend/api/ingest.py`; Modify `grafin_ai_backend/main.py`; Test `tests/test_ingest_api.py`.
 
-- [ ] **Step 1: Implement `garda_ai_backend/api/ingest_schemas.py`**
+- [ ] **Step 1: Implement `grafin_ai_backend/api/ingest_schemas.py`**
 
 ```python
 from datetime import datetime
@@ -544,9 +544,9 @@ class IngestResponse(BaseModel):
     results: list[IngestResultItem]
 ```
 
-- [ ] **Step 2: Implement `garda_ai_backend/api/ingest.py`**
+- [ ] **Step 2: Implement `grafin_ai_backend/api/ingest.py`**
 
-Full module `garda_ai_backend/api/ingest.py`:
+Full module `grafin_ai_backend/api/ingest.py`:
 ```python
 import json
 import uuid
@@ -558,12 +558,12 @@ from fastapi import APIRouter, Depends, Header, Request
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
-from garda_ai_backend.api.deps import RedisDep, SessionDep, SettingsDep
-from garda_ai_backend.api.ingest_auth import require_ingest_token
-from garda_ai_backend.api.ingest_schemas import IngestRequest, IngestResponse, IngestResultItem
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.repositories.ingest import IngestRepository
-from garda_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
+from grafin_ai_backend.api.deps import RedisDep, SessionDep, SettingsDep
+from grafin_ai_backend.api.ingest_auth import require_ingest_token
+from grafin_ai_backend.api.ingest_schemas import IngestRequest, IngestResponse, IngestResultItem
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.repositories.ingest import IngestRepository
+from grafin_ai_backend.services.scoring_client import ScoringClient, ScoringUnavailable
 
 log = structlog.get_logger()
 router = APIRouter(
@@ -666,7 +666,7 @@ async def ingest(
 ```
 (Duplicates report `seq=None, status=None, ingested=False`, which is accurate for "no event created this call".)
 
-- [ ] **Step 3: Wire the router + shared httpx client in `garda_ai_backend/main.py`**
+- [ ] **Step 3: Wire the router + shared httpx client in `grafin_ai_backend/main.py`**
 
 Add a lifespan that owns one pooled `httpx.AsyncClient` on `app.state`, and include the router:
 ```python
@@ -674,7 +674,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 
-from garda_ai_backend.api.ingest import router as ingest_router
+from grafin_ai_backend.api.ingest import router as ingest_router
 
 
 @asynccontextmanager
@@ -685,7 +685,7 @@ async def lifespan(app: FastAPI):
     finally:
         await app.state.http_client.aclose()
 ```
-Change the app construction to `app = FastAPI(title="Garda AI Backend", version="0.1.0", lifespan=lifespan)` and add `app.include_router(ingest_router)` alongside the others.
+Change the app construction to `app = FastAPI(title="Grafin AI Backend", version="0.1.0", lifespan=lifespan)` and add `app.include_router(ingest_router)` alongside the others.
 NOTE: if `main.py` already defines a lifespan, MERGE this into it (don't create a second). Read `main.py` first.
 
 - [ ] **Step 4: Write `tests/test_ingest_api.py`**
@@ -695,8 +695,8 @@ Endpoint tests against testcontainers Postgres + Redis (reuse the backend's exis
 ```python
 import pytest
 
-from garda_ai_backend.api.ingest import get_scoring_client
-from garda_ai_backend.services.scoring_client import ScoringUnavailable
+from grafin_ai_backend.api.ingest import get_scoring_client
+from grafin_ai_backend.services.scoring_client import ScoringUnavailable
 
 _TXN = {
     "transaction_id": 40217, "from_bank_id": "011", "from_account": "1000000001",
@@ -768,17 +768,17 @@ def test_ingest_unknown_reference_400(app, client, ingest_headers):
     finally:
         app.dependency_overrides.clear()
 ```
-NOTE: use the SAME app-level test fixtures the existing endpoint tests use (e.g. `tests/test_ws_uvicorn.py` / whichever tests boot the FastAPI app with a real Postgres+Redis). The mocked scoring client is injected via `app.dependency_overrides[get_scoring_client]`. If the existing tests publish/subscribe to verify Redis, add a subscriber assertion on `garda:events:live` for the publish test; otherwise asserting the DB rows + response is sufficient.
+NOTE: use the SAME app-level test fixtures the existing endpoint tests use (e.g. `tests/test_ws_uvicorn.py` / whichever tests boot the FastAPI app with a real Postgres+Redis). The mocked scoring client is injected via `app.dependency_overrides[get_scoring_client]`. If the existing tests publish/subscribe to verify Redis, add a subscriber assertion on `grafin:events:live` for the publish test; otherwise asserting the DB rows + response is sufficient.
 
 - [ ] **Step 5: Run the full suite + lint**
 
-Run: `uv run pytest -q` → all green (existing + new). `uv run ruff check garda_ai_backend tests` → clean.
+Run: `uv run pytest -q` → all green (existing + new). `uv run ruff check grafin_ai_backend tests` → clean.
 If the ASGI TestClient doesn't run the lifespan (so `app.state.http_client` is missing), use a client that triggers lifespan (e.g. `TestClient(app)` as a context manager, or httpx ASGITransport with lifespan) — the scoring client is overridden in tests anyway, so `app.state.http_client` may be unused in tests; ensure the override path doesn't touch it. Report how you handled lifespan in tests.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/api/ingest_schemas.py garda_ai_backend/api/ingest.py garda_ai_backend/main.py tests/test_ingest_api.py
+git add grafin_ai_backend/api/ingest_schemas.py grafin_ai_backend/api/ingest.py grafin_ai_backend/main.py tests/test_ingest_api.py
 git commit -m "feat(ingest): POST /api/v1/ingest — score, persist, publish (commit-then-notify)"
 ```
 
@@ -786,21 +786,21 @@ git commit -m "feat(ingest): POST /api/v1/ingest — score, persist, publish (co
 
 ### Task 6: Ingest metrics
 
-**Files:** Modify `garda_ai_backend/observability.py`; wire counters in `garda_ai_backend/api/ingest.py`.
+**Files:** Modify `grafin_ai_backend/observability.py`; wire counters in `grafin_ai_backend/api/ingest.py`.
 
-- [ ] **Step 1: Add metrics to `garda_ai_backend/observability.py`**
+- [ ] **Step 1: Add metrics to `grafin_ai_backend/observability.py`**
 
 ```python
 from prometheus_client import Counter, Histogram  # extend existing import
 
 INGEST_TRANSACTIONS = Counter(
-    "garda_ingest_transactions_total",
+    "grafin_ingest_transactions_total",
     "Transactions received by /ingest, by result",
     ["result"],  # bounded: inserted | duplicate
     registry=REGISTRY,
 )
 INGEST_SCORING_LATENCY = Histogram(
-    "garda_ingest_scoring_latency_seconds",
+    "grafin_ingest_scoring_latency_seconds",
     "Latency of the scoring-service call from /ingest",
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
     registry=REGISTRY,
@@ -813,12 +813,12 @@ In `api/ingest.py`: time the `scoring.score(...)` call with `INGEST_SCORING_LATE
 
 - [ ] **Step 3: Run + verify metrics exposed**
 
-Run: `uv run pytest -q` → green. Add/extend a test asserting `/metrics` exposes `garda_ingest_transactions_total` after an ingest (optional if an existing metrics test covers the endpoint). Run `uv run ruff check garda_ai_backend tests` → clean.
+Run: `uv run pytest -q` → green. Add/extend a test asserting `/metrics` exposes `grafin_ingest_transactions_total` after an ingest (optional if an existing metrics test covers the endpoint). Run `uv run ruff check grafin_ai_backend tests` → clean.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add garda_ai_backend/observability.py garda_ai_backend/api/ingest.py
+git add grafin_ai_backend/observability.py grafin_ai_backend/api/ingest.py
 git commit -m "feat(ingest): RED-style ingest metrics (transactions total + scoring latency)"
 ```
 
@@ -826,7 +826,7 @@ git commit -m "feat(ingest): RED-style ingest metrics (transactions total + scor
 
 ### Task 7: Documentation
 
-**Files:** `docs/c4/03-component.md`, `docs/c4/04-code.md` (backend); the system container note in `garda-ai-deploy/docs/c4/02-container.md`.
+**Files:** `docs/c4/03-component.md`, `docs/c4/04-code.md` (backend); the system container note in `grafin-ai-deploy/docs/c4/02-container.md`.
 
 - [ ] **Step 1: Refresh backend C4 (c4-architecture plugin)**
 
@@ -834,13 +834,13 @@ Run the `c4-code` + `c4-component` agents over the backend to document the new c
 
 - [ ] **Step 2: Update the system Container view**
 
-In `garda-ai-deploy/docs/c4/02-container.md`, add the edge: backend → scoring service (HTTP `POST /v1/score`) and the ingest entrypoint (producer → backend `POST /api/v1/ingest`). Note this is additive (the replay path still exists until Phase 5).
+In `grafin-ai-deploy/docs/c4/02-container.md`, add the edge: backend → scoring service (HTTP `POST /v1/score`) and the ingest entrypoint (producer → backend `POST /api/v1/ingest`). Note this is additive (the replay path still exists until Phase 5).
 
 - [ ] **Step 3: Commit (per repo)**
 
 ```bash
 git add docs/c4 && git commit -m "docs(ingest): C4 refresh for the ingest write-path"
-cd ../garda-ai-deploy && git add docs/c4 && git commit -m "docs: system container adds backend->scoring + ingest edges" && cd -
+cd ../grafin-ai-deploy && git add docs/c4 && git commit -m "docs: system container adds backend->scoring + ingest edges" && cd -
 ```
 
 ---

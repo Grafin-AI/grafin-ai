@@ -11,11 +11,11 @@ from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.config import get_settings
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.repositories.explanations import ExplanationsRepository
-from garda_ai_backend.schema import (
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.config import get_settings
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.repositories.explanations import ExplanationsRepository
+from grafin_ai_backend.schema import (
     Account,
     Bank,
     Entity,
@@ -24,11 +24,11 @@ from garda_ai_backend.schema import (
     TransactionEvent,
     User,
 )
-from garda_ai_backend.security.tokens import create_access_token
-from garda_ai_backend.services.explain.evidence import compute_evidence
-from garda_ai_backend.services.explain import knowledge as kb
-from garda_ai_backend.services.explain.llm import parse_narrative
-from garda_ai_backend.services.explain.rules import NARRATIVE_FIELDS
+from grafin_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.services.explain.evidence import compute_evidence
+from grafin_ai_backend.services.explain import knowledge as kb
+from grafin_ai_backend.services.explain.llm import parse_narrative
+from grafin_ai_backend.services.explain.rules import NARRATIVE_FIELDS
 
 T_TIME = datetime(2025, 9, 1, 3, 0, tzinfo=UTC)  # 03:00 -> night
 TARGET = 100
@@ -116,7 +116,7 @@ def _settings(**update):
 @pytest_asyncio.fixture
 async def make_client(session, redis_url, explain_dataset, monkeypatch):
     """Factory: make_client(settings, handler) -> AsyncClient against the app."""
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
 
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
@@ -632,7 +632,7 @@ async def test_gemini_tool_loop_error_falls_back_to_single_call(make_client):
 
 
 def test_policy_references_by_reason_code():
-    from garda_ai_backend.services.explain.llm import policy_references
+    from grafin_ai_backend.services.explain.llm import policy_references
 
     ids = [e["id"] for e in policy_references("ga-fanout")]
     assert "tipologi-fan-out" in ids and set(kb.GENERAL_IDS) <= set(ids)

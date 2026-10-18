@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Remove the accelerated-simulation machinery from `garda-ai-backend`: re-anchor reads from `sim_state.sim_now` to wall-clock `now()`, delete the `/sim` endpoints + `sim_state` table + `SimRepository`/schema/seed, and drop the redundant `sim_now` from the WS live-event message.
+**Goal:** Remove the accelerated-simulation machinery from `grafin-ai-backend`: re-anchor reads from `sim_state.sim_now` to wall-clock `now()`, delete the `/sim` endpoints + `sim_state` table + `SimRepository`/schema/seed, and drop the redundant `sim_now` from the WS live-event message.
 
 **Architecture:** The events now enter via `/ingest` (stamped `surfaced_at = now()`), so every read view's `surfaced_at <= sim_now` filter just re-binds to wall-clock `now()`. This is a **dependency swap** (`get_sim_now` → `get_now`) plus deletions — no query rewrites. Tests keep their deterministic 2025 fixture data by overriding `get_now` to the fixed `SIM_NOW` instant.
 
 **Tech Stack:** FastAPI, SQLAlchemy 2.0 async, Alembic, pytest + testcontainers. No new deps.
 
-**Spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-shed-simulation-design.md`
+**Spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-shed-simulation-design.md`
 
 **Guardrail — do NOT remove:** `SystemHealthResponse.model_accuracy_simulated` / the "Simulated (Phase 1)" concept. That is scorer honesty, unrelated to the sim clock.
 
@@ -17,13 +17,13 @@
 ## Task 1: Re-anchor the read dependency (`get_sim_now` → `get_now`)
 
 **Files:**
-- Modify: `garda_ai_backend/api/deps.py`
-- Modify: `garda_ai_backend/api/geo.py`, `api/metrics.py`, `api/transactions.py`, `api/users_view.py`, `api/analytics.py`
+- Modify: `grafin_ai_backend/api/deps.py`
+- Modify: `grafin_ai_backend/api/geo.py`, `api/metrics.py`, `api/transactions.py`, `api/users_view.py`, `api/analytics.py`
 - Modify (tests): `tests/test_geo_endpoint.py`, `tests/test_metrics_endpoints.py`, `tests/test_analytics_endpoint.py`, `tests/test_users_view_endpoints.py`, `tests/test_transactions_endpoints.py`
 
 - [ ] **Step 1: Replace the dependency in `api/deps.py`**
 
-Remove the `SimRepository` import (`from garda_ai_backend.repositories.sim import SimRepository`) and replace the whole `get_sim_now` / `SimNowDep` block:
+Remove the `SimRepository` import (`from grafin_ai_backend.repositories.sim import SimRepository`) and replace the whole `get_sim_now` / `SimNowDep` block:
 
 ```python
 async def get_sim_now(session: SessionDep) -> datetime:
@@ -61,12 +61,12 @@ Add `UTC` to the datetime import: `from datetime import UTC, datetime`. (`HTTPEx
 - [ ] **Step 2: Swap the dependency in the 6 view routers**
 
 In each of `api/geo.py`, `api/metrics.py`, `api/transactions.py`, `api/users_view.py`, `api/analytics.py`:
-- Change the import `SimNowDep` → `NowDep` (in the `from garda_ai_backend.api.deps import ...` line).
+- Change the import `SimNowDep` → `NowDep` (in the `from grafin_ai_backend.api.deps import ...` line).
 - Rename every `sim_now` identifier to `now` throughout the file (it is used **only** as this dependency variable in these files — signatures `sim_now: SimNowDep` → `now: NowDep`, and its uses like `sim_now.isoformat()`, `sim_now - window`, `repo.overview(sim_now)` → `now...`). Occurrence guide: geo (1 param + 2 uses), metrics (3 params + several cache-key/window uses), transactions (1 param + 1 use), users_view (2 params + 2 uses), analytics (1 param + several uses).
 
 Example — `api/transactions.py` handler after the change:
 ```python
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep, NowDep
+from grafin_ai_backend.api.deps import CurrentUserDep, SessionDep, NowDep
 ...
 @router.get("/live", response_model=LiveResponse)
 async def live(
@@ -109,7 +109,7 @@ git commit -m "refactor: re-anchor read views from sim clock to wall-clock now()
 ## Task 2: Drop `sim_now` from the WS live-event message
 
 **Files:**
-- Modify: `garda_ai_backend/api/ingest.py`
+- Modify: `grafin_ai_backend/api/ingest.py`
 - Modify: `tests/test_ingest_api.py`
 
 - [ ] **Step 1: Remove the field from the published message**
@@ -152,18 +152,18 @@ git commit -m "refactor: drop redundant sim_now from the live-event message"
 ## Task 3: Delete the `/sim` control surface
 
 **Files:**
-- Delete: `garda_ai_backend/api/sim.py`, `garda_ai_backend/repositories/sim.py`, `tests/test_sim_endpoints.py`
-- Modify: `garda_ai_backend/main.py`, `garda_ai_backend/api/view_schemas.py`
+- Delete: `grafin_ai_backend/api/sim.py`, `grafin_ai_backend/repositories/sim.py`, `tests/test_sim_endpoints.py`
+- Modify: `grafin_ai_backend/main.py`, `grafin_ai_backend/api/view_schemas.py`
 
 - [ ] **Step 1: Delete the files**
 
 ```bash
-git rm garda_ai_backend/api/sim.py garda_ai_backend/repositories/sim.py tests/test_sim_endpoints.py
+git rm grafin_ai_backend/api/sim.py grafin_ai_backend/repositories/sim.py tests/test_sim_endpoints.py
 ```
 
 - [ ] **Step 2: Remove the router from `main.py`**
 
-Delete the import line `from garda_ai_backend.api.sim import router as sim_router` and the registration line `app.include_router(sim_router)`.
+Delete the import line `from grafin_ai_backend.api.sim import router as sim_router` and the registration line `app.include_router(sim_router)`.
 
 - [ ] **Step 3: Remove the sim schemas from `api/view_schemas.py`**
 
@@ -171,7 +171,7 @@ Delete the `SimStateResponse` and `SimControlRequest` classes (lines 6-16). If `
 
 - [ ] **Step 4: Verify no dangling references**
 
-Run: `uv run ruff check garda_ai_backend && grep -rn "SimStateResponse\|SimControlRequest\|api.sim\|repositories.sim\|SimRepository" garda_ai_backend tests || echo "clean"`
+Run: `uv run ruff check grafin_ai_backend && grep -rn "SimStateResponse\|SimControlRequest\|api.sim\|repositories.sim\|SimRepository" grafin_ai_backend tests || echo "clean"`
 Expected: ruff clean; grep prints `clean` (no matches).
 
 - [ ] **Step 5: Commit**
@@ -186,7 +186,7 @@ git commit -m "feat: remove the /sim state+control endpoints and SimRepository"
 ## Task 4: Simplify `system/health` (drop the sim lookup)
 
 **Files:**
-- Modify: `garda_ai_backend/api/system.py`
+- Modify: `grafin_ai_backend/api/system.py`
 - Modify (if needed): `tests/test_system_endpoint.py`
 
 - [ ] **Step 1: Rewrite the health handler**
@@ -197,9 +197,9 @@ Replace `api/system.py` with (removes the `SimRepository` import + lookup; `even
 from fastapi import APIRouter
 from sqlalchemy import func, select, text
 
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
-from garda_ai_backend.api.view_schemas import SystemHealthResponse
-from garda_ai_backend.schema import TransactionEvent
+from grafin_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from grafin_ai_backend.api.view_schemas import SystemHealthResponse
+from grafin_ai_backend.schema import TransactionEvent
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -247,19 +247,19 @@ git commit -m "refactor: system/health no longer depends on the sim clock"
 ## Task 5: Remove the `SimState` model, seed, and test fixtures
 
 **Files:**
-- Delete: `garda_ai_backend/schema/sim.py`
-- Modify: `garda_ai_backend/schema/__init__.py`, `garda_ai_backend/seed.py`, `tests/conftest.py`, `tests/test_schema.py`, `tests/test_seed.py`
+- Delete: `grafin_ai_backend/schema/sim.py`
+- Modify: `grafin_ai_backend/schema/__init__.py`, `grafin_ai_backend/seed.py`, `tests/conftest.py`, `tests/test_schema.py`, `tests/test_seed.py`
 
 - [ ] **Step 1: Delete the model + export**
 
 ```bash
-git rm garda_ai_backend/schema/sim.py
+git rm grafin_ai_backend/schema/sim.py
 ```
-In `schema/__init__.py`, remove `from garda_ai_backend.schema.sim import SimState` and remove `"SimState"` from `__all__` (and the trailing reference in the list).
+In `schema/__init__.py`, remove `from grafin_ai_backend.schema.sim import SimState` and remove `"SimState"` from `__all__` (and the trailing reference in the list).
 
 - [ ] **Step 2: Remove sim seeding from `seed.py`**
 
-Delete the `ensure_sim_state` function, the `from garda_ai_backend.schema import SimState` import, and its call in `_main`:
+Delete the `ensure_sim_state` function, the `from grafin_ai_backend.schema import SimState` import, and its call in `_main`:
 ```python
         await ensure_sim_state(
             session, start=datetime(2025, 9, 1, tzinfo=UTC), speed=60.0
@@ -269,7 +269,7 @@ Delete the `ensure_sim_state` function, the `from garda_ai_backend.schema import
 
 - [ ] **Step 3: Remove the `SimState` seed from `tests/conftest.py`**
 
-Remove `SimState` from the `from garda_ai_backend.schema import (...)` tuple, and delete the line:
+Remove `SimState` from the `from grafin_ai_backend.schema import (...)` tuple, and delete the line:
 ```python
     session.add(SimState(id=1, sim_now=SIM_NOW, speed=Decimal("60"), running=True))
 ```
@@ -282,7 +282,7 @@ Remove `SimState` from the `from garda_ai_backend.schema import (...)` tuple, an
 
 - [ ] **Step 5: Verify + run**
 
-Run: `grep -rn "SimState\|ensure_sim_state\|sim_state" garda_ai_backend tests || echo clean`
+Run: `grep -rn "SimState\|ensure_sim_state\|sim_state" grafin_ai_backend tests || echo clean`
 Expected: `clean` (only the Alembic migration in Task 6 will reference `sim_state`, not added yet).
 Run: `uv run pytest tests/test_schema.py tests/test_seed.py -q`
 Expected: PASS.
@@ -359,12 +359,12 @@ git commit -m "feat: Alembic migration dropping the sim_state table"
 
 - [ ] **Step 1: Run the whole suite + lint + type-check**
 
-Run: `uv run pytest -q && uv run ruff check garda_ai_backend && uv run mypy garda_ai_backend`
+Run: `uv run pytest -q && uv run ruff check grafin_ai_backend && uv run mypy grafin_ai_backend`
 Expected: all green. (The pre-existing 12 unrelated ruff errors noted in earlier phases, if still present, are out of scope — do not touch files you didn't change in this plan; scope ruff to the changed files if needed: `uv run ruff check <changed files>`.)
 
 - [ ] **Step 2: Confirm no sim residue in code**
 
-Run: `grep -rn "sim_now\|SimState\|SimRepository\|/sim\|get_sim_now\|SimNowDep\|ensure_sim_state" garda_ai_backend || echo "clean"`
+Run: `grep -rn "sim_now\|SimState\|SimRepository\|/sim\|get_sim_now\|SimNowDep\|ensure_sim_state" grafin_ai_backend || echo "clean"`
 Expected: `clean`.
 
 - [ ] **Step 3: Commit any final fixups (if the previous steps required them)**
@@ -378,7 +378,7 @@ git commit -m "chore: backend sim-shed cleanup" || echo "nothing to commit"
 
 ## Definition of Done
 
-- `uv run pytest -q` green; `uv run ruff check garda_ai_backend` clean on changed files; `uv run mypy garda_ai_backend` clean.
+- `uv run pytest -q` green; `uv run ruff check grafin_ai_backend` clean on changed files; `uv run mypy grafin_ai_backend` clean.
 - Reads anchored to wall-clock `now()` via `get_now`/`NowDep`; no `get_sim_now`/`SimNowDep`.
 - `/sim/*` endpoints, `SimRepository`, `SimState` model + `sim_state` table (Alembic drop), and the sim schemas/seed are gone.
 - The WS live-event message no longer carries `sim_now`.

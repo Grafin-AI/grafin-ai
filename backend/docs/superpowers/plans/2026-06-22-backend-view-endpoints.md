@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement every dashboard read endpoint in `garda-ai-backend` — metrics overview, transaction volume, heatmap, fraud analytics, geographic provinces, user-risk list + profile detail, alerts list + ack, live transactions + transaction detail, system health, and the sim clock (state + admin control). All aggregate over `transaction_events` surfaced so far (`surfaced_at ≤ sim_now`), apply server-side PII masking, are role-gated, and Redis-cache the heavy aggregates.
+**Goal:** Implement every dashboard read endpoint in `grafin-ai-backend` — metrics overview, transaction volume, heatmap, fraud analytics, geographic provinces, user-risk list + profile detail, alerts list + ack, live transactions + transaction detail, system health, and the sim clock (state + admin control). All aggregate over `transaction_events` surfaced so far (`surfaced_at ≤ sim_now`), apply server-side PII masking, are role-gated, and Redis-cache the heavy aggregates.
 
 **Architecture:** Continues the Plan-1/2A layering — `api/` routers (role-gated, no logic) → `services/` (use cases, masking, caching) → `repositories/` (all SQL) → `schema/`. PII masking lives in a serialization helper (never in repositories). `sim_now` is read from the `sim_state` singleton. There is no live data yet (the pipeline in Plan 3 loads it), so tests seed a small fixed dataset via a shared fixture.
 
@@ -15,14 +15,14 @@
 - **sim_now source:** `SimRepository.get_sim_now(session)` returns `sim_state.sim_now` (seeded row id=1). Every aggregate filters `transaction_events.surfaced_at <= sim_now`.
 - **Status values:** `approved | flagged | blocked`. "Flagged" for dashboards = `status IN ('flagged','blocked')`.
 - **Role gating:** read endpoints require `require_role("analyst", "admin")`; `POST /sim/control` requires `require_role("admin")`.
-- **Masking:** applied in services via `garda_ai_backend/api/masking.py` for `analyst`; `admin` requests may pass `?unmasked=true` (audited-logged).
+- **Masking:** applied in services via `grafin_ai_backend/api/masking.py` for `analyst`; `admin` requests may pass `?unmasked=true` (audited-logged).
 - **Caching:** `cached_json(redis, key, ttl, compute)` helper; key includes endpoint + a `sim_now` bucket + params.
 - **Money:** `Decimal` in the DB → serialized as `float`/string in responses (Pydantic handles `Decimal`→JSON; use `float` fields in response models for the frontend).
 
 ## File structure (created/modified by this plan)
 
 ```
-garda_ai_backend/
+grafin_ai_backend/
 ├── api/
 │   ├── masking.py                 # CREATE: mask_name, mask_account_id, mask_payment_id
 │   ├── cache.py                   # CREATE: cached_json(redis, key, ttl, compute)
@@ -79,7 +79,7 @@ from decimal import Decimal
 
 import pytest_asyncio as _pytest_asyncio
 
-from garda_ai_backend.schema import (
+from grafin_ai_backend.schema import (
     Account,
     Alert,
     Bank,
@@ -162,14 +162,14 @@ git commit -m "test: shared seeded dataset fixture for view endpoints"
 ### Task 2: PII masking helper
 
 **Files:**
-- Create: `garda_ai_backend/api/masking.py`
+- Create: `grafin_ai_backend/api/masking.py`
 - Test: `tests/test_view_masking.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_view_masking.py`:
 ```python
-from garda_ai_backend.api.masking import mask_account_id, mask_name
+from grafin_ai_backend.api.masking import mask_account_id, mask_name
 
 
 def test_mask_name_keeps_initials():
@@ -190,7 +190,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/api/masking.py`:
+`grafin_ai_backend/api/masking.py`:
 ```python
 def mask_name(name: str) -> str:
     """Mask each word to its initial + asterisks: 'Ahmad Setiawan' -> 'A**** S****'."""
@@ -218,7 +218,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/api/masking.py tests/test_view_masking.py
+git add grafin_ai_backend/api/masking.py tests/test_view_masking.py
 git commit -m "feat: server-side PII masking helpers"
 ```
 
@@ -227,14 +227,14 @@ git commit -m "feat: server-side PII masking helpers"
 ### Task 3: Redis aggregate cache helper
 
 **Files:**
-- Create: `garda_ai_backend/api/cache.py`
+- Create: `grafin_ai_backend/api/cache.py`
 - Test: `tests/test_view_cache.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_view_cache.py`:
 ```python
-from garda_ai_backend.api.cache import cached_json
+from grafin_ai_backend.api.cache import cached_json
 
 
 async def test_cached_json_computes_once(redis_client):
@@ -269,7 +269,7 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/api/cache.py`:
+`grafin_ai_backend/api/cache.py`:
 ```python
 import json
 from collections.abc import Awaitable, Callable
@@ -298,7 +298,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/api/cache.py tests/test_view_cache.py
+git add grafin_ai_backend/api/cache.py tests/test_view_cache.py
 git commit -m "feat: redis aggregate cache helper (cached_json)"
 ```
 
@@ -307,10 +307,10 @@ git commit -m "feat: redis aggregate cache helper (cached_json)"
 ### Task 4: Sim repository + sim endpoints
 
 **Files:**
-- Create: `garda_ai_backend/repositories/sim.py`
-- Create: `garda_ai_backend/api/view_schemas.py` (started here, extended later)
-- Create: `garda_ai_backend/api/sim.py`
-- Modify: `garda_ai_backend/main.py` (include sim router)
+- Create: `grafin_ai_backend/repositories/sim.py`
+- Create: `grafin_ai_backend/api/view_schemas.py` (started here, extended later)
+- Create: `grafin_ai_backend/api/sim.py`
+- Modify: `grafin_ai_backend/main.py` (include sim router)
 - Test: `tests/test_sim_endpoints.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -322,9 +322,9 @@ from datetime import UTC, datetime
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 SECRET = "test-secret"
 
@@ -343,7 +343,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
 
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -386,14 +386,14 @@ Expected: FAIL (router/modules missing).
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/sim.py`:
+`grafin_ai_backend/repositories/sim.py`:
 ```python
 from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import SimState
+from grafin_ai_backend.schema import SimState
 
 
 class SimRepository:
@@ -428,7 +428,7 @@ class SimRepository:
 
 - [ ] **Step 4: Start the view schemas**
 
-`garda_ai_backend/api/view_schemas.py`:
+`grafin_ai_backend/api/view_schemas.py`:
 ```python
 from datetime import datetime
 
@@ -449,13 +449,13 @@ class SimControlRequest(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/sim.py`:
+`grafin_ai_backend/api/sim.py`:
 ```python
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep, require_role
-from garda_ai_backend.api.view_schemas import SimControlRequest, SimStateResponse
-from garda_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.api.deps import CurrentUserDep, SessionDep, require_role
+from grafin_ai_backend.api.view_schemas import SimControlRequest, SimStateResponse
+from grafin_ai_backend.repositories.sim import SimRepository
 
 router = APIRouter(prefix="/api/v1/sim", tags=["sim"])
 
@@ -482,9 +482,9 @@ async def control(
 
 - [ ] **Step 6: Wire the router into `main.py`**
 
-In `garda_ai_backend/main.py`, after the existing `app.include_router(auth_router)` line, add:
+In `grafin_ai_backend/main.py`, after the existing `app.include_router(auth_router)` line, add:
 ```python
-from garda_ai_backend.api.sim import router as sim_router
+from grafin_ai_backend.api.sim import router as sim_router
 
 app.include_router(sim_router)
 ```
@@ -498,7 +498,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/sim.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/sim.py garda_ai_backend/main.py tests/test_sim_endpoints.py
+git add grafin_ai_backend/repositories/sim.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/sim.py grafin_ai_backend/main.py tests/test_sim_endpoints.py
 git commit -m "feat: sim repository + /sim/state and /sim/control (admin) endpoints"
 ```
 
@@ -507,10 +507,10 @@ git commit -m "feat: sim repository + /sim/state and /sim/control (admin) endpoi
 ### Task 5: Metrics repository + overview/volume/heatmap endpoints
 
 **Files:**
-- Create: `garda_ai_backend/repositories/metrics.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/metrics.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/metrics.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/metrics.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_metrics_endpoints.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -520,9 +520,9 @@ git commit -m "feat: sim repository + /sim/state and /sim/control (admin) endpoi
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -537,7 +537,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -586,14 +586,14 @@ Expected: FAIL (modules/router missing).
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/metrics.py`:
+`grafin_ai_backend/repositories/metrics.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import Integer, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Transaction, TransactionEvent
+from grafin_ai_backend.schema import Transaction, TransactionEvent
 
 
 class MetricsRepository:
@@ -659,7 +659,7 @@ class MetricsRepository:
 
 - [ ] **Step 4: Add view schemas**
 
-Append to `garda_ai_backend/api/view_schemas.py`:
+Append to `grafin_ai_backend/api/view_schemas.py`:
 ```python
 class MetricsOverviewResponse(BaseModel):
     total_transactions: int
@@ -686,19 +686,19 @@ class HeatmapResponse(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/metrics.py`:
+`grafin_ai_backend/api/metrics.py`:
 ```python
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.cache import cached_json
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
-from garda_ai_backend.api.view_schemas import (
+from grafin_ai_backend.api.cache import cached_json
+from grafin_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from grafin_ai_backend.api.view_schemas import (
     HeatmapResponse,
     MetricsOverviewResponse,
     VolumeResponse,
 )
-from garda_ai_backend.repositories.metrics import MetricsRepository
-from garda_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.repositories.metrics import MetricsRepository
+from grafin_ai_backend.repositories.sim import SimRepository
 
 router = APIRouter(prefix="/api/v1/metrics", tags=["metrics"])
 
@@ -759,7 +759,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/metrics.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/metrics.py garda_ai_backend/main.py tests/test_metrics_endpoints.py
+git add grafin_ai_backend/repositories/metrics.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/metrics.py grafin_ai_backend/main.py tests/test_metrics_endpoints.py
 git commit -m "feat: metrics overview/volume/heatmap endpoints (cached)"
 ```
 
@@ -768,10 +768,10 @@ git commit -m "feat: metrics overview/volume/heatmap endpoints (cached)"
 ### Task 6: Fraud analytics endpoint
 
 **Files:**
-- Create: `garda_ai_backend/repositories/analytics.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/analytics.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/analytics.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/analytics.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_analytics_endpoint.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -781,9 +781,9 @@ git commit -m "feat: metrics overview/volume/heatmap endpoints (cached)"
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -798,7 +798,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -827,14 +827,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/analytics.py`:
+`grafin_ai_backend/repositories/analytics.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Transaction, TransactionEvent
+from grafin_ai_backend.schema import Transaction, TransactionEvent
 
 
 class AnalyticsRepository:
@@ -880,7 +880,7 @@ class AnalyticsRepository:
 
 - [ ] **Step 4: Add view schemas**
 
-Append to `garda_ai_backend/api/view_schemas.py`:
+Append to `grafin_ai_backend/api/view_schemas.py`:
 ```python
 class TypologyCount(BaseModel):
     typology: str
@@ -901,19 +901,19 @@ class FraudAnalyticsResponse(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/analytics.py`:
+`grafin_ai_backend/api/analytics.py`:
 ```python
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.cache import cached_json
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
-from garda_ai_backend.api.view_schemas import (
+from grafin_ai_backend.api.cache import cached_json
+from grafin_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from grafin_ai_backend.api.view_schemas import (
     DetectionMetrics,
     FraudAnalyticsResponse,
     TypologyCount,
 )
-from garda_ai_backend.repositories.analytics import AnalyticsRepository
-from garda_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.repositories.analytics import AnalyticsRepository
+from grafin_ai_backend.repositories.sim import SimRepository
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
@@ -958,7 +958,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/analytics.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/analytics.py garda_ai_backend/main.py tests/test_analytics_endpoint.py
+git add grafin_ai_backend/repositories/analytics.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/analytics.py grafin_ai_backend/main.py tests/test_analytics_endpoint.py
 git commit -m "feat: fraud analytics endpoint (typology distribution + precision/recall/f1)"
 ```
 
@@ -967,10 +967,10 @@ git commit -m "feat: fraud analytics endpoint (typology distribution + precision
 ### Task 7: Geographic provinces endpoint
 
 **Files:**
-- Create: `garda_ai_backend/repositories/geo.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/geo.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/geo.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/geo.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_geo_endpoint.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -980,9 +980,9 @@ git commit -m "feat: fraud analytics endpoint (typology distribution + precision
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -997,7 +997,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -1023,14 +1023,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/geo.py`:
+`grafin_ai_backend/repositories/geo.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Account, Entity, Transaction, TransactionEvent
+from grafin_ai_backend.schema import Account, Entity, Transaction, TransactionEvent
 
 
 class GeoRepository:
@@ -1072,15 +1072,15 @@ class GeoResponse(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/geo.py`:
+`grafin_ai_backend/api/geo.py`:
 ```python
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.cache import cached_json
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
-from garda_ai_backend.api.view_schemas import GeoResponse, ProvinceFraud
-from garda_ai_backend.repositories.geo import GeoRepository
-from garda_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.api.cache import cached_json
+from grafin_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from grafin_ai_backend.api.view_schemas import GeoResponse, ProvinceFraud
+from grafin_ai_backend.repositories.geo import GeoRepository
+from grafin_ai_backend.repositories.sim import SimRepository
 
 
 def _risk_level(count: int) -> str:
@@ -1126,7 +1126,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/geo.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/geo.py garda_ai_backend/main.py tests/test_geo_endpoint.py
+git add grafin_ai_backend/repositories/geo.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/geo.py grafin_ai_backend/main.py tests/test_geo_endpoint.py
 git commit -m "feat: geographic province fraud distribution endpoint"
 ```
 
@@ -1135,10 +1135,10 @@ git commit -m "feat: geographic province fraud distribution endpoint"
 ### Task 8: Transactions live + detail endpoints
 
 **Files:**
-- Create: `garda_ai_backend/repositories/transactions.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/transactions.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/transactions.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/transactions.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_transactions_endpoints.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1148,9 +1148,9 @@ git commit -m "feat: geographic province fraud distribution endpoint"
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -1165,7 +1165,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -1213,14 +1213,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/transactions.py`:
+`grafin_ai_backend/repositories/transactions.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Bank, Transaction, TransactionEvent
+from grafin_ai_backend.schema import Bank, Transaction, TransactionEvent
 
 
 class TransactionsRepository:
@@ -1323,14 +1323,14 @@ class TransactionDetail(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/transactions.py`:
+`grafin_ai_backend/api/transactions.py`:
 ```python
 from fastapi import APIRouter, HTTPException, Query, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep
-from garda_ai_backend.api.view_schemas import LiveItem, LiveResponse, TransactionDetail
-from garda_ai_backend.repositories.sim import SimRepository
-from garda_ai_backend.repositories.transactions import TransactionsRepository
+from grafin_ai_backend.api.deps import CurrentUserDep, SessionDep
+from grafin_ai_backend.api.view_schemas import LiveItem, LiveResponse, TransactionDetail
+from grafin_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.repositories.transactions import TransactionsRepository
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
@@ -1368,7 +1368,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/transactions.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/transactions.py garda_ai_backend/main.py tests/test_transactions_endpoints.py
+git add grafin_ai_backend/repositories/transactions.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/transactions.py grafin_ai_backend/main.py tests/test_transactions_endpoints.py
 git commit -m "feat: transactions live window (resync source) + detail endpoints"
 ```
 
@@ -1377,10 +1377,10 @@ git commit -m "feat: transactions live window (resync source) + detail endpoints
 ### Task 9: User risk list + profile detail endpoints (with masking)
 
 **Files:**
-- Create: `garda_ai_backend/repositories/users_view.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/users_view.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/users_view.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/users_view.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_users_view_endpoints.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1390,9 +1390,9 @@ git commit -m "feat: transactions live window (resync source) + detail endpoints
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth(role: str = "analyst") -> dict:
@@ -1407,7 +1407,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -1455,14 +1455,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/users_view.py`:
+`grafin_ai_backend/repositories/users_view.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Account, Entity, Transaction, TransactionEvent
+from grafin_ai_backend.schema import Account, Entity, Transaction, TransactionEvent
 
 
 class UserRiskRepository:
@@ -1536,15 +1536,15 @@ class UserRiskResponse(BaseModel):
 
 - [ ] **Step 5: Implement the router (with masking)**
 
-`garda_ai_backend/api/users_view.py`:
+`grafin_ai_backend/api/users_view.py`:
 ```python
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep
-from garda_ai_backend.api.masking import mask_name
-from garda_ai_backend.api.view_schemas import RiskProfile, UserRiskResponse
-from garda_ai_backend.repositories.sim import SimRepository
-from garda_ai_backend.repositories.users_view import UserRiskRepository
+from grafin_ai_backend.api.deps import CurrentUserDep, SessionDep
+from grafin_ai_backend.api.masking import mask_name
+from grafin_ai_backend.api.view_schemas import RiskProfile, UserRiskResponse
+from grafin_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.repositories.users_view import UserRiskRepository
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -1593,7 +1593,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/users_view.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/users_view.py garda_ai_backend/main.py tests/test_users_view_endpoints.py
+git add grafin_ai_backend/repositories/users_view.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/users_view.py grafin_ai_backend/main.py tests/test_users_view_endpoints.py
 git commit -m "feat: user risk list + profile endpoints with role-aware PII masking"
 ```
 
@@ -1602,10 +1602,10 @@ git commit -m "feat: user risk list + profile endpoints with role-aware PII mask
 ### Task 10: Alerts list + acknowledge endpoints
 
 **Files:**
-- Create: `garda_ai_backend/repositories/alerts.py`
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/alerts.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/repositories/alerts.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/alerts.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_alerts_endpoints.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1617,9 +1617,9 @@ from datetime import UTC, datetime
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth(role: str = "analyst") -> dict:
@@ -1634,7 +1634,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -1673,14 +1673,14 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the repository**
 
-`garda_ai_backend/repositories/alerts.py`:
+`grafin_ai_backend/repositories/alerts.py`:
 ```python
 from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from garda_ai_backend.schema import Alert
+from grafin_ai_backend.schema import Alert
 
 
 class AlertsRepository:
@@ -1722,13 +1722,13 @@ class AlertsResponse(BaseModel):
 
 - [ ] **Step 5: Implement the router**
 
-`garda_ai_backend/api/alerts.py`:
+`grafin_ai_backend/api/alerts.py`:
 ```python
 from fastapi import APIRouter, HTTPException, status
 
-from garda_ai_backend.api.deps import CurrentUserDep, SessionDep
-from garda_ai_backend.api.view_schemas import AlertItem, AlertsResponse
-from garda_ai_backend.repositories.alerts import AlertsRepository
+from grafin_ai_backend.api.deps import CurrentUserDep, SessionDep
+from grafin_ai_backend.api.view_schemas import AlertItem, AlertsResponse
+from grafin_ai_backend.repositories.alerts import AlertsRepository
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
@@ -1765,7 +1765,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add garda_ai_backend/repositories/alerts.py garda_ai_backend/api/view_schemas.py garda_ai_backend/api/alerts.py garda_ai_backend/main.py tests/test_alerts_endpoints.py
+git add grafin_ai_backend/repositories/alerts.py grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/alerts.py grafin_ai_backend/main.py tests/test_alerts_endpoints.py
 git commit -m "feat: alerts list + acknowledge endpoints"
 ```
 
@@ -1774,9 +1774,9 @@ git commit -m "feat: alerts list + acknowledge endpoints"
 ### Task 11: System health endpoint
 
 **Files:**
-- Modify: `garda_ai_backend/api/view_schemas.py`
-- Create: `garda_ai_backend/api/system.py`
-- Modify: `garda_ai_backend/main.py`
+- Modify: `grafin_ai_backend/api/view_schemas.py`
+- Create: `grafin_ai_backend/api/system.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_system_endpoint.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -1786,9 +1786,9 @@ git commit -m "feat: alerts list + acknowledge endpoints"
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -1803,7 +1803,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -1829,7 +1829,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add view schema**
 
-Append to `garda_ai_backend/api/view_schemas.py`:
+Append to `grafin_ai_backend/api/view_schemas.py`:
 ```python
 class SystemHealthResponse(BaseModel):
     db_ok: bool
@@ -1840,15 +1840,15 @@ class SystemHealthResponse(BaseModel):
 
 - [ ] **Step 4: Implement the router**
 
-`garda_ai_backend/api/system.py`:
+`grafin_ai_backend/api/system.py`:
 ```python
 from fastapi import APIRouter
 from sqlalchemy import func, select, text
 
-from garda_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
-from garda_ai_backend.api.view_schemas import SystemHealthResponse
-from garda_ai_backend.repositories.sim import SimRepository
-from garda_ai_backend.schema import TransactionEvent
+from grafin_ai_backend.api.deps import CurrentUserDep, RedisDep, SessionDep
+from grafin_ai_backend.api.view_schemas import SystemHealthResponse
+from grafin_ai_backend.repositories.sim import SimRepository
+from grafin_ai_backend.schema import TransactionEvent
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -1895,7 +1895,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add garda_ai_backend/api/view_schemas.py garda_ai_backend/api/system.py garda_ai_backend/main.py tests/test_system_endpoint.py
+git add grafin_ai_backend/api/view_schemas.py grafin_ai_backend/api/system.py grafin_ai_backend/main.py tests/test_system_endpoint.py
 git commit -m "feat: system health endpoint (db/redis/events; phase-1 simulated flag)"
 ```
 
@@ -1904,18 +1904,18 @@ git commit -m "feat: system health endpoint (db/redis/events; phase-1 simulated 
 ### Task 12: Full-suite gate + OpenAPI sanity + C4 docs
 
 **Files:**
-- Modify: `garda-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
+- Modify: `grafin-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
 
 - [ ] **Step 1: Run the full suite + lint**
 
-Run: `uv run pytest -v` (expect all green, ~39 prior + the new view tests) and `uv run ruff check garda_ai_backend/`.
+Run: `uv run pytest -v` (expect all green, ~39 prior + the new view tests) and `uv run ruff check grafin_ai_backend/`.
 Expected: all PASS / clean. Fix any failures before proceeding.
 
 - [ ] **Step 2: Verify OpenAPI lists every new route**
 
 Run a quick check that the app exposes the endpoints:
 ```bash
-uv run python -c "from garda_ai_backend.main import app; print(sorted(r.path for r in app.routes))"
+uv run python -c "from grafin_ai_backend.main import app; print(sorted(r.path for r in app.routes))"
 ```
 Expected: includes `/api/v1/metrics/overview`, `/api/v1/metrics/volume`, `/api/v1/metrics/heatmap`, `/api/v1/analytics/fraud`, `/api/v1/geo/provinces`, `/api/v1/transactions/live`, `/api/v1/transactions/{transaction_id}`, `/api/v1/users/risk`, `/api/v1/users/{entity_id}/profile`, `/api/v1/alerts`, `/api/v1/alerts/{alert_id}/ack`, `/api/v1/system/health`, `/api/v1/sim/state`, `/api/v1/sim/control`.
 

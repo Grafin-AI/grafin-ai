@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the authenticated live WebSocket relay `WS /api/v1/ws/live` to `garda-ai-backend`. It subscribes to the Redis channel the pipeline worker (Plan 3) publishes scored events to and fans each event out to connected dashboard clients, with per-connection backpressure (drop-to-latest + resync hint). Clients backfill gaps via the already-built uncached `GET /api/v1/transactions/live?after_seq=`.
+**Goal:** Add the authenticated live WebSocket relay `WS /api/v1/ws/live` to `grafin-ai-backend`. It subscribes to the Redis channel the pipeline worker (Plan 3) publishes scored events to and fans each event out to connected dashboard clients, with per-connection backpressure (drop-to-latest + resync hint). Clients backfill gaps via the already-built uncached `GET /api/v1/transactions/live?after_seq=`.
 
 **Architecture:** A shared channel constant (`realtime/channels.py`) is the single source of truth both backend and pipeline use. WS auth is a pure helper (`api/ws_auth.py`) reusing the existing JWT `decode_token` — browsers can't set the `Authorization` header on a WS handshake, so the access token arrives as a `?token=` query param. The relay handler authenticates, accepts, subscribes to Redis pub/sub, and runs a bounded-queue reader/writer pair so a slow client gets dropped-to-latest with a `{"type":"resync"}` hint rather than blocking the server.
 
@@ -13,7 +13,7 @@
 ## File structure
 
 ```
-garda_ai_backend/
+grafin_ai_backend/
 ├── realtime/
 │   ├── __init__.py            # CREATE (empty)
 │   └── channels.py            # CREATE: LIVE_EVENTS_CHANNEL constant (shared with pipeline)
@@ -31,23 +31,23 @@ tests/
 ### Task 1: Shared channel constant + WS token auth
 
 **Files:**
-- Create: `garda_ai_backend/realtime/__init__.py` (empty), `garda_ai_backend/realtime/channels.py`
-- Create: `garda_ai_backend/api/ws_auth.py`
+- Create: `grafin_ai_backend/realtime/__init__.py` (empty), `grafin_ai_backend/realtime/channels.py`
+- Create: `grafin_ai_backend/api/ws_auth.py`
 - Test: `tests/test_ws_auth.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_ws_auth.py`:
 ```python
-from garda_ai_backend.api.ws_auth import authenticate_ws_token
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.security.tokens import create_access_token, create_refresh_token
+from grafin_ai_backend.api.ws_auth import authenticate_ws_token
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.security.tokens import create_access_token, create_refresh_token
 
 S = "test-secret"
 
 
 def test_channel_constant_is_stable():
-    assert LIVE_EVENTS_CHANNEL == "garda:events:live"
+    assert LIVE_EVENTS_CHANNEL == "grafin:events:live"
 
 
 def test_valid_access_token():
@@ -83,22 +83,22 @@ Expected: FAIL (`ModuleNotFoundError`).
 
 - [ ] **Step 3: Implement**
 
-`garda_ai_backend/realtime/__init__.py`:
+`grafin_ai_backend/realtime/__init__.py`:
 ```python
 ```
 (empty file)
 
-`garda_ai_backend/realtime/channels.py`:
+`grafin_ai_backend/realtime/channels.py`:
 ```python
 # Redis pub/sub channel the pipeline replay worker publishes scored events to and
 # the backend WebSocket relay subscribes to. Shared constant — keep both in sync.
-LIVE_EVENTS_CHANNEL = "garda:events:live"
+LIVE_EVENTS_CHANNEL = "grafin:events:live"
 ```
 
-`garda_ai_backend/api/ws_auth.py`:
+`grafin_ai_backend/api/ws_auth.py`:
 ```python
-from garda_ai_backend.api.deps import CurrentUser
-from garda_ai_backend.security.tokens import InvalidToken, decode_token
+from grafin_ai_backend.api.deps import CurrentUser
+from grafin_ai_backend.security.tokens import InvalidToken, decode_token
 
 
 def authenticate_ws_token(token: str, secret: str) -> CurrentUser | None:
@@ -122,7 +122,7 @@ Expected: PASS (6 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/realtime/ garda_ai_backend/api/ws_auth.py tests/test_ws_auth.py
+git add grafin_ai_backend/realtime/ grafin_ai_backend/api/ws_auth.py tests/test_ws_auth.py
 git commit -m "feat: shared live-events channel constant + WS token auth helper"
 ```
 
@@ -131,8 +131,8 @@ git commit -m "feat: shared live-events channel constant + WS token auth helper"
 ### Task 2: WebSocket relay handler
 
 **Files:**
-- Create: `garda_ai_backend/api/ws.py`
-- Modify: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/api/ws.py`
+- Modify: `grafin_ai_backend/main.py`
 - Test: `tests/test_ws_live.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -146,14 +146,14 @@ import redis as sync_redis
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _app(redis_url):
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_redis_dep] = lambda: build_redis(redis_url)
     return app
 
@@ -194,16 +194,16 @@ Expected: FAIL (route missing → handshake rejected / 404).
 
 - [ ] **Step 3: Implement the relay**
 
-`garda_ai_backend/api/ws.py`:
+`grafin_ai_backend/api/ws.py`:
 ```python
 import asyncio
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from garda_ai_backend.api.deps import RedisDep, SettingsDep
-from garda_ai_backend.api.ws_auth import authenticate_ws_token
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.api.deps import RedisDep, SettingsDep
+from grafin_ai_backend.api.ws_auth import authenticate_ws_token
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
 
 router = APIRouter(tags=["ws"])
 
@@ -266,17 +266,17 @@ async def ws_live(websocket: WebSocket, redis: RedisDep, settings: SettingsDep) 
 
 - [ ] **Step 4: Wire into `main.py`**
 
-Add with the other imports: `from garda_ai_backend.api.ws import router as ws_router` and, after the other `include_router` calls, `app.include_router(ws_router)`.
+Add with the other imports: `from grafin_ai_backend.api.ws import router as ws_router` and, after the other `include_router` calls, `app.include_router(ws_router)`.
 
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_ws_live.py -v`
-Expected: PASS (2 tests). Then full suite `uv run pytest -v` and `uv run ruff check garda_ai_backend/`.
+Expected: PASS (2 tests). Then full suite `uv run pytest -v` and `uv run ruff check grafin_ai_backend/`.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/api/ws.py garda_ai_backend/main.py tests/test_ws_live.py
+git add grafin_ai_backend/api/ws.py grafin_ai_backend/main.py tests/test_ws_live.py
 git commit -m "feat: authenticated live WebSocket relay with backpressure"
 ```
 
@@ -285,7 +285,7 @@ git commit -m "feat: authenticated live WebSocket relay with backpressure"
 ### Task 3: C4 docs — WebSocket relay implemented
 
 **Files:**
-- Modify: `garda-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
+- Modify: `grafin-ai-backend/docs/c4/03-component.md`, `docs/c4/04-code.md`
 
 - [ ] **Step 1: Regenerate**
 

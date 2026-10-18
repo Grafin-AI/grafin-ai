@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from garda_ai_backend.api.ingest_auth import _verify_ingest
+from grafin_ai_backend.api.ingest_auth import _verify_ingest
 
 
 def test_verify_ingest_accepts_matching():

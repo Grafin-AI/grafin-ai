@@ -1,4 +1,4 @@
-from garda_ai_backend.redis_client import build_redis
+from grafin_ai_backend.redis_client import build_redis
 
 
 async def test_build_redis_pings(redis_url):

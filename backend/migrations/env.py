@@ -11,8 +11,8 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-from garda_ai_backend.config import get_settings
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.config import get_settings
+from grafin_ai_backend.schema import Base
 
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 

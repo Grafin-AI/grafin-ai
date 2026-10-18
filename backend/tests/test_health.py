@@ -1,7 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.main import app
+from grafin_ai_backend.main import app
 
 
 @pytest.fixture
@@ -20,4 +20,4 @@ async def test_healthz(client):
 async def test_metrics_exposed(client):
     r = await client.get("/metrics")
     assert r.status_code == 200
-    assert "garda_http_requests_total" in r.text
+    assert "grafin_http_requests_total" in r.text

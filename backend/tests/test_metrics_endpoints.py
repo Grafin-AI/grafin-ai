@@ -3,9 +3,9 @@ from datetime import UTC, datetime
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.security.tokens import create_access_token
 
 
 def _auth() -> dict:
@@ -20,7 +20,7 @@ async def client(session, redis_url, seeded_dataset, monkeypatch):
     test_redis = build_redis(redis_url)
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
     app.dependency_overrides[deps.get_session] = _override_session
     app.dependency_overrides[deps.get_data_now] = lambda: seeded_dataset
     transport = ASGITransport(app=app)
@@ -85,7 +85,7 @@ def test_floor_to_bucket_aligns_window_start():
     window starting 23:59 yields an 'hour' bucket holding one minute of data,
     which plots as a near-zero point next to full ones and reads as missing data.
     """
-    from garda_ai_backend.api.metrics import _floor_to_bucket
+    from grafin_ai_backend.api.metrics import _floor_to_bucket
 
     mid = datetime(2025, 9, 8, 23, 59, 30, 500000, tzinfo=UTC)
     assert _floor_to_bucket(mid, "hour") == datetime(2025, 9, 8, 23, 0, tzinfo=UTC)

@@ -2,9 +2,9 @@
 
 **Date:** 2026-06-25
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-backend`
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
-**Depends on:** `garda-ai-scoring` (Phase 1, its `POST /v1/score` contract).
+**Repo:** `grafin-ai-backend`
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
+**Depends on:** `grafin-ai-scoring` (Phase 1, its `POST /v1/score` contract).
 
 Phase 2 of the platform re-architecture. Add an **ingest write-path** to the backend: receive
 transaction batches, score them via the scoring service, persist `transactions` +
@@ -17,7 +17,7 @@ read endpoints are UNCHANGED — they are removed/re-anchored in Phase 5. During
 replay path still drives the live dashboard; the new `/ingest` is exercised via tests + the WS
 relay, and becomes the dashboard's sole source at Phase 5.
 
-## Configuration (add to `garda_ai_backend/config.py`)
+## Configuration (add to `grafin_ai_backend/config.py`)
 
 - `scoring_url: str` — base URL of the scoring service (e.g. `http://scoring:8000`). Required.
 - `scoring_token: str` — bearer token presented to the scoring service. Required.
@@ -28,7 +28,7 @@ Fail-fast: these are required (no default), so a misconfigured deploy crashes at
 than silently exposing/breaking ingest. (Consistent with the existing `jwt_secret` fail-closed
 validator; keep dev ergonomics by allowing them via `.env`.)
 
-## Scoring client — `garda_ai_backend/services/scoring_client.py`
+## Scoring client — `grafin_ai_backend/services/scoring_client.py`
 
 An httpx `AsyncClient` wrapper:
 - `async def score(items: list[ScoreItem]) -> list[ScoreResult]` → `POST {scoring_url}/v1/score`
@@ -95,7 +95,7 @@ request-controllable override — see the Phase-1 auth-bypass lesson). User JWTs
      transaction_id, fraud_score, typology, status` (`surfaced_at = now()`).
    - `INSERT INTO alerts (event_seq, severity, typology, created_at)` for events with
      `status = 'blocked'` (severity `high`, `created_at = now()`) — same rule as the replay worker.
-4. **Publish (after commit)** — for each new event, publish to Redis `garda:events:live` the
+4. **Publish (after commit)** — for each new event, publish to Redis `grafin:events:live` the
    **exact message shape the WS relay/frontend already consume**:
    `{seq, transaction_id, bank, type, amount, fraud_score, typology, status, surfaced_at, sim_now}`
    where `bank` = the from-bank name (join `banks`), `type` = `payment_format`, `amount` =
@@ -117,7 +117,7 @@ no persisted effect.
   batch is rejected atomically (nothing persisted).
 - 503 — scoring service unavailable (after retries).
 
-## Repository — `garda_ai_backend/repositories/ingest.py`
+## Repository — `grafin_ai_backend/repositories/ingest.py`
 
 Encapsulates the three batch statements above (asyncpg-style `unnest` inserts + `RETURNING`),
 adapted from the proven `ReplayRepository.write_events_and_advance` pattern (minus the sim-clock
@@ -130,8 +130,8 @@ one transaction (session.begin()).
 
 - Structured request log for `/ingest` (batch size, inserted count, duration) with correlation id.
 - Metrics (bounded labels): reuse the backend's Prometheus registry; add
-  `garda_ingest_transactions_total{result}` (`inserted|duplicate`) and
-  `garda_ingest_scoring_latency_seconds` (histogram) — bounded, `prefix_name_unit`.
+  `grafin_ingest_transactions_total{result}` (`inserted|duplicate`) and
+  `grafin_ingest_scoring_latency_seconds` (histogram) — bounded, `prefix_name_unit`.
 - Correlation id propagated to the scoring call (above).
 
 ## Testing
@@ -140,7 +140,7 @@ Against the backend's existing testcontainers (Postgres + Redis), with a **mocke
 - Persistence: POST a batch → 200; `transactions` + `transaction_events` rows present; `alerts`
   row for a `blocked` result.
 - Idempotency: re-POST the same batch → `ingested:false`, no duplicate events, no extra publish.
-- Publish: a Redis subscriber on `garda:events:live` receives one message per new event with the
+- Publish: a Redis subscriber on `grafin:events:live` receives one message per new event with the
   expected shape/fields.
 - 503: scoring client raises `ScoringUnavailable` → 503, and **nothing persisted** (DB unchanged).
 - 401: missing/wrong ingest token. 422: malformed / oversize batch. 400: unknown bank/account ref.
@@ -172,7 +172,7 @@ Build subagent-driven with `fastapi-pro`/`python-pro` implementers + `code-revie
   does not change the read endpoints; ingested data is verified at the ingest→persist→publish→WS
   level, not via the aggregate views.
 - Removing the replay worker / `sim_state` / `/sim/*` — Phase 5.
-- The producer (`garda-ai-sim`) — Phase 4; the reference seed (`garda-ai-ingest`) — Phase 3.
+- The producer (`grafin-ai-sim`) — Phase 4; the reference seed (`grafin-ai-ingest`) — Phase 3.
 - Account/bank **upsert on ingest** for unknown references (a real external feed) — future; Phase 2
   requires reference data pre-seeded and 400s on unknown refs.
 - No message queue between producer and backend — direct HTTP batches (anchor decision).

@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from garda_ai_backend.db import build_engine
+from grafin_ai_backend.db import build_engine
 
 
 async def test_build_engine_connects(pg_url):

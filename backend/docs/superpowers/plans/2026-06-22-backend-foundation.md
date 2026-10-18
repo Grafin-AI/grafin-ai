@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the `garda-ai-backend` service skeleton with the canonical PostgreSQL schema, Alembic migrations, typed config, async DB access, and health/metrics endpoints — the foundation every other repo depends on.
+**Goal:** Stand up the `grafin-ai-backend` service skeleton with the canonical PostgreSQL schema, Alembic migrations, typed config, async DB access, and health/metrics endpoints — the foundation every other repo depends on.
 
 **Architecture:** FastAPI (async) layered as `api/ → services/ → repositories/ → schema/`. SQLAlchemy 2.0 async models in `schema/` are the single source of truth for the data model; Alembic creates the schema at init. This plan delivers the runnable skeleton + schema only; auth and view endpoints come in Plan 2.
 
@@ -13,10 +13,10 @@
 ## File structure (created by this plan)
 
 ```
-garda-ai-backend/
+grafin-ai-backend/
 ├── pyproject.toml                      # uv project + deps + tool config
 ├── .env.example                        # documented required env vars
-├── garda_ai_backend/
+├── grafin_ai_backend/
 │   ├── __init__.py
 │   ├── config.py                       # pydantic-settings Settings
 │   ├── db.py                           # async engine + session factory
@@ -47,14 +47,14 @@ Each `schema/*.py` groups tables that change together. `db.py`, `config.py`, `ob
 
 **Files:**
 - Create: `pyproject.toml`
-- Create: `garda_ai_backend/__init__.py`
+- Create: `grafin_ai_backend/__init__.py`
 - Create: `.env.example`
 
 - [ ] **Step 1: Create `pyproject.toml`**
 
 ```toml
 [project]
-name = "garda-ai-backend"
+name = "grafin-ai-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -87,7 +87,7 @@ line-length = 100
 
 - [ ] **Step 2: Create package marker**
 
-`garda_ai_backend/__init__.py`:
+`grafin_ai_backend/__init__.py`:
 ```python
 __version__ = "0.1.0"
 ```
@@ -96,10 +96,10 @@ __version__ = "0.1.0"
 
 ```bash
 # Database
-GARDA_DATABASE_URL=postgresql+asyncpg://garda:garda@localhost:5432/garda
+GRAFIN_DATABASE_URL=postgresql+asyncpg://grafin:grafin@localhost:5432/grafin
 # App
-GARDA_ENV=development
-GARDA_LOG_LEVEL=INFO
+GRAFIN_ENV=development
+GRAFIN_LOG_LEVEL=INFO
 ```
 
 - [ ] **Step 4: Install deps and verify**
@@ -110,8 +110,8 @@ Expected: resolves and creates `.venv` with no errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pyproject.toml garda_ai_backend/__init__.py .env.example uv.lock
-git commit -m "chore: scaffold garda-ai-backend project"
+git add pyproject.toml grafin_ai_backend/__init__.py .env.example uv.lock
+git commit -m "chore: scaffold grafin-ai-backend project"
 ```
 
 ---
@@ -119,19 +119,19 @@ git commit -m "chore: scaffold garda-ai-backend project"
 ### Task 2: Typed configuration
 
 **Files:**
-- Create: `garda_ai_backend/config.py`
+- Create: `grafin_ai_backend/config.py`
 - Test: `tests/test_config.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_config.py`:
 ```python
-from garda_ai_backend.config import Settings
+from grafin_ai_backend.config import Settings
 
 
 def test_settings_reads_env(monkeypatch):
-    monkeypatch.setenv("GARDA_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d")
-    monkeypatch.setenv("GARDA_ENV", "production")
+    monkeypatch.setenv("GRAFIN_DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/d")
+    monkeypatch.setenv("GRAFIN_ENV", "production")
     s = Settings()
     assert s.database_url == "postgresql+asyncpg://u:p@h:5432/d"
     assert s.env == "production"
@@ -141,17 +141,17 @@ def test_settings_reads_env(monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_config.py -v`
-Expected: FAIL — `ModuleNotFoundError: garda_ai_backend.config`.
+Expected: FAIL — `ModuleNotFoundError: grafin_ai_backend.config`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-`garda_ai_backend/config.py`:
+`grafin_ai_backend/config.py`:
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GRAFIN_", env_file=".env", extra="ignore")
 
     database_url: str
     env: str = "development"
@@ -170,7 +170,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/config.py tests/test_config.py
+git add grafin_ai_backend/config.py tests/test_config.py
 git commit -m "feat: typed settings via pydantic-settings"
 ```
 
@@ -179,16 +179,16 @@ git commit -m "feat: typed settings via pydantic-settings"
 ### Task 3: Schema base + reference tables
 
 **Files:**
-- Create: `garda_ai_backend/schema/base.py`
-- Create: `garda_ai_backend/schema/reference.py`
-- Create: `garda_ai_backend/schema/__init__.py`
+- Create: `grafin_ai_backend/schema/base.py`
+- Create: `grafin_ai_backend/schema/reference.py`
+- Create: `grafin_ai_backend/schema/__init__.py`
 - Test: `tests/test_schema.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_schema.py`:
 ```python
-from garda_ai_backend.schema import Base, Bank, Entity, Account
+from grafin_ai_backend.schema import Base, Bank, Entity, Account
 
 
 def test_reference_tables_registered():
@@ -206,11 +206,11 @@ def test_reference_tables_registered():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_schema.py -v`
-Expected: FAIL — `ModuleNotFoundError: garda_ai_backend.schema`.
+Expected: FAIL — `ModuleNotFoundError: grafin_ai_backend.schema`.
 
 - [ ] **Step 3: Write the base**
 
-`garda_ai_backend/schema/base.py`:
+`grafin_ai_backend/schema/base.py`:
 ```python
 from sqlalchemy.orm import DeclarativeBase
 
@@ -221,12 +221,12 @@ class Base(DeclarativeBase):
 
 - [ ] **Step 4: Write the reference models**
 
-`garda_ai_backend/schema/reference.py`:
+`grafin_ai_backend/schema/reference.py`:
 ```python
 from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from garda_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.base import Base
 
 
 class Bank(Base):
@@ -256,10 +256,10 @@ class Account(Base):
 
 - [ ] **Step 5: Write the package exporter**
 
-`garda_ai_backend/schema/__init__.py`:
+`grafin_ai_backend/schema/__init__.py`:
 ```python
-from garda_ai_backend.schema.base import Base
-from garda_ai_backend.schema.reference import Account, Bank, Entity
+from grafin_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.reference import Account, Bank, Entity
 
 __all__ = ["Base", "Bank", "Entity", "Account"]
 ```
@@ -272,7 +272,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add garda_ai_backend/schema/ tests/test_schema.py
+git add grafin_ai_backend/schema/ tests/test_schema.py
 git commit -m "feat: schema base + reference tables (banks, entities, accounts)"
 ```
 
@@ -281,8 +281,8 @@ git commit -m "feat: schema base + reference tables (banks, entities, accounts)"
 ### Task 4: Transaction + event tables
 
 **Files:**
-- Create: `garda_ai_backend/schema/transactions.py`
-- Modify: `garda_ai_backend/schema/__init__.py`
+- Create: `grafin_ai_backend/schema/transactions.py`
+- Modify: `grafin_ai_backend/schema/__init__.py`
 - Test: `tests/test_schema.py` (add cases)
 
 - [ ] **Step 1: Add failing tests**
@@ -290,7 +290,7 @@ git commit -m "feat: schema base + reference tables (banks, entities, accounts)"
 Append to `tests/test_schema.py`:
 ```python
 def test_transaction_tables_registered():
-    from garda_ai_backend.schema import Transaction, TransactionEvent
+    from grafin_ai_backend.schema import Transaction, TransactionEvent
     tables = Base.metadata.tables
     txn_cols = {c.name for c in tables["transactions"].columns}
     assert {"id", "event_time", "from_account", "to_account",
@@ -307,14 +307,14 @@ Expected: FAIL — `ImportError: cannot import name 'Transaction'`.
 
 - [ ] **Step 3: Write the models**
 
-`garda_ai_backend/schema/transactions.py`:
+`grafin_ai_backend/schema/transactions.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from garda_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.base import Base
 
 
 class Transaction(Base):
@@ -345,11 +345,11 @@ class TransactionEvent(Base):
 
 - [ ] **Step 4: Export the new models**
 
-Update `garda_ai_backend/schema/__init__.py`:
+Update `grafin_ai_backend/schema/__init__.py`:
 ```python
-from garda_ai_backend.schema.base import Base
-from garda_ai_backend.schema.reference import Account, Bank, Entity
-from garda_ai_backend.schema.transactions import Transaction, TransactionEvent
+from grafin_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.reference import Account, Bank, Entity
+from grafin_ai_backend.schema.transactions import Transaction, TransactionEvent
 
 __all__ = ["Base", "Bank", "Entity", "Account", "Transaction", "TransactionEvent"]
 ```
@@ -362,7 +362,7 @@ Expected: PASS (both schema tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/schema/transactions.py garda_ai_backend/schema/__init__.py tests/test_schema.py
+git add grafin_ai_backend/schema/transactions.py grafin_ai_backend/schema/__init__.py tests/test_schema.py
 git commit -m "feat: transactions + transaction_events tables"
 ```
 
@@ -371,10 +371,10 @@ git commit -m "feat: transactions + transaction_events tables"
 ### Task 5: Alerts, users, sim_state tables
 
 **Files:**
-- Create: `garda_ai_backend/schema/alerts.py`
-- Create: `garda_ai_backend/schema/users.py`
-- Create: `garda_ai_backend/schema/sim.py`
-- Modify: `garda_ai_backend/schema/__init__.py`
+- Create: `grafin_ai_backend/schema/alerts.py`
+- Create: `grafin_ai_backend/schema/users.py`
+- Create: `grafin_ai_backend/schema/sim.py`
+- Modify: `grafin_ai_backend/schema/__init__.py`
 - Test: `tests/test_schema.py` (add case)
 
 - [ ] **Step 1: Add failing test**
@@ -382,7 +382,7 @@ git commit -m "feat: transactions + transaction_events tables"
 Append to `tests/test_schema.py`:
 ```python
 def test_ops_tables_registered():
-    from garda_ai_backend.schema import Alert, User, SimState
+    from grafin_ai_backend.schema import Alert, User, SimState
     tables = Base.metadata.tables
     assert {"id", "event_seq", "severity", "typology"} <= {c.name for c in tables["alerts"].columns}
     assert {"id", "email", "password_hash", "role"} <= {c.name for c in tables["users"].columns}
@@ -396,14 +396,14 @@ Expected: FAIL — `ImportError: cannot import name 'Alert'`.
 
 - [ ] **Step 3: Write the models**
 
-`garda_ai_backend/schema/alerts.py`:
+`grafin_ai_backend/schema/alerts.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from garda_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.base import Base
 
 
 class Alert(Base):
@@ -417,14 +417,14 @@ class Alert(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 ```
 
-`garda_ai_backend/schema/users.py`:
+`grafin_ai_backend/schema/users.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from garda_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.base import Base
 
 
 class User(Base):
@@ -436,14 +436,14 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 ```
 
-`garda_ai_backend/schema/sim.py`:
+`grafin_ai_backend/schema/sim.py`:
 ```python
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 
-from garda_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.base import Base
 
 
 class SimState(Base):
@@ -456,14 +456,14 @@ class SimState(Base):
 
 - [ ] **Step 4: Export the new models**
 
-Update `garda_ai_backend/schema/__init__.py`:
+Update `grafin_ai_backend/schema/__init__.py`:
 ```python
-from garda_ai_backend.schema.base import Base
-from garda_ai_backend.schema.reference import Account, Bank, Entity
-from garda_ai_backend.schema.transactions import Transaction, TransactionEvent
-from garda_ai_backend.schema.alerts import Alert
-from garda_ai_backend.schema.users import User
-from garda_ai_backend.schema.sim import SimState
+from grafin_ai_backend.schema.base import Base
+from grafin_ai_backend.schema.reference import Account, Bank, Entity
+from grafin_ai_backend.schema.transactions import Transaction, TransactionEvent
+from grafin_ai_backend.schema.alerts import Alert
+from grafin_ai_backend.schema.users import User
+from grafin_ai_backend.schema.sim import SimState
 
 __all__ = [
     "Base", "Bank", "Entity", "Account", "Transaction",
@@ -479,7 +479,7 @@ Expected: PASS (all schema tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/schema/ tests/test_schema.py
+git add grafin_ai_backend/schema/ tests/test_schema.py
 git commit -m "feat: alerts, users, sim_state tables"
 ```
 
@@ -488,7 +488,7 @@ git commit -m "feat: alerts, users, sim_state tables"
 ### Task 6: Async DB engine + session
 
 **Files:**
-- Create: `garda_ai_backend/db.py`
+- Create: `grafin_ai_backend/db.py`
 - Test: `tests/conftest.py`, `tests/test_db.py`
 
 - [ ] **Step 1: Write the testcontainers fixture**
@@ -500,7 +500,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.schema import Base
 
 
 @pytest.fixture(scope="session")
@@ -526,7 +526,7 @@ async def session(pg_url):
 ```python
 from sqlalchemy import text
 
-from garda_ai_backend.db import build_engine
+from grafin_ai_backend.db import build_engine
 
 
 async def test_build_engine_connects(pg_url):
@@ -540,11 +540,11 @@ async def test_build_engine_connects(pg_url):
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_db.py -v`
-Expected: FAIL — `ModuleNotFoundError: garda_ai_backend.db`.
+Expected: FAIL — `ModuleNotFoundError: grafin_ai_backend.db`.
 
 - [ ] **Step 4: Write the implementation**
 
-`garda_ai_backend/db.py`:
+`grafin_ai_backend/db.py`:
 ```python
 from collections.abc import AsyncIterator
 
@@ -555,7 +555,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from garda_ai_backend.config import get_settings
+from grafin_ai_backend.config import get_settings
 
 
 def build_engine(url: str) -> AsyncEngine:
@@ -587,7 +587,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/db.py tests/conftest.py tests/test_db.py
+git add grafin_ai_backend/db.py tests/conftest.py tests/test_db.py
 git commit -m "feat: async engine + session factory with testcontainers fixture"
 ```
 
@@ -609,8 +609,8 @@ Then edit `alembic.ini` line `sqlalchemy.url =` to be empty (URL comes from env)
 
 Replace the metadata + URL section of `migrations/env.py` so it reads:
 ```python
-from garda_ai_backend.config import get_settings
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.config import get_settings
+from grafin_ai_backend.schema import Base
 
 target_metadata = Base.metadata
 
@@ -622,7 +622,7 @@ And in both `run_migrations_offline()` and `run_migrations_online()`, use `get_u
 
 - [ ] **Step 3: Generate the initial migration**
 
-Run: `GARDA_DATABASE_URL=postgresql+asyncpg://garda:garda@localhost:5432/garda uv run alembic revision --autogenerate -m "initial schema"`
+Run: `GRAFIN_DATABASE_URL=postgresql+asyncpg://grafin:grafin@localhost:5432/grafin uv run alembic revision --autogenerate -m "initial schema"`
 Expected: a file under `migrations/versions/` creating all 9 tables. (Requires a reachable Postgres; use a local docker `postgres:16` or skip autogenerate and hand-write if unavailable.)
 
 - [ ] **Step 4: Write the failing test**
@@ -632,7 +632,7 @@ Expected: a file under `migrations/versions/` creating all 9 tables. (Requires a
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from garda_ai_backend.schema import Base
+from grafin_ai_backend.schema import Base
 
 
 def test_migration_covers_all_tables():
@@ -664,14 +664,14 @@ git commit -m "feat: alembic migrations create canonical schema at init"
 ### Task 8: Observability (structlog + Prometheus)
 
 **Files:**
-- Create: `garda_ai_backend/observability.py`
+- Create: `grafin_ai_backend/observability.py`
 - Test: `tests/test_observability.py`
 
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_observability.py`:
 ```python
-from garda_ai_backend.observability import configure_logging, REGISTRY, REQUEST_COUNT
+from grafin_ai_backend.observability import configure_logging, REGISTRY, REQUEST_COUNT
 
 
 def test_logging_and_metrics_configured():
@@ -679,7 +679,7 @@ def test_logging_and_metrics_configured():
     REQUEST_COUNT.labels(method="GET", path="/healthz", status="200").inc()
     # metric is registered and increments
     value = REGISTRY.get_sample_value(
-        "garda_http_requests_total",
+        "grafin_http_requests_total",
         {"method": "GET", "path": "/healthz", "status": "200"},
     )
     assert value == 1.0
@@ -688,11 +688,11 @@ def test_logging_and_metrics_configured():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_observability.py -v`
-Expected: FAIL — `ModuleNotFoundError: garda_ai_backend.observability`.
+Expected: FAIL — `ModuleNotFoundError: grafin_ai_backend.observability`.
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_ai_backend/observability.py`:
+`grafin_ai_backend/observability.py`:
 ```python
 import logging
 
@@ -701,7 +701,7 @@ from prometheus_client import CollectorRegistry, Counter
 
 REGISTRY = CollectorRegistry()
 REQUEST_COUNT = Counter(
-    "garda_http_requests_total",
+    "grafin_http_requests_total",
     "Total HTTP requests",
     ["method", "path", "status"],
     registry=REGISTRY,
@@ -728,7 +728,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add garda_ai_backend/observability.py tests/test_observability.py
+git add grafin_ai_backend/observability.py tests/test_observability.py
 git commit -m "feat: structlog JSON logging + prometheus request counter"
 ```
 
@@ -737,7 +737,7 @@ git commit -m "feat: structlog JSON logging + prometheus request counter"
 ### Task 9: FastAPI app + health/readiness/metrics endpoints
 
 **Files:**
-- Create: `garda_ai_backend/main.py`
+- Create: `grafin_ai_backend/main.py`
 - Test: `tests/test_health.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -747,7 +747,7 @@ git commit -m "feat: structlog JSON logging + prometheus request counter"
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from garda_ai_backend.main import app
+from grafin_ai_backend.main import app
 
 
 @pytest.fixture
@@ -766,30 +766,30 @@ async def test_healthz(client):
 async def test_metrics_exposed(client):
     r = await client.get("/metrics")
     assert r.status_code == 200
-    assert "garda_http_requests_total" in r.text
+    assert "grafin_http_requests_total" in r.text
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_health.py -v`
-Expected: FAIL — `ModuleNotFoundError: garda_ai_backend.main`.
+Expected: FAIL — `ModuleNotFoundError: grafin_ai_backend.main`.
 
 - [ ] **Step 3: Write the implementation**
 
-`garda_ai_backend/main.py`:
+`grafin_ai_backend/main.py`:
 ```python
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
-from garda_ai_backend.config import get_settings
-from garda_ai_backend.db import _maker
-from garda_ai_backend.observability import REGISTRY, configure_logging
+from grafin_ai_backend.config import get_settings
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.observability import REGISTRY, configure_logging
 
 settings = get_settings()
 configure_logging(settings.log_level)
 
-app = FastAPI(title="Garda AI Backend", version="0.1.0")
+app = FastAPI(title="Grafin AI Backend", version="0.1.0")
 
 
 @app.get("/healthz")
@@ -827,7 +827,7 @@ Expected: all tests PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add garda_ai_backend/main.py tests/test_health.py
+git add grafin_ai_backend/main.py tests/test_health.py
 git commit -m "feat: FastAPI app with health, readiness, metrics endpoints"
 ```
 
@@ -836,12 +836,12 @@ git commit -m "feat: FastAPI app with health, readiness, metrics endpoints"
 ### Task 10: C4 Component + Code documentation (deliverable)
 
 **Files:**
-- Create: `garda-ai-backend/docs/c4/03-component.md`
-- Create: `garda-ai-backend/docs/c4/04-code.md`
+- Create: `grafin-ai-backend/docs/c4/03-component.md`
+- Create: `grafin-ai-backend/docs/c4/04-code.md`
 
 - [ ] **Step 1: Generate Code-level C4**
 
-Use the c4-architecture plugin's `c4-code` agent against `garda_ai_backend/` to document modules (config, db, schema/*, observability, main), their functions/signatures and dependencies. Save to `docs/c4/04-code.md`.
+Use the c4-architecture plugin's `c4-code` agent against `grafin_ai_backend/` to document modules (config, db, schema/*, observability, main), their functions/signatures and dependencies. Save to `docs/c4/04-code.md`.
 
 - [ ] **Step 2: Generate Component-level C4**
 

@@ -18,8 +18,8 @@ import time
 import pytest
 from redis.asyncio import Redis
 
-from garda_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
-from garda_ai_backend.security.tokens import create_access_token
+from grafin_ai_backend.realtime.channels import LIVE_EVENTS_CHANNEL
+from grafin_ai_backend.security.tokens import create_access_token
 
 websockets = pytest.importorskip("websockets")
 
@@ -49,14 +49,14 @@ async def test_relay_streams_event_under_real_uvicorn(redis_url):
     port = _free_port()
     env = {
         **os.environ,
-        "GARDA_REDIS_URL": redis_url,
-        "GARDA_JWT_SECRET": _SECRET,
-        "GARDA_ENV": "development",
-        "GARDA_DATABASE_URL": "postgresql+asyncpg://x:x@localhost:5432/x",  # WS path never hits the DB
+        "GRAFIN_REDIS_URL": redis_url,
+        "GRAFIN_JWT_SECRET": _SECRET,
+        "GRAFIN_ENV": "development",
+        "GRAFIN_DATABASE_URL": "postgresql+asyncpg://x:x@localhost:5432/x",  # WS path never hits the DB
     }
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "uvicorn", "garda_ai_backend.main:app",
+            sys.executable, "-m", "uvicorn", "grafin_ai_backend.main:app",
             "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning",
         ],
         env=env,
@@ -92,14 +92,14 @@ async def test_relay_rejects_bad_token_under_real_uvicorn(redis_url):
     port = _free_port()
     env = {
         **os.environ,
-        "GARDA_REDIS_URL": redis_url,
-        "GARDA_JWT_SECRET": _SECRET,
-        "GARDA_ENV": "development",
-        "GARDA_DATABASE_URL": "postgresql+asyncpg://x:x@localhost:5432/x",
+        "GRAFIN_REDIS_URL": redis_url,
+        "GRAFIN_JWT_SECRET": _SECRET,
+        "GRAFIN_ENV": "development",
+        "GRAFIN_DATABASE_URL": "postgresql+asyncpg://x:x@localhost:5432/x",
     }
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "uvicorn", "garda_ai_backend.main:app",
+            sys.executable, "-m", "uvicorn", "grafin_ai_backend.main:app",
             "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning",
         ],
         env=env,

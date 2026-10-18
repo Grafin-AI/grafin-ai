@@ -1,13 +1,13 @@
-# C4 Code Level: garda_ai_backend
+# C4 Code Level: grafin_ai_backend
 
 ## Overview
 
-- **Name**: Garda AI Backend — Python Package
-- **Description**: Core application package for the Garda AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, all SQLAlchemy 2.0 ORM models, a full view-endpoint layer (metrics, analytics, geo, transactions, user-risk, alerts, system health), and — as of Phase 2 — a token-gated ingest write-path (`POST /api/v1/ingest`) that scores batches via the outbound garda-ai-scoring service, persists them idempotently, and publishes new events to `garda:events:live`.
-- **Location**: [`garda_ai_backend/`](../../garda_ai_backend/)
+- **Name**: Grafin AI Backend — Python Package
+- **Description**: Core application package for the Grafin AI real-time AML detection platform. Implements the FastAPI service, async database and Redis layers, argon2id authentication with JWT token rotation, RBAC, Prometheus observability, all SQLAlchemy 2.0 ORM models, a full view-endpoint layer (metrics, analytics, geo, transactions, user-risk, alerts, system health), and — as of Phase 2 — a token-gated ingest write-path (`POST /api/v1/ingest`) that scores batches via the outbound grafin-ai-scoring service, persists them idempotently, and publishes new events to `grafin:events:live`.
+- **Location**: [`grafin_ai_backend/`](../../grafin_ai_backend/)
 - **Language**: Python 3.12+
 - **Purpose**: Serves the API surface for the AML dashboard, persists transaction and alert data, authenticates users via JWT access/refresh token pairs, enforces role-based access control, exposes read aggregates bounded by the data clock (`max(transaction_events.event_time)`) and backed by Redis caching, applies PII masking for non-admin roles, and provides health/metrics endpoints for platform observability.
-- **Version**: `0.1.0` (declared in `garda_ai_backend/__init__.py`)
+- **Version**: `0.1.0` (declared in `grafin_ai_backend/__init__.py`)
 
 ---
 
@@ -32,7 +32,7 @@
 | `repositories.alerts` | `repositories/alerts.py` | `AlertsRepository` — alert list and acknowledge |
 | `repositories.ingest` *(Phase 2)* | `repositories/ingest.py` | `IngestRepository` — enrich lookups + idempotent batch persist; `InsertedEvent` |
 | `services.auth` | `services/auth.py` | `AuthService` — authenticate, token rotation, logout; `TokenPair`, `AuthError` |
-| `services.scoring_client` *(Phase 2)* | `services/scoring_client.py` | `ScoringClient` — resilient httpx client for garda-ai-scoring `POST /v1/score`; `ScoringUnavailable` |
+| `services.scoring_client` *(Phase 2)* | `services/scoring_client.py` | `ScoringClient` — resilient httpx client for grafin-ai-scoring `POST /v1/score`; `ScoringUnavailable` |
 | `api.schemas` | `api/schemas.py` | Pydantic request/response models for the auth API |
 | `api.view_schemas` | `api/view_schemas.py` | Pydantic response models for all view endpoints |
 | `api.deps` | `api/deps.py` | FastAPI dependency functions; `CurrentUser`; `NowDep` (data clock); `require_role` factory |
@@ -49,7 +49,7 @@
 | `api.system` | `api/system.py` | System router: health check |
 | `api.ws_auth` | `api/ws_auth.py` | `authenticate_ws_token` — validates WS query-param access token; reuses `decode_token` |
 | `api.ws` | `api/ws.py` | WebSocket router: `ws_live` handler at `WS /api/v1/ws/live` |
-| `api.ingest_auth` *(Phase 2)* | `api/ingest_auth.py` | `require_ingest_token` — bearer `GARDA_INGEST_TOKEN` dependency (settings-only, constant-time) |
+| `api.ingest_auth` *(Phase 2)* | `api/ingest_auth.py` | `require_ingest_token` — bearer `GRAFIN_INGEST_TOKEN` dependency (settings-only, constant-time) |
 | `api.ingest_schemas` *(Phase 2)* | `api/ingest_schemas.py` | Pydantic request/response models for the ingest write-path |
 | `api.ingest` *(Phase 2)* | `api/ingest.py` | Ingest router: `POST /api/v1/ingest` — enrich → score → persist → publish |
 | `realtime.channels` | `realtime/channels.py` | `LIVE_EVENTS_CHANNEL` constant — shared Redis pub/sub channel name (cross-repo coupling) |
@@ -65,7 +65,7 @@
 
 ## Module: `config`
 
-- **File**: [`garda_ai_backend/config.py`](../../garda_ai_backend/config.py)
+- **File**: [`grafin_ai_backend/config.py`](../../grafin_ai_backend/config.py)
 - **External dependencies**: `pydantic-settings`, `pydantic.model_validator`, `functools.lru_cache`
 
 ### Class: `Settings`
@@ -84,13 +84,13 @@ class Settings(BaseSettings)
 | `jwt_algorithm` | `str` | `"HS256"` | JWT signature algorithm |
 | `jwt_access_ttl_min` | `int` | `15` | Access token lifetime in minutes |
 | `jwt_refresh_ttl_days` | `int` | `7` | Refresh token lifetime in days |
-| `scoring_url` | `str` | required | Base URL of the garda-ai-scoring service *(Phase 2)* |
+| `scoring_url` | `str` | required | Base URL of the grafin-ai-scoring service *(Phase 2)* |
 | `scoring_token` | `str` | required (`min_length=1`) | Bearer token for the scoring service *(Phase 2)* |
 | `ingest_token` | `str` | required (`min_length=16`) | Shared bearer token gating `POST /api/v1/ingest` *(Phase 2)* |
 | `scoring_timeout_s` | `float` | `5.0` | Per-call timeout for the scoring client *(Phase 2)* |
 | `scoring_retries` | `int` | `2` | Bounded retry count for transient scoring failures *(Phase 2)* |
 
-**Configuration**: reads environment variables with prefix `GARDA_`; optionally from `.env`. Extra variables are silently ignored (`extra="ignore"`).
+**Configuration**: reads environment variables with prefix `GRAFIN_`; optionally from `.env`. Extra variables are silently ignored (`extra="ignore"`).
 
 **Inherits from**: `pydantic_settings.BaseSettings`
 
@@ -120,9 +120,9 @@ def get_settings() -> Settings
 
 ## Module: `db`
 
-- **File**: [`garda_ai_backend/db.py`](../../garda_ai_backend/db.py)
+- **File**: [`grafin_ai_backend/db.py`](../../grafin_ai_backend/db.py)
 - **External dependencies**: `sqlalchemy.ext.asyncio` (AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine)
-- **Internal dependencies**: `garda_ai_backend.config.get_settings`
+- **Internal dependencies**: `grafin_ai_backend.config.get_settings`
 
 ### Module-level state
 
@@ -188,9 +188,9 @@ classDiagram
 
 ## Module: `redis_client`
 
-- **File**: [`garda_ai_backend/redis_client.py`](../../garda_ai_backend/redis_client.py)
+- **File**: [`grafin_ai_backend/redis_client.py`](../../grafin_ai_backend/redis_client.py)
 - **External dependencies**: `redis.asyncio.Redis`
-- **Internal dependencies**: `garda_ai_backend.config.get_settings`
+- **Internal dependencies**: `grafin_ai_backend.config.get_settings`
 
 ### Module-level state
 
@@ -222,7 +222,7 @@ def get_redis() -> Redis
 
 ## Module: `observability`
 
-- **File**: [`garda_ai_backend/observability.py`](../../garda_ai_backend/observability.py)
+- **File**: [`grafin_ai_backend/observability.py`](../../grafin_ai_backend/observability.py)
 - **External dependencies**: `prometheus_client` (CollectorRegistry, Counter, Histogram), `structlog`, `logging`
 
 ### Module-level objects
@@ -230,9 +230,9 @@ def get_redis() -> Redis
 | Name | Type | Description |
 |---|---|---|
 | `REGISTRY` | `prometheus_client.CollectorRegistry` | Isolated Prometheus registry; avoids polluting the global default registry |
-| `REQUEST_COUNT` | `prometheus_client.Counter` | Counter `garda_http_requests_total` with labels `method`, `path`, `status` |
-| `INGEST_TRANSACTIONS` *(Phase 2)* | `prometheus_client.Counter` | Counter `garda_ingest_transactions_total` with label `result` (bounded cardinality: `inserted` \| `duplicate`) |
-| `INGEST_SCORING_LATENCY` *(Phase 2)* | `prometheus_client.Histogram` | Histogram `garda_ingest_scoring_latency_seconds` — latency of the outbound scoring call from `/ingest`; buckets `0.005 … 1.0` s |
+| `REQUEST_COUNT` | `prometheus_client.Counter` | Counter `grafin_http_requests_total` with labels `method`, `path`, `status` |
+| `INGEST_TRANSACTIONS` *(Phase 2)* | `prometheus_client.Counter` | Counter `grafin_ingest_transactions_total` with label `result` (bounded cardinality: `inserted` \| `duplicate`) |
+| `INGEST_SCORING_LATENCY` *(Phase 2)* | `prometheus_client.Histogram` | Histogram `grafin_ingest_scoring_latency_seconds` — latency of the outbound scoring call from `/ingest`; buckets `0.005 … 1.0` s |
 
 ### Function: `configure_logging`
 
@@ -248,14 +248,14 @@ def configure_logging(level: str = "INFO") -> None
 
 ## Module: `main`
 
-- **File**: [`garda_ai_backend/main.py`](../../garda_ai_backend/main.py)
+- **File**: [`grafin_ai_backend/main.py`](../../grafin_ai_backend/main.py)
 - **External dependencies**: `fastapi`, `httpx`, `prometheus_client`, `sqlalchemy.text`, `contextlib.asynccontextmanager`
 - **Internal dependencies**: `config.get_settings`, `db._maker`, `observability.REGISTRY`, `observability.configure_logging`, all API routers (including `api.ingest.router` *(Phase 2)*)
 
 ### Object: `app`
 
 ```python
-app = FastAPI(title="Garda AI Backend", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Grafin AI Backend", version="0.1.0", lifespan=lifespan)
 ```
 
 The root ASGI application instance. On import, calls `get_settings()` and `configure_logging(settings.log_level)` as side effects. Mounts all routers via `include_router`, including the Phase 2 `ingest_router`.
@@ -302,7 +302,7 @@ async def metrics() -> Response
 
 ## Module: `security.passwords`
 
-- **File**: [`garda_ai_backend/security/passwords.py`](../../garda_ai_backend/security/passwords.py)
+- **File**: [`grafin_ai_backend/security/passwords.py`](../../grafin_ai_backend/security/passwords.py)
 - **External dependencies**: `argon2` (`PasswordHasher`, `VerifyMismatchError`)
 
 ### Module-level state
@@ -350,7 +350,7 @@ def dummy_verify() -> None
 
 ## Module: `security.tokens`
 
-- **File**: [`garda_ai_backend/security/tokens.py`](../../garda_ai_backend/security/tokens.py)
+- **File**: [`grafin_ai_backend/security/tokens.py`](../../grafin_ai_backend/security/tokens.py)
 - **External dependencies**: `PyJWT` (`jwt`), `datetime`, `uuid`
 
 ### Class: `InvalidToken`
@@ -412,7 +412,7 @@ def decode_token(token: str, secret: str, algorithm: str = "HS256") -> dict
 
 ## Module: `security.refresh_store`
 
-- **File**: [`garda_ai_backend/security/refresh_store.py`](../../garda_ai_backend/security/refresh_store.py)
+- **File**: [`grafin_ai_backend/security/refresh_store.py`](../../grafin_ai_backend/security/refresh_store.py)
 - **External dependencies**: `redis.asyncio.Redis`
 
 ### Class: `RefreshTokenStore`
@@ -482,9 +482,9 @@ async def revoke(self, jti: str) -> None
 
 ## Module: `repositories.users`
 
-- **File**: [`garda_ai_backend/repositories/users.py`](../../garda_ai_backend/repositories/users.py)
+- **File**: [`grafin_ai_backend/repositories/users.py`](../../grafin_ai_backend/repositories/users.py)
 - **External dependencies**: `sqlalchemy.ext.asyncio.AsyncSession`, `sqlalchemy.select`
-- **Internal dependencies**: `garda_ai_backend.schema.User`
+- **Internal dependencies**: `grafin_ai_backend.schema.User`
 
 ### Class: `UserRepository`
 
@@ -542,9 +542,9 @@ async def create(
 
 ## Module: `repositories.metrics`
 
-- **File**: [`garda_ai_backend/repositories/metrics.py`](../../garda_ai_backend/repositories/metrics.py)
+- **File**: [`grafin_ai_backend/repositories/metrics.py`](../../grafin_ai_backend/repositories/metrics.py)
 - **External dependencies**: `sqlalchemy` (case, cast, func, select, Integer)
-- **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Internal dependencies**: `grafin_ai_backend.schema.Transaction`, `grafin_ai_backend.schema.TransactionEvent`
 - **Cache note**: All three methods are called exclusively through `cached_json` in `api/metrics.py`. Cache keys carry the data clock (`overview:{now}`, `volume:{range}:{now}`, `heatmap:{now}`), TTL = 5 s.
 
 ### Class: `MetricsRepository`
@@ -598,9 +598,9 @@ async def heatmap(self, now: datetime) -> list[list[int]]
 
 ## Module: `repositories.analytics`
 
-- **File**: [`garda_ai_backend/repositories/analytics.py`](../../garda_ai_backend/repositories/analytics.py)
+- **File**: [`grafin_ai_backend/repositories/analytics.py`](../../grafin_ai_backend/repositories/analytics.py)
 - **External dependencies**: `sqlalchemy` (case, func, select)
-- **Internal dependencies**: `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Internal dependencies**: `grafin_ai_backend.schema.Transaction`, `grafin_ai_backend.schema.TransactionEvent`
 - **Cache note**: Both methods are called through `cached_json` in `api/analytics.py`. Cache key `fraud:{now}`, TTL = 5 s.
 
 ### Class: `AnalyticsRepository`
@@ -641,9 +641,9 @@ async def confusion_counts(self, now: datetime) -> dict
 
 ## Module: `repositories.geo`
 
-- **File**: [`garda_ai_backend/repositories/geo.py`](../../garda_ai_backend/repositories/geo.py)
+- **File**: [`grafin_ai_backend/repositories/geo.py`](../../grafin_ai_backend/repositories/geo.py)
 - **External dependencies**: `sqlalchemy` (func, select)
-- **Internal dependencies**: `garda_ai_backend.schema.Account`, `garda_ai_backend.schema.Entity`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Internal dependencies**: `grafin_ai_backend.schema.Account`, `grafin_ai_backend.schema.Entity`, `grafin_ai_backend.schema.Transaction`, `grafin_ai_backend.schema.TransactionEvent`
 - **Cache note**: Called through `cached_json` in `api/geo.py`. Cache key `geo:{now}`, TTL = 10 s.
 
 ### Class: `GeoRepository`
@@ -674,9 +674,9 @@ async def province_fraud_counts(self, now: datetime) -> list[dict]
 
 ## Module: `repositories.transactions`
 
-- **File**: [`garda_ai_backend/repositories/transactions.py`](../../garda_ai_backend/repositories/transactions.py)
+- **File**: [`grafin_ai_backend/repositories/transactions.py`](../../grafin_ai_backend/repositories/transactions.py)
 - **External dependencies**: `sqlalchemy.select`
-- **Internal dependencies**: `garda_ai_backend.schema.Bank`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Internal dependencies**: `grafin_ai_backend.schema.Bank`, `grafin_ai_backend.schema.Transaction`, `grafin_ai_backend.schema.TransactionEvent`
 - **Cache note**: NOT cached. The live feed must reflect the most recent events in real time; caching would delay the resync source used by the dashboard.
 
 ### Class: `TransactionsRepository`
@@ -722,9 +722,9 @@ async def detail(self, transaction_id: int) -> dict | None
 
 ## Module: `repositories.users_view`
 
-- **File**: [`garda_ai_backend/repositories/users_view.py`](../../garda_ai_backend/repositories/users_view.py)
+- **File**: [`grafin_ai_backend/repositories/users_view.py`](../../grafin_ai_backend/repositories/users_view.py)
 - **External dependencies**: `sqlalchemy` (func, select)
-- **Internal dependencies**: `garda_ai_backend.schema.Account`, `garda_ai_backend.schema.Entity`, `garda_ai_backend.schema.Transaction`, `garda_ai_backend.schema.TransactionEvent`
+- **Internal dependencies**: `grafin_ai_backend.schema.Account`, `grafin_ai_backend.schema.Entity`, `grafin_ai_backend.schema.Transaction`, `grafin_ai_backend.schema.TransactionEvent`
 - **Cache note**: NOT cached directly. The router applies role-aware masking post-fetch so the cached form would leak PII; masking must happen in the request context.
 
 ### Class: `UserRiskRepository`
@@ -770,9 +770,9 @@ async def profile(self, now: datetime, entity_id: str) -> dict | None
 
 ## Module: `repositories.alerts`
 
-- **File**: [`garda_ai_backend/repositories/alerts.py`](../../garda_ai_backend/repositories/alerts.py)
+- **File**: [`grafin_ai_backend/repositories/alerts.py`](../../grafin_ai_backend/repositories/alerts.py)
 - **External dependencies**: `sqlalchemy.select`
-- **Internal dependencies**: `garda_ai_backend.schema.Alert`
+- **Internal dependencies**: `grafin_ai_backend.schema.Alert`
 
 ### Class: `AlertsRepository`
 
@@ -814,7 +814,7 @@ async def acknowledge(self, alert_id: int, user_id: int) -> Alert | None
 
 ## Module: `services.auth`
 
-- **File**: [`garda_ai_backend/services/auth.py`](../../garda_ai_backend/services/auth.py)
+- **File**: [`grafin_ai_backend/services/auth.py`](../../grafin_ai_backend/services/auth.py)
 - **External dependencies**: `dataclasses`
 - **Internal dependencies**: `repositories.users.UserRepository`, `security.passwords.{dummy_verify, verify_password}`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, create_access_token, create_refresh_token, decode_token}`
 
@@ -897,7 +897,7 @@ async def logout(self, refresh_token: str) -> None
 
 ## Module: `api.schemas`
 
-- **File**: [`garda_ai_backend/api/schemas.py`](../../garda_ai_backend/api/schemas.py)
+- **File**: [`grafin_ai_backend/api/schemas.py`](../../grafin_ai_backend/api/schemas.py)
 - **External dependencies**: `pydantic` (BaseModel)
 
 ### Class: `LoginRequest`
@@ -945,7 +945,7 @@ class MeResponse(BaseModel):
 
 ## Module: `api.view_schemas`
 
-- **File**: [`garda_ai_backend/api/view_schemas.py`](../../garda_ai_backend/api/view_schemas.py)
+- **File**: [`grafin_ai_backend/api/view_schemas.py`](../../grafin_ai_backend/api/view_schemas.py)
 - **External dependencies**: `pydantic` (BaseModel), `datetime`
 
 Pydantic response models for all view endpoints. Every class is a pure `BaseModel` with no custom validators.
@@ -1007,7 +1007,7 @@ Pydantic response models for all view endpoints. Every class is a pure `BaseMode
 
 ## Module: `api.deps`
 
-- **File**: [`garda_ai_backend/api/deps.py`](../../garda_ai_backend/api/deps.py)
+- **File**: [`grafin_ai_backend/api/deps.py`](../../grafin_ai_backend/api/deps.py)
 - **External dependencies**: `fastapi` (Depends, HTTPException, HTTPBearer, HTTPAuthorizationCredentials), `redis.asyncio.Redis`, `sqlalchemy` (func, select), `sqlalchemy.ext.asyncio.AsyncSession`
 - **Internal dependencies**: `config.Settings`, `config.get_settings`, `db._maker`, `redis_client.get_redis`, `repositories.users.UserRepository`, `schema.TransactionEvent`, `security.refresh_store.RefreshTokenStore`, `security.tokens.{InvalidToken, decode_token}`, `services.auth.AuthService`
 
@@ -1106,7 +1106,7 @@ def require_role(*roles: str) -> Callable[[CurrentUser], CurrentUser]
 
 ## Module: `api.masking`
 
-- **File**: [`garda_ai_backend/api/masking.py`](../../garda_ai_backend/api/masking.py)
+- **File**: [`grafin_ai_backend/api/masking.py`](../../grafin_ai_backend/api/masking.py)
 - **External dependencies**: none
 - **Internal dependencies**: none
 
@@ -1146,7 +1146,7 @@ def mask_payment_id(payment_id: str) -> str
 
 ## Module: `api.cache`
 
-- **File**: [`garda_ai_backend/api/cache.py`](../../garda_ai_backend/api/cache.py)
+- **File**: [`grafin_ai_backend/api/cache.py`](../../grafin_ai_backend/api/cache.py)
 - **External dependencies**: `redis.asyncio.Redis`, `json`
 
 ### Function: `cached_json`
@@ -1173,7 +1173,7 @@ async def cached_json(
 
 ## Module: `api.ratelimit`
 
-- **File**: [`garda_ai_backend/api/ratelimit.py`](../../garda_ai_backend/api/ratelimit.py)
+- **File**: [`grafin_ai_backend/api/ratelimit.py`](../../grafin_ai_backend/api/ratelimit.py)
 - **External dependencies**: `fastapi` (HTTPException), `redis.asyncio.Redis`
 
 ### Class: `RateLimiter`
@@ -1209,7 +1209,7 @@ async def check(self, key: str) -> None
 
 ## Module: `api.auth`
 
-- **File**: [`garda_ai_backend/api/auth.py`](../../garda_ai_backend/api/auth.py)
+- **File**: [`grafin_ai_backend/api/auth.py`](../../grafin_ai_backend/api/auth.py)
 - **External dependencies**: `fastapi` (APIRouter, Depends, HTTPException, Request, Response)
 - **Internal dependencies**: `api.deps.{AuthServiceDep, CurrentUserDep, RedisDep, SessionDep}`, `api.ratelimit.RateLimiter`, `api.schemas.{LoginRequest, MeResponse, RefreshRequest, TokenResponse}`, `repositories.users.UserRepository`, `services.auth.AuthError`
 
@@ -1260,7 +1260,7 @@ async def me(user: CurrentUserDep, session: SessionDep) -> MeResponse
 
 ## Module: `api.metrics`
 
-- **File**: [`garda_ai_backend/api/metrics.py`](../../garda_ai_backend/api/metrics.py)
+- **File**: [`grafin_ai_backend/api/metrics.py`](../../grafin_ai_backend/api/metrics.py)
 - **External dependencies**: `fastapi` (APIRouter, Query)
 - **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{HeatmapResponse, MetricsOverviewResponse, VolumeResponse}`, `repositories.metrics.MetricsRepository`
 - **Cache**: All three routes use `cached_json` with 5 s TTL. Keys are data-clock-stamped.
@@ -1322,7 +1322,7 @@ async def heatmap(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentU
 
 ## Module: `api.analytics`
 
-- **File**: [`garda_ai_backend/api/analytics.py`](../../garda_ai_backend/api/analytics.py)
+- **File**: [`grafin_ai_backend/api/analytics.py`](../../grafin_ai_backend/api/analytics.py)
 - **External dependencies**: `fastapi.APIRouter`
 - **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{DetectionMetrics, FraudAnalyticsResponse, TypologyCount}`, `repositories.analytics.AnalyticsRepository`
 - **Cache**: Single route cached with 5 s TTL.
@@ -1358,7 +1358,7 @@ async def fraud(session: SessionDep, redis: RedisDep, now: NowDep, _: CurrentUse
 
 ## Module: `api.geo`
 
-- **File**: [`garda_ai_backend/api/geo.py`](../../garda_ai_backend/api/geo.py)
+- **File**: [`grafin_ai_backend/api/geo.py`](../../grafin_ai_backend/api/geo.py)
 - **External dependencies**: `fastapi.APIRouter`
 - **Internal dependencies**: `api.cache.cached_json`, `api.deps.{CurrentUserDep, NowDep, RedisDep, SessionDep}`, `api.view_schemas.{GeoResponse, ProvinceFraud}`, `repositories.geo.GeoRepository`
 - **Cache**: Single route cached with 10 s TTL.
@@ -1394,7 +1394,7 @@ async def provinces(session: SessionDep, redis: RedisDep, now: NowDep, _: Curren
 
 ## Module: `api.transactions`
 
-- **File**: [`garda_ai_backend/api/transactions.py`](../../garda_ai_backend/api/transactions.py)
+- **File**: [`grafin_ai_backend/api/transactions.py`](../../grafin_ai_backend/api/transactions.py)
 - **External dependencies**: `fastapi` (APIRouter, HTTPException, Query)
 - **Internal dependencies**: `api.deps.{CurrentUserDep, NowDep, SessionDep}`, `api.view_schemas.{LiveItem, LiveResponse, TransactionDetail}`, `repositories.transactions.TransactionsRepository`
 - **Cache**: NOT cached. Live feed is a resync source; stale data would break incremental polling.
@@ -1435,14 +1435,14 @@ async def detail(
 
 ### Route: `GET /api/v1/transactions/{transaction_id}/explanation`
 
-- **Description**: `services.explain.generate_explanation`: stored row in `transaction_explanations` (returned without an LLM call) → `evidence.compute_evidence` (24h window ending at the transaction's `event_time`, inclusive; never reads `is_laundering`; uses the `(from_account, event_time)` / `(to_account, event_time)` indexes) → `rules.risk_factors` → LLM narrative (`GARDA_LLM_PROVIDER`; anthropic/gemini/ollama via httpx) or `rules.rules_narrative`. Raises HTTP 404 if not found.
+- **Description**: `services.explain.generate_explanation`: stored row in `transaction_explanations` (returned without an LLM call) → `evidence.compute_evidence` (24h window ending at the transaction's `event_time`, inclusive; never reads `is_laundering`; uses the `(from_account, event_time)` / `(to_account, event_time)` indexes) → `rules.risk_factors` → LLM narrative (`GRAFIN_LLM_PROVIDER`; anthropic/gemini/ollama via httpx) or `rules.rules_narrative`. Raises HTTP 404 if not found.
 - **Role gate**: any authenticated user
 
 ---
 
 ## Module: `api.users_view`
 
-- **File**: [`garda_ai_backend/api/users_view.py`](../../garda_ai_backend/api/users_view.py)
+- **File**: [`grafin_ai_backend/api/users_view.py`](../../grafin_ai_backend/api/users_view.py)
 - **External dependencies**: `fastapi` (APIRouter, HTTPException)
 - **Internal dependencies**: `api.deps.{CurrentUserDep, NowDep, SessionDep}`, `api.masking.mask_name`, `api.view_schemas.{RiskProfile, UserRiskResponse}`, `repositories.users_view.UserRiskRepository`
 - **Cache**: NOT cached (masking is role-dependent and must execute per-request in the authenticated context).
@@ -1503,7 +1503,7 @@ async def profile(
 
 ## Module: `api.alerts`
 
-- **File**: [`garda_ai_backend/api/alerts.py`](../../garda_ai_backend/api/alerts.py)
+- **File**: [`grafin_ai_backend/api/alerts.py`](../../grafin_ai_backend/api/alerts.py)
 - **External dependencies**: `fastapi` (APIRouter, HTTPException)
 - **Internal dependencies**: `api.deps.{CurrentUserDep, SessionDep}`, `api.view_schemas.{AlertItem, AlertsResponse}`, `repositories.alerts.AlertsRepository`
 
@@ -1547,7 +1547,7 @@ async def ack(alert_id: int, session: SessionDep, user: CurrentUserDep) -> Alert
 
 ## Module: `api.system`
 
-- **File**: [`garda_ai_backend/api/system.py`](../../garda_ai_backend/api/system.py)
+- **File**: [`grafin_ai_backend/api/system.py`](../../grafin_ai_backend/api/system.py)
 - **External dependencies**: `fastapi.APIRouter`, `sqlalchemy` (func, select, text)
 - **Internal dependencies**: `api.deps.{CurrentUserDep, RedisDep, SessionDep}`, `api.view_schemas.SystemHealthResponse`, `schema.TransactionEvent`
 
@@ -1564,33 +1564,33 @@ router = APIRouter(prefix="/api/v1/system", tags=["system"])
 async def health(session: SessionDep, redis: RedisDep, _: CurrentUserDep) -> SystemHealthResponse
 ```
 
-- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts **all** `TransactionEvent` rows as `events_surfaced` — `select(func.count()).select_from(TransactionEvent)` with no time filter, because this is an operational "how much is in the database" probe rather than a windowed view. Sets `model_accuracy_simulated=True` unless `GARDA_MODEL_NAME` is set, in which case it is `False` and `model_name` is returned. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
+- **Description**: Performs live connectivity checks against both PostgreSQL (`SELECT 1`) and Redis (`PING`). Counts **all** `TransactionEvent` rows as `events_surfaced` — `select(func.count()).select_from(TransactionEvent)` with no time filter, because this is an operational "how much is in the database" probe rather than a windowed view. Sets `model_accuracy_simulated=True` unless `GRAFIN_MODEL_NAME` is set, in which case it is `False` and `model_name` is returned. Any probe failure sets the corresponding `*_ok` flag to `False` without raising.
 - **Role gate**: any authenticated user
 
 ---
 
 ## Module: `realtime.channels`
 
-- **File**: [`garda_ai_backend/realtime/channels.py`](../../garda_ai_backend/realtime/channels.py)
+- **File**: [`grafin_ai_backend/realtime/channels.py`](../../grafin_ai_backend/realtime/channels.py)
 - **External dependencies**: none
 - **Internal dependencies**: none
-- **Cross-repo coupling**: This constant's value (`garda:events:live`) is a wire contract shared between `garda-ai-backend` (subscriber) and the pipeline worker repo (publisher). The pipeline now keeps its own local copy of this constant and duplicates the value *by contract* — it does NOT import it from this package. Both sides must keep the string identical; any rename must be coordinated across both repositories.
+- **Cross-repo coupling**: This constant's value (`grafin:events:live`) is a wire contract shared between `grafin-ai-backend` (subscriber) and the pipeline worker repo (publisher). The pipeline now keeps its own local copy of this constant and duplicates the value *by contract* — it does NOT import it from this package. Both sides must keep the string identical; any rename must be coordinated across both repositories.
 
 ### Constant: `LIVE_EVENTS_CHANNEL`
 
 ```python
-LIVE_EVENTS_CHANNEL: str = "garda:events:live"
+LIVE_EVENTS_CHANNEL: str = "grafin:events:live"
 ```
 
 - **Description**: The Redis pub/sub channel name on which the pipeline replay worker publishes JSON-encoded scored `TransactionEvent` payloads and on which the backend WebSocket relay (`api/ws.py`) maintains an active subscription. Defined here for the backend; the pipeline holds a duplicate local copy of this value (kept identical by contract, not imported) to prevent silent divergence.
 - **Type**: `str` (module-level constant)
-- **Value**: `"garda:events:live"`
+- **Value**: `"grafin:events:live"`
 
 ---
 
 ## Module: `api.ws_auth`
 
-- **File**: [`garda_ai_backend/api/ws_auth.py`](../../garda_ai_backend/api/ws_auth.py)
+- **File**: [`grafin_ai_backend/api/ws_auth.py`](../../grafin_ai_backend/api/ws_auth.py)
 - **External dependencies**: none beyond the standard library
 - **Internal dependencies**: `api.deps.CurrentUser`, `security.tokens.{InvalidToken, decode_token}`
 
@@ -1617,7 +1617,7 @@ def authenticate_ws_token(token: str, secret: str) -> CurrentUser | None
 
 ## Module: `api.ws`
 
-- **File**: [`garda_ai_backend/api/ws.py`](../../garda_ai_backend/api/ws.py)
+- **File**: [`grafin_ai_backend/api/ws.py`](../../grafin_ai_backend/api/ws.py)
 - **External dependencies**: `fastapi` (APIRouter, WebSocket, WebSocketDisconnect)
 - **Internal dependencies**: `api.deps.{RedisDep, SettingsDep}`, `api.ws_auth.authenticate_ws_token`, `realtime.channels.LIVE_EVENTS_CHANNEL`
 
@@ -1690,7 +1690,7 @@ flowchart LR
 
 ## Module: `services.scoring_client` *(Phase 2 — added 2026-06-25)*
 
-- **File**: [`garda_ai_backend/services/scoring_client.py`](../../garda_ai_backend/services/scoring_client.py)
+- **File**: [`grafin_ai_backend/services/scoring_client.py`](../../grafin_ai_backend/services/scoring_client.py)
 - **External dependencies**: `httpx`, `asyncio`
 - **Internal dependencies**: none
 
@@ -1708,7 +1708,7 @@ class ScoringUnavailable(Exception)
 class ScoringClient
 ```
 
-- **Description**: Thin resilient client for the separate **garda-ai-scoring** service's `POST /v1/score`. Wraps a shared pooled `httpx.AsyncClient` (created once and stored on `app.state.http_client` by the `main.py` lifespan). This is the backend's only outbound synchronous HTTP dependency.
+- **Description**: Thin resilient client for the separate **grafin-ai-scoring** service's `POST /v1/score`. Wraps a shared pooled `httpx.AsyncClient` (created once and stored on `app.state.http_client` by the `main.py` lifespan). This is the backend's only outbound synchronous HTTP dependency.
 
 #### Method: `__init__`
 
@@ -1751,7 +1751,7 @@ async def score(
 
 ## Module: `api.ingest_auth` *(Phase 2 — added 2026-06-25)*
 
-- **File**: [`garda_ai_backend/api/ingest_auth.py`](../../garda_ai_backend/api/ingest_auth.py)
+- **File**: [`grafin_ai_backend/api/ingest_auth.py`](../../grafin_ai_backend/api/ingest_auth.py)
 - **External dependencies**: `hmac`, `fastapi` (Header, HTTPException, status)
 - **Internal dependencies**: `config.get_settings`
 
@@ -1778,7 +1778,7 @@ def require_ingest_token(authorization: str | None = Header(default=None)) -> No
 
 ## Module: `api.ingest_schemas` *(Phase 2 — added 2026-06-25)*
 
-- **File**: [`garda_ai_backend/api/ingest_schemas.py`](../../garda_ai_backend/api/ingest_schemas.py)
+- **File**: [`grafin_ai_backend/api/ingest_schemas.py`](../../grafin_ai_backend/api/ingest_schemas.py)
 - **External dependencies**: `pydantic` (BaseModel, Field), `datetime`, `decimal.Decimal`, `typing` (Annotated, Literal)
 
 ### Type aliases
@@ -1830,7 +1830,7 @@ class IngestResponse(BaseModel):
 
 ## Module: `repositories.ingest` *(Phase 2 — added 2026-06-25)*
 
-- **File**: [`garda_ai_backend/repositories/ingest.py`](../../garda_ai_backend/repositories/ingest.py)
+- **File**: [`grafin_ai_backend/repositories/ingest.py`](../../grafin_ai_backend/repositories/ingest.py)
 - **External dependencies**: `sqlalchemy.select`, `sqlalchemy.dialects.postgresql.insert as pg_insert`, `sqlalchemy.ext.asyncio.AsyncSession`, `dataclasses`, `datetime`
 - **Internal dependencies**: `schema.{Account, Alert, Bank, Transaction, TransactionEvent}`
 
@@ -1903,7 +1903,7 @@ async def persist(
 
 ## Module: `api.ingest` *(Phase 2 — added 2026-06-25)*
 
-- **File**: [`garda_ai_backend/api/ingest.py`](../../garda_ai_backend/api/ingest.py)
+- **File**: [`grafin_ai_backend/api/ingest.py`](../../grafin_ai_backend/api/ingest.py)
 - **External dependencies**: `fastapi` (APIRouter, Depends, Header, HTTPException, Request, status), `httpx`, `structlog`, `sqlalchemy.exc.IntegrityError`, `json`, `time`, `uuid`, `datetime`
 - **Internal dependencies**: `api.deps.{RedisDep, SessionDep, SettingsDep}`, `api.ingest_auth.require_ingest_token`, `api.ingest_schemas.{IngestRequest, IngestResponse, IngestResultItem}`, `observability.{INGEST_SCORING_LATENCY, INGEST_TRANSACTIONS}`, `realtime.channels.LIVE_EVENTS_CHANNEL`, `repositories.ingest.IngestRepository`, `services.scoring_client.{ScoringClient, ScoringUnavailable}`
 
@@ -1947,14 +1947,14 @@ async def ingest(
   5. **Persist**: `repo.persist(txn_rows, scores_by_id, now)`; an `IntegrityError` with SQLSTATE `23503` (FK) → HTTP **400** (unknown bank/account — seed reference data first). Increments `INGEST_TRANSACTIONS{inserted}` / `{duplicate}`.
   6. **Publish**: commit-then-notify — for each new event, `redis.publish(LIVE_EVENTS_CHANNEL, json.dumps(message))` using the **same message shape** the WS relay/frontend consume (`seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time`) — the identical key set `TransactionsRepository.live_window` returns, so a client's WS stream and its `after_seq=` backfill never disagree on fields. A publish failure after commit leaves events persisted-but-not-published (accepted for Phase 2).
   7. **Respond**: one `IngestResultItem` per submitted transaction; duplicates get `ingested=False`, `seq=None`, `status=None`.
-- **Auth**: bearer `GARDA_INGEST_TOKEN` (router dependency)
+- **Auth**: bearer `GRAFIN_INGEST_TOKEN` (router dependency)
 - **Error surface**: `200` / `400` (FK) / `401` (bad token) / `422` (schema) / `502` (invalid scoring results) / `503` (scoring unavailable)
 
 ---
 
 ## Module: `seed`
 
-- **File**: [`garda_ai_backend/seed.py`](../../garda_ai_backend/seed.py)
+- **File**: [`grafin_ai_backend/seed.py`](../../grafin_ai_backend/seed.py)
 - **External dependencies**: `asyncio`, `datetime`
 - **Internal dependencies**: `db._maker`, `repositories.users.UserRepository`, `security.passwords.hash_password`
 
@@ -1973,7 +1973,7 @@ async def ensure_admin(session: AsyncSession, email: str, password: str) -> User
 async def _main() -> None
 ```
 
-- **Description**: Entry point when `seed.py` is run directly (`python -m garda_ai_backend.seed`). Seeds the default admin (`admin@grafin.ai` / `admin`) and commits the transaction. There is no clock to seed: "now" is derived from the ingested data, so an empty database simply has no timeline yet.
+- **Description**: Entry point when `seed.py` is run directly (`python -m grafin_ai_backend.seed`). Seeds the default admin (`admin@grafin.ai` / `admin`) and commits the transaction. There is no clock to seed: "now" is derived from the ingested data, so an empty database simply has no timeline yet.
 
 ---
 
@@ -1983,7 +1983,7 @@ The `schema/` sub-package defines all SQLAlchemy 2.0 ORM models using the **mapp
 
 ### `schema/base.py` — `Base`
 
-- **File**: [`garda_ai_backend/schema/base.py`](../../garda_ai_backend/schema/base.py)
+- **File**: [`grafin_ai_backend/schema/base.py`](../../grafin_ai_backend/schema/base.py)
 - **External dependencies**: `sqlalchemy.orm.DeclarativeBase`
 
 ```python
@@ -1997,9 +1997,9 @@ Empty declarative base. All ORM model classes inherit from `Base`, registering t
 
 ### `schema/reference.py` — Reference Tables
 
-- **File**: [`garda_ai_backend/schema/reference.py`](../../garda_ai_backend/schema/reference.py)
+- **File**: [`grafin_ai_backend/schema/reference.py`](../../grafin_ai_backend/schema/reference.py)
 - **External dependencies**: `sqlalchemy` (ForeignKey, Numeric, String), `sqlalchemy.orm` (Mapped, mapped_column, relationship)
-- **Internal dependencies**: `garda_ai_backend.schema.base.Base`
+- **Internal dependencies**: `grafin_ai_backend.schema.base.Base`
 
 #### Class: `Bank`
 
@@ -2047,7 +2047,7 @@ class Account(Base):
 
 ### `schema/transactions.py` — Transaction Tables
 
-- **File**: [`garda_ai_backend/schema/transactions.py`](../../garda_ai_backend/schema/transactions.py)
+- **File**: [`grafin_ai_backend/schema/transactions.py`](../../grafin_ai_backend/schema/transactions.py)
 
 #### Class: `Transaction`
 
@@ -2096,7 +2096,7 @@ Both timestamps are kept on purpose. `event_time` is denormalized onto the event
 
 ### `schema/alerts.py` — Alert Table
 
-- **File**: [`garda_ai_backend/schema/alerts.py`](../../garda_ai_backend/schema/alerts.py)
+- **File**: [`grafin_ai_backend/schema/alerts.py`](../../grafin_ai_backend/schema/alerts.py)
 
 #### Class: `Alert`
 
@@ -2119,7 +2119,7 @@ class Alert(Base):
 
 ### `schema/users.py` — User Table
 
-- **File**: [`garda_ai_backend/schema/users.py`](../../garda_ai_backend/schema/users.py)
+- **File**: [`grafin_ai_backend/schema/users.py`](../../grafin_ai_backend/schema/users.py)
 
 #### Class: `User`
 
@@ -2140,12 +2140,12 @@ class User(Base):
 
 ### `schema/__init__.py` — Package Re-exports
 
-- **File**: [`garda_ai_backend/schema/__init__.py`](../../garda_ai_backend/schema/__init__.py)
+- **File**: [`grafin_ai_backend/schema/__init__.py`](../../grafin_ai_backend/schema/__init__.py)
 
 Re-exports all ORM model classes and `Base`:
 
 ```python
-from garda_ai_backend.schema import Base, Bank, Entity, Account, Transaction, TransactionEvent, Alert, User
+from grafin_ai_backend.schema import Base, Bank, Entity, Account, Transaction, TransactionEvent, Alert, User
 ```
 
 ---
@@ -2154,7 +2154,7 @@ from garda_ai_backend.schema import Base, Bank, Entity, Account, Transaction, Tr
 
 ```mermaid
 ---
-title: ORM Schema — garda_ai_backend
+title: ORM Schema — grafin_ai_backend
 ---
 classDiagram
     namespace Reference {
@@ -2244,7 +2244,7 @@ classDiagram
 
 ```mermaid
 ---
-title: Internal Module Dependencies — garda_ai_backend
+title: Internal Module Dependencies — grafin_ai_backend
 ---
 flowchart TB
     config["config.py\nSettings / get_settings"]
@@ -2469,13 +2469,13 @@ flowchart TB
 
 **Updated 2026-06-25 — Ingest write-path (Phase 2, additive)**
 
-- **`services/scoring_client.py` added**: `ScoringClient` (`score()`) + `ScoringUnavailable`. Resilient httpx client for garda-ai-scoring `POST /v1/score` over a pooled `AsyncClient` (bearer token, `X-Correlation-ID` propagated, bounded retries with backoff, 4xx-no-retry, response validation). First outbound HTTP dependency of the backend.
-- **`api/ingest_auth.py` added**: `require_ingest_token` / `_verify_ingest` — bearer `GARDA_INGEST_TOKEN`, settings-only, constant-time (`hmac.compare_digest`). Separate from the user JWT stack.
+- **`services/scoring_client.py` added**: `ScoringClient` (`score()`) + `ScoringUnavailable`. Resilient httpx client for grafin-ai-scoring `POST /v1/score` over a pooled `AsyncClient` (bearer token, `X-Correlation-ID` propagated, bounded retries with backoff, 4xx-no-retry, response validation). First outbound HTTP dependency of the backend.
+- **`api/ingest_auth.py` added**: `require_ingest_token` / `_verify_ingest` — bearer `GRAFIN_INGEST_TOKEN`, settings-only, constant-time (`hmac.compare_digest`). Separate from the user JWT stack.
 - **`api/ingest_schemas.py` added**: `IngestTxn`, `IngestRequest` (batch cap 1000), `IngestResultItem`, `IngestResponse`; `Amount` / `RiskStatus` aliases with input caps.
 - **`repositories/ingest.py` added**: `IngestRepository` (`risk_categories`, `bank_names`, `persist`) + `InsertedEvent`. Idempotent atomic persist via `pg_insert ... ON CONFLICT (id) DO NOTHING RETURNING`; events for new ids only, alerts for blocked; one transaction.
-- **`api/ingest.py` added**: `POST /api/v1/ingest` — enrich → score (503 if down, 502 if invalid results) → atomic persist (400 on FK) → publish new events to `garda:events:live` (commit-then-notify, same message shape as the read/live path). Idempotent on producer `transaction_id`.
+- **`api/ingest.py` added**: `POST /api/v1/ingest` — enrich → score (503 if down, 502 if invalid results) → atomic persist (400 on FK) → publish new events to `grafin:events:live` (commit-then-notify, same message shape as the read/live path). Idempotent on producer `transaction_id`.
 - **`config.py`**: added `scoring_url` / `scoring_token` (required) / `ingest_token` (required, min 16) / `scoring_timeout_s` / `scoring_retries`.
-- **`observability.py`**: added `INGEST_TRANSACTIONS` (`garda_ingest_transactions_total{result}`) and `INGEST_SCORING_LATENCY` (`garda_ingest_scoring_latency_seconds`).
+- **`observability.py`**: added `INGEST_TRANSACTIONS` (`grafin_ingest_transactions_total{result}`) and `INGEST_SCORING_LATENCY` (`grafin_ingest_scoring_latency_seconds`).
 - **`main.py`**: added a `lifespan` that opens/closes the pooled `httpx.AsyncClient` on `app.state.http_client`, and mounts `ingest_router`.
 - The replay/read paths are unchanged; re-anchoring the read/aggregate layer onto ingest-produced events is deferred to Phase 5.
 
@@ -2500,6 +2500,6 @@ flowchart TB
 - The WebSocket push frame and the `GET /api/v1/transactions/live?after_seq=` response carry the identical key set (`seq`, `transaction_id`, `bank`, `type`, `amount`, `fraud_score`, `typology`, `status`, `surfaced_at`, `event_time`). This is a deliberate contract: the dashboard's live list and its reconnect-backfill must render from the same fields, so a gap filled over REST is indistinguishable from one delivered over the socket.
 - The live transaction feed (`GET /api/v1/transactions/live`) is deliberately NOT cached because it acts as the resync source for the dashboard's live panel. Caching would delay event delivery and break incremental polling via `after_seq`.
 - User-risk endpoints are NOT cached because the masking decision (`mask_name`) is role-dependent and must be applied in the authenticated request context. Caching the pre-masked form would risk leaking unmasked PII; caching the masked form would prevent admins from ever seeing the real names.
-- `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "garda:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. The pipeline keeps its own local copy of this value (duplicated by contract, not imported from this package). Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
+- `realtime/channels.py` defines `LIVE_EVENTS_CHANNEL = "grafin:events:live"` as a shared string constant. This is a cross-repo coupling point: the pipeline worker (a separate repository) publishes to this channel, and the backend WebSocket relay subscribes to it. The pipeline keeps its own local copy of this value (duplicated by contract, not imported from this package). Both sides must reference the same channel name; any rename must be coordinated atomically across both repos.
 - WebSocket authentication (`api/ws_auth.py`) passes the JWT via the `?token=` query parameter instead of an `Authorization` header because browser WebSocket APIs (`new WebSocket(url)`) do not support custom headers on the upgrade request. The validation logic deliberately mirrors `deps.get_current_user` — it calls the same `decode_token`, checks `type == "access"`, and builds the same `CurrentUser` object — so the security posture is equivalent.
 - The WebSocket relay (`api/ws.py`) is covered by a real-transport integration test in `tests/test_ws_uvicorn.py` (subprocess uvicorn + real `websockets` client + Redis publish); Starlette's in-process `TestClient` could not exercise the transport bug that this test was written to catch.

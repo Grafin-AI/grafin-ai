@@ -10,7 +10,7 @@ Postgres + Redis fixtures from conftest, mirroring tests/test_alerts_endpoints.p
   touches ``app.state.http_client`` and the (un-run) lifespan is irrelevant. See
   the note on ``client`` below.
 
-The ingest bearer token comes from ``GARDA_INGEST_TOKEN`` set in conftest.
+The ingest bearer token comes from ``GRAFIN_INGEST_TOKEN`` set in conftest.
 """
 
 import asyncio
@@ -23,15 +23,15 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
-from garda_ai_backend.api import deps
-from garda_ai_backend.api.ingest import get_scoring_client
-from garda_ai_backend.observability import REGISTRY
-from garda_ai_backend.redis_client import build_redis
-from garda_ai_backend.repositories.transactions import TransactionsRepository
-from garda_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
-from garda_ai_backend.services.scoring_client import ScoringUnavailable
+from grafin_ai_backend.api import deps
+from grafin_ai_backend.api.ingest import get_scoring_client
+from grafin_ai_backend.observability import REGISTRY
+from grafin_ai_backend.redis_client import build_redis
+from grafin_ai_backend.repositories.transactions import TransactionsRepository
+from grafin_ai_backend.schema import Account, Bank, Entity, Transaction, TransactionEvent
+from grafin_ai_backend.services.scoring_client import ScoringUnavailable
 
-_INGEST_TOKEN = os.environ["GARDA_INGEST_TOKEN"]  # set in conftest (test-ingest-token)
+_INGEST_TOKEN = os.environ["GRAFIN_INGEST_TOKEN"]  # set in conftest (test-ingest-token)
 
 
 def _ingest_headers() -> dict:
@@ -130,7 +130,7 @@ async def client(session, redis_url, monkeypatch):
     await test_redis.flushdb()
     monkeypatch.setattr(deps, "get_redis", lambda: test_redis)
 
-    from garda_ai_backend.main import app
+    from grafin_ai_backend.main import app
 
     app.dependency_overrides[deps.get_session] = _override_session
     transport = ASGITransport(app=app)
@@ -238,7 +238,7 @@ async def test_ingest_unknown_reference_returns_400(client, session):
 async def test_ingest_publishes_live_event(client, session, seeded_reference, redis_url):
     subscriber = build_redis(redis_url)
     pubsub = subscriber.pubsub()
-    await pubsub.subscribe("garda:events:live")
+    await pubsub.subscribe("grafin:events:live")
     # Drain the subscribe-confirmation frame.
     await pubsub.get_message(timeout=1.0)
 
@@ -281,7 +281,7 @@ async def test_published_message_includes_event_time(client, session, seeded_ref
     timeline; surfaced_at stays for detection-lag."""
     subscriber = build_redis(redis_url)
     pubsub = subscriber.pubsub()
-    await pubsub.subscribe("garda:events:live")
+    await pubsub.subscribe("grafin:events:live")
     # Drain the subscribe-confirmation frame.
     await pubsub.get_message(timeout=1.0)
 
@@ -457,7 +457,7 @@ async def test_ingest_records_transaction_metrics(client, session, seeded_refere
     # counter and the metric is scrapeable from the app's Prometheus endpoint.
     def _inserted() -> float:
         return REGISTRY.get_sample_value(
-            "garda_ingest_transactions_total", {"result": "inserted"}
+            "grafin_ingest_transactions_total", {"result": "inserted"}
         ) or 0.0
 
     before = _inserted()
@@ -475,7 +475,7 @@ async def test_ingest_records_transaction_metrics(client, session, seeded_refere
     # The counter is exposed on the /metrics scrape endpoint the app already serves.
     scrape = await client.get("/metrics")
     assert scrape.status_code == 200
-    assert "garda_ingest_transactions_total" in scrape.text
+    assert "grafin_ingest_transactions_total" in scrape.text
 
 
 async def test_ingest_invalid_scoring_response_returns_502(client, session, seeded_reference):
