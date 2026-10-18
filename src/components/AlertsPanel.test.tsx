@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 // Hoisted so the vi.mock factory below (itself hoisted) can reference it.
@@ -7,6 +7,7 @@ const { alert } = vi.hoisted(() => ({
   alert: {
     id: 2,
     event_seq: 3,
+    transaction_id: 4214452,
     severity: 'medium',
     typology: 'Smurfing',
     created_at: '2026-08-12T12:00:00+00:00',  // ingestion time — must NOT be shown
@@ -18,6 +19,11 @@ const { alert } = vi.hoisted(() => ({
 vi.mock('../api/queries', () => ({
   useAlerts: () => ({ data: { alerts: [alert] }, isLoading: false, isError: false }),
   useAckAlert: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock('./TransactionDetailsModal', () => ({
+  TransactionDetailsModal: ({ isOpen, transactionId }: { isOpen: boolean; transactionId: number | null }) =>
+    isOpen ? <div role="dialog">detail {transactionId}</div> : null,
 }));
 
 import { AlertsPanel } from './AlertsPanel';
@@ -36,5 +42,14 @@ describe('AlertsPanel timestamp', () => {
 
     // The old relative rendering ("N minutes ago" / "just now") is gone.
     expect(screen.queryByText(/ago|just now/)).not.toBeInTheDocument();
+  });
+});
+
+describe('AlertsPanel detail', () => {
+  it('opens the transaction detail when the alert card is clicked', () => {
+    render(<AlertsPanel />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Lihat detail transaksi 4214452/ }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('detail 4214452');
   });
 });

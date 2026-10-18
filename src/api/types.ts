@@ -189,6 +189,7 @@ export interface UserRiskResponse { profiles: RiskProfile[]; }
 export interface AlertItem {
   id: number;
   event_seq: number;
+  transaction_id: number;
   severity: string;
   typology: string | null;
   created_at: string;

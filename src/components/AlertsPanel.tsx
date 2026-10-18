@@ -1,11 +1,12 @@
-import { useLayoutEffect, useRef } from 'react';
-import { Check } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Check, ChevronRight } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { cn } from './ui/utils';
 import { useAlerts, useAckAlert } from '../api/queries';
 import { formatTime } from '../lib/formatTime';
 import { formatInt } from '../lib/format';
 import { pulseOnce } from '../lib/motion';
+import { TransactionDetailsModal } from './TransactionDetailsModal';
 import type { AlertItem } from '../api/types';
 
 // Alerts are raised by the ingest pipeline for blocked transactions.
@@ -22,7 +23,11 @@ function levelMeta(severity: string) {
   }
 }
 
-function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => void }) {
+function AlertRow({ alert, onAck, onOpen }: {
+  alert: AlertItem;
+  onAck: (id: number) => void;
+  onOpen: (transactionId: number) => void;
+}) {
   const m = levelMeta(alert.severity);
   return (
     <li
@@ -37,7 +42,18 @@ function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => v
           <span className={cn('text-[13px] font-semibold', m.text)}>{m.label}</span>
           <span className="num text-xs text-muted-foreground">#{alert.id} · seq {alert.event_seq}</span>
         </div>
-        <span className="text-[13px] text-foreground">{alert.typology ?? 'Transaksi diblokir model'}</span>
+        <button
+          type="button"
+          onClick={() => onOpen(alert.transaction_id)}
+          aria-label={`Lihat detail transaksi ${alert.transaction_id}: ${alert.typology ?? 'diblokir model'}`}
+          className="-mx-1 flex min-h-8 items-center justify-between gap-2 rounded-md px-1 text-left text-[13px] text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <span className="min-w-0">
+            {alert.typology ?? 'Transaksi diblokir model'}
+            <span className="num ml-2 text-xs text-muted-foreground">TXN-{alert.transaction_id}</span>
+          </span>
+          <ChevronRight className="size-4 flex-none text-muted-foreground" aria-hidden />
+        </button>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="num text-xs text-muted-foreground">{formatTime(alert.event_time)}</span>
           {alert.acknowledged ? (
@@ -63,6 +79,7 @@ function AlertRow({ alert, onAck }: { alert: AlertItem; onAck: (id: number) => v
 export function AlertsPanel() {
   const { data, isLoading, isError } = useAlerts('all');
   const ackMutation = useAckAlert();
+  const [openTxn, setOpenTxn] = useState<number | null>(null);
 
   const alerts = data?.alerts ?? [];
   const unread = alerts.filter((a) => !a.acknowledged).length;
@@ -104,10 +121,15 @@ export function AlertsPanel() {
       ) : (
         <ul ref={listRef} className="-mr-2 flex max-h-[520px] flex-col gap-2.5 overflow-y-auto pr-2">
           {alerts.map((alert) => (
-            <AlertRow key={alert.id} alert={alert} onAck={(id) => ackMutation.mutate(id)} />
+            <AlertRow key={alert.id} alert={alert} onAck={(id) => ackMutation.mutate(id)} onOpen={setOpenTxn} />
           ))}
         </ul>
       )}
+      <TransactionDetailsModal
+        transactionId={openTxn}
+        isOpen={openTxn != null}
+        onClose={() => setOpenTxn(null)}
+      />
     </section>
   );
 }
