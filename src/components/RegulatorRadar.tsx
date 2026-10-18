@@ -20,12 +20,12 @@ const fmtPct = (r: number) =>
 
 /** Heat colour for a matrix cell relative to the matrix maximum. */
 export function heatColor(v: number, max: number): { bg: string; fg: string } {
-  if (v <= 0 || max <= 0) return { bg: '#0A1020', fg: '#5B6B85' };
+  if (v <= 0 || max <= 0) return { bg: '#F6F8FC', fg: '#94A3B8' };
   const t = v / max;
-  if (t < 0.1) return { bg: '#14213A', fg: '#D3DCEA' };
-  if (t < 0.3) return { bg: '#1B3A63', fg: '#D3DCEA' };
-  if (t < 0.6) return { bg: '#1F6FB2', fg: '#E6EDF7' };
-  return { bg: '#139EF6', fg: '#04121F' };
+  if (t < 0.1) return { bg: '#E6F3FE', fg: '#0F172A' };
+  if (t < 0.3) return { bg: '#B9DCF8', fg: '#0F172A' };
+  if (t < 0.6) return { bg: '#5DB9F7', fg: '#0F172A' };
+  return { bg: '#0B6FB8', fg: '#FFFFFF' };
 }
 
 export interface FlowMatrix {
@@ -59,8 +59,8 @@ function InstitutionCard({ inst, maxRate }: { inst: InstitutionStat; maxRate: nu
     <li className="bg-card border border-border rounded-xl px-4 py-3.5 flex flex-col gap-2 list-none">
       <div className="flex justify-between items-center gap-2">
         <span className="text-sm font-semibold truncate">{inst.bank}</span>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-[#5BE3B5] shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#2FD3A0]" aria-hidden="true" />
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-approved shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-approved" aria-hidden="true" />
           node aktif
         </span>
       </div>
@@ -68,18 +68,18 @@ function InstitutionCard({ inst, maxRate }: { inst: InstitutionStat; maxRate: nu
         {fmtInt(inst.transactions)}
       </span>
       <div
-        className="h-1.5 rounded-sm bg-[#1C2740] overflow-hidden"
+        className="h-1.5 rounded-sm bg-surface-inset overflow-hidden"
         role="meter"
         aria-label={`Rasio ditandai ${inst.bank}`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(rate * 1000) / 10}
       >
-        <div className="h-1.5 bg-[#F5B14C]" style={{ width: `${width}%` }} />
+        <div className="h-1.5 bg-flagged" style={{ width: `${width}%` }} />
       </div>
-      <div className="font-mono tabular-nums flex justify-between text-xs text-[#93A3BC]">
+      <div className="font-mono tabular-nums flex justify-between text-xs text-muted-foreground">
         <span>ditandai {fmtPct(inst.flagged_rate)}</span>
-        <span className="text-[#F2546B]">blokir {fmtInt(inst.blocked)}</span>
+        <span className="text-blocked">blokir {fmtInt(inst.blocked)}</span>
       </div>
     </li>
   );
@@ -93,9 +93,9 @@ function FlowMatrixTable({ matrix }: { matrix: FlowMatrix }) {
         <caption className="sr-only">Jumlah transaksi terflag dari bank (baris) ke bank (kolom)</caption>
         <thead>
           <tr>
-            <th scope="col" className="text-[#93A3BC] font-medium text-left px-2 py-1">dari \ ke</th>
+            <th scope="col" className="text-muted-foreground font-medium text-left px-2 py-1">dari \ ke</th>
             {matrix.banks.map((b) => (
-              <th key={b} scope="col" className="font-mono tabular-nums text-[#93A3BC] font-medium px-2 py-1" title={b}>
+              <th key={b} scope="col" className="font-mono tabular-nums text-muted-foreground font-medium px-2 py-1" title={b}>
                 {short(b)}
               </th>
             ))}
@@ -104,7 +104,7 @@ function FlowMatrixTable({ matrix }: { matrix: FlowMatrix }) {
         <tbody>
           {matrix.banks.map((from, i) => (
             <tr key={from}>
-              <th scope="row" className="font-mono tabular-nums text-[#B4C1D6] font-medium text-left px-2 py-1 whitespace-nowrap" title={from}>
+              <th scope="row" className="font-mono tabular-nums text-text-secondary font-medium text-left px-2 py-1 whitespace-nowrap" title={from}>
                 {short(from)}
               </th>
               {matrix.cells[i].map((v, j) => {
@@ -132,22 +132,22 @@ function PrivacyShield() {
   return (
     <section aria-label="Perisai privasi" className="bg-card border border-border rounded-xl px-[18px] py-4 flex flex-col gap-3 min-w-0">
       <h2 className="m-0 text-base font-semibold flex items-center gap-2">
-        <ShieldCheck className="w-4 h-4 text-[#2FD3A0]" aria-hidden="true" />
+        <ShieldCheck className="w-4 h-4 text-approved" aria-hidden="true" />
         Perisai Privasi — yang dikirim tiap node
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-[#111A2E] border border-[#23304A] rounded-[10px] p-3 flex flex-col gap-1.5">
-          <span className="text-xs text-[#F2546B] font-semibold">Tetap di institusi</span>
-          <span className="text-[13px] text-[#D3DCEA]">Nama nasabah, NIK, nomor rekening, nominal mentah</span>
+        <div className="bg-card-2 border border-border rounded-[10px] p-3 flex flex-col gap-1.5">
+          <span className="text-xs text-blocked font-semibold">Tetap di institusi</span>
+          <span className="text-[13px] text-text-secondary">Nama nasabah, NIK, nomor rekening, nominal mentah</span>
         </div>
-        <div className="bg-[#111A2E] border border-[#23304A] rounded-[10px] p-3 flex flex-col gap-1.5">
-          <span className="text-xs text-[#2FD3A0] font-semibold">Dikirim ke Hub</span>
-          <span className="text-[13px] text-[#D3DCEA]">hash rekening asal/tujuan + vektor fitur</span>
+        <div className="bg-card-2 border border-border rounded-[10px] p-3 flex flex-col gap-1.5">
+          <span className="text-xs text-approved font-semibold">Dikirim ke Hub</span>
+          <span className="text-[13px] text-text-secondary">hash rekening asal/tujuan + vektor fitur</span>
         </div>
       </div>
       <pre
         aria-label="Contoh payload yang dikirim node"
-        className="font-mono tabular-nums m-0 p-3 rounded-lg bg-[#0A1020] border border-[#1C2740] text-xs leading-relaxed text-[#B4C1D6] whitespace-pre-wrap"
+        className="font-mono tabular-nums m-0 p-3 rounded-lg bg-card-2 border border-border text-xs leading-relaxed text-text-secondary whitespace-pre-wrap"
       >{`{
   "src": "sha256:9f2c…41ab",
   "dst": "sha256:07de…c3f0",
@@ -188,7 +188,7 @@ export function RegulatorRadar() {
             Pandangan lintas institusi untuk BI / OJK — aliran dana mencurigakan antar bank
           </span>
         </div>
-        <span role="note" className="px-3 py-2 rounded-lg bg-[#33250D] text-[#F7C878] text-[13px] max-w-[520px]">
+        <span role="note" className="px-3 py-2 rounded-lg bg-flagged-bg text-flagged text-[13px] max-w-[520px]">
           {FEDERATION_NOTE}
         </span>
       </header>
@@ -198,12 +198,12 @@ export function RegulatorRadar() {
           {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-[116px] rounded-xl" />)}
         </div>
       ) : isError && !notAvailable ? (
-        <div role="alert" className="bg-card border border-border rounded-xl p-8 text-center text-sm text-[#F2546B]">
+        <div role="alert" className="bg-card border border-border rounded-xl p-8 text-center text-sm text-blocked">
           Gagal memuat data institusi. Silakan coba lagi nanti.
         </div>
       ) : notAvailable || institutions.length === 0 ? (
-        <div className="bg-card border border-dashed border-[#2B3B5C] rounded-xl p-10 text-center flex flex-col items-center gap-2">
-          <Radar className="w-8 h-8 text-[#93A3BC]" aria-hidden="true" />
+        <div className="bg-card border border-dashed border-[#C9D3E1] rounded-xl p-10 text-center flex flex-col items-center gap-2">
+          <Radar className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
           <span className="text-sm font-medium">Data radar lintas institusi belum tersedia</span>
           <span className="text-xs text-muted-foreground max-w-md">
             Agregat per institusi akan muncul di sini setelah layanan analitik institusi aktif dan data transaksi dimuat.

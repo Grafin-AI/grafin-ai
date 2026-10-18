@@ -74,8 +74,8 @@ describe('radar helpers', () => {
   });
 
   it('shades cells relative to the maximum', () => {
-    expect(heatColor(0, 10).bg).toBe('#0A1020');
-    expect(heatColor(10, 10).bg).toBe('#139EF6');
-    expect(heatColor(1, 100).bg).toBe('#14213A');
+    expect(heatColor(0, 10).bg).toBe('#F6F8FC');
+    expect(heatColor(10, 10).bg).toBe('#0B6FB8');
+    expect(heatColor(1, 100).bg).toBe('#E6F3FE');
   });
 });
