@@ -87,6 +87,85 @@ export interface TransactionExplanation {
   risk_factors: RiskFactor[];
   evidence: Record<string, number | string | boolean | null>;
   generated_at: string;
+  /** Fixed code such as GA-FANIN, GA-FANOUT, GA-CYCLE, GA-GATHER, GA-VELOCITY, GA-AMOUNT, GA-NETWORK. */
+  reason_code: string;
+  /** 'Tinggi' | 'Sedang' | 'Rendah' */
+  confidence: string;
+  references: PolicyReference[];
+  /** false = rules fallback, not stored (retry possible). */
+  persisted: boolean;
+  str_draft: StrDraft | null;
+}
+
+export interface PolicyReference {
+  id: string;
+  title: string;
+}
+
+export interface StrDraftParties {
+  pengirim: string;
+  penerima: string;
+}
+
+/** LTKM (Laporan Transaksi Keuangan Mencurigakan) draft. */
+export interface StrDraft {
+  nomor_draf: string;
+  pihak: StrDraftParties;
+  kronologi: string;
+  indikator: string[];
+  analisis: string;
+  rekomendasi: string;
+  catatan: string;
+}
+
+export type NetworkRole = 'sender' | 'receiver' | 'other';
+
+export interface NetworkNode {
+  id: string;
+  label: string;
+  bank: string;
+  role: NetworkRole;
+  flagged_count: number;
+}
+
+export interface NetworkEdge {
+  id: number;
+  source: string;
+  target: string;
+  amount: number;
+  currency: string;
+  event_time: string;
+  status: string;
+  fraud_score: number;
+  focal: boolean;
+}
+
+export interface TransactionNetwork {
+  transaction_id: number;
+  window_hours: number;
+  nodes: NetworkNode[];
+  edges: NetworkEdge[];
+  truncated: boolean;
+}
+
+export interface InstitutionStat {
+  bank: string;
+  transactions: number;
+  flagged: number;
+  blocked: number;
+  flagged_rate: number;
+}
+
+export interface InstitutionFlow {
+  from_bank: string;
+  to_bank: string;
+  flagged_count: number;
+  amount: number;
+}
+
+export interface InstitutionsResponse {
+  institutions: InstitutionStat[];
+  flows: InstitutionFlow[];
 }
 
 export interface RiskProfile {
