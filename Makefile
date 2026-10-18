@@ -43,10 +43,11 @@ dataset-sort:
 
 # --- Demo replay -------------------------------------------------------------
 # HI-Small-ID spans 2025-09-04..09-21 (5,078,345 rows; sim ordinal = 1-based CSV row).
-# The model's split: validation days 2025-09-09..09-11 (ordinals 2,766,833..4,214,445),
-# test days from 2025-09-12 (ordinal 4,214,446). Precomputed scores cover val + test.
-DEMO_HISTORY_SKIP  ?= 2766832
-DEMO_HISTORY_LIMIT ?= 1447613
+# The model's split (day index from 2025-09-04): validation days 2025-09-10..09-11
+# (ordinals 3,248,922..4,214,445), test days from 2025-09-12 (ordinal 4,214,446).
+# Precomputed scores cover exactly val + test, so history starts at the first val row.
+DEMO_HISTORY_SKIP  ?= 3248921
+DEMO_HISTORY_LIMIT ?= 965524
 DEMO_TEST_SKIP     ?= 4214445
 DEMO_TEST_SPEED    ?= 60
 
