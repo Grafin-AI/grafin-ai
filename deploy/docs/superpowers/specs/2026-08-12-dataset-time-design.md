@@ -8,7 +8,7 @@
 
 ## Problem
 
-The dashboard shows today's date (`2026-08-12T02:00:00`) on every chart and stat card. That is the Phase 4 streaming model ② ("now-stamped, real cadence") working as designed: the sim reads each row's CSV timestamp, uses it **only to pace** sending, then stamps the event with the wall clock ([`reader.py:10`](../../../garda-ai-sim/garda_ai_sim/reader.py), [`producer.py:73`](../../../garda-ai-sim/garda_ai_sim/producer.py)). Separately, every read view buckets and filters on `transaction_events.surfaced_at` (ingestion time, also wall clock) — e.g. `date_trunc(trunc, surfaced_at)` in `repositories/metrics.py:39`, which is literally the chart's X axis.
+The dashboard shows today's date (`2026-08-12T02:00:00`) on every chart and stat card. That is the Phase 4 streaming model ② ("now-stamped, real cadence") working as designed: the sim reads each row's CSV timestamp, uses it **only to pace** sending, then stamps the event with the wall clock ([`reader.py:10`](../../../grafin-ai-sim/grafin_ai_sim/reader.py), [`producer.py:73`](../../../grafin-ai-sim/grafin_ai_sim/producer.py)). Separately, every read view buckets and filters on `transaction_events.surfaced_at` (ingestion time, also wall clock) — e.g. `date_trunc(trunc, surfaced_at)` in `repositories/metrics.py:39`, which is literally the chart's X axis.
 
 The user wants the platform to present the dataset's real timeline. The HI-Small dataset spans **2025/09/01 00:20 → 2025/09/10 23:37** (10 days, IDR/Indonesian banks).
 

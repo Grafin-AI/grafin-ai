@@ -6,9 +6,9 @@ Secrets are never committed. Create `api-env.yaml` and `scoring-env.yaml` locall
 ```bash
 gcloud sql instances create grafin-pg --database-version=POSTGRES_16 --region=asia-southeast2 \
   --edition=ENTERPRISE --tier=db-custom-2-8192 --storage-size=20 --storage-auto-increase
-gcloud sql databases create garda --instance=grafin-pg
-gcloud sql users create garda --instance=grafin-pg --password="$DB_PASSWORD"
-gcloud sql import sql grafin-pg gs://<bucket>/garda.sql.gz --database=garda --user=garda
+gcloud sql databases create <db> --instance=grafin-pg
+gcloud sql users create <db-user> --instance=grafin-pg --password="$DB_PASSWORD"
+gcloud sql import sql grafin-pg gs://<bucket>/<dump>.sql.gz --database=<db> --user=<db-user>
 gcloud firestore databases create --location=asia-southeast2 --type=firestore-native
 gcloud artifacts repositories create grafin --repository-format=docker --location=asia-southeast2
 ```
@@ -30,7 +30,7 @@ gcloud run deploy grafin-api --region asia-southeast2 \
   --container backend --image $REG/backend:v1 --port 8000 --env-vars-file api-env.yaml \
       --memory 2Gi --cpu 2 --depends-on scoring,redis \
   --container scoring --image $REG/scoring:v1 --env-vars-file scoring-env.yaml --command sh \
-      --args="-c,uv run --no-sync uvicorn garda_ai_scoring.api.app:app --host 0.0.0.0 --port 8001" \
+      --args="-c,uv run --no-sync uvicorn grafin_ai_scoring.api.app:app --host 0.0.0.0 --port 8001" \
       --memory 2Gi --cpu 1 --startup-probe tcpSocket.port=8001,periodSeconds=5,failureThreshold=60 \
   --container redis --image mirror.gcr.io/library/redis:7-alpine --memory 512Mi --cpu 0.5 \
       --startup-probe tcpSocket.port=6379,periodSeconds=2,failureThreshold=30
@@ -40,13 +40,13 @@ gcloud run services add-iam-policy-binding grafin-api --region asia-southeast2 \
 The runtime service account needs `roles/cloudsql.client`, `roles/datastore.user`,
 `roles/logging.logWriter`, `roles/artifactregistry.reader`.
 
-`api-env.yaml` keys: `GARDA_DATABASE_URL` (`postgresql+asyncpg://garda:<pw>@/garda?host=/cloudsql/<connection>`),
-`GARDA_REDIS_URL=redis://localhost:6379/0`, `GARDA_SCORING_URL=http://localhost:8001`,
-`GARDA_JWT_SECRET`, `GARDA_SCORING_TOKEN`, `GARDA_INGEST_TOKEN`, `GARDA_ENV=production`,
-`GARDA_LLM_PROVIDER=gemini`, `GARDA_LLM_MODEL=gemini-3.8-flash`, `GARDA_LLM_API_KEY`,
-`GARDA_LLM_TIMEOUT_S=60`, `GARDA_MODEL_NAME`, `GARDA_EXPLANATION_STORE=firestore`,
-`GARDA_FIRESTORE_PROJECT=garda-ai-dev-01`, `GARDA_CORS_ORIGINS=https://<site>.web.app,https://<site>.firebaseapp.com`.
-`scoring-env.yaml`: `GARDA_SCORING_TOKEN`, `GARDA_SCORER=precomputed`, `GARDA_SCORES_PATH=/scores/scores.csv`.
+`api-env.yaml` keys: `GRAFIN_DATABASE_URL` (`postgresql+asyncpg://<db-user>:<pw>@/<db>?host=/cloudsql/<connection>`),
+`GRAFIN_REDIS_URL=redis://localhost:6379/0`, `GRAFIN_SCORING_URL=http://localhost:8001`,
+`GRAFIN_JWT_SECRET`, `GRAFIN_SCORING_TOKEN`, `GRAFIN_INGEST_TOKEN`, `GRAFIN_ENV=production`,
+`GRAFIN_LLM_PROVIDER=gemini`, `GRAFIN_LLM_MODEL=gemini-3.8-flash`, `GRAFIN_LLM_API_KEY`,
+`GRAFIN_LLM_TIMEOUT_S=60`, `GRAFIN_MODEL_NAME`, `GRAFIN_EXPLANATION_STORE=firestore`,
+`GRAFIN_FIRESTORE_PROJECT=garda-ai-dev-01`, `GRAFIN_CORS_ORIGINS=https://<site>.web.app,https://<site>.firebaseapp.com`.
+`scoring-env.yaml`: `GRAFIN_SCORING_TOKEN`, `GRAFIN_SCORER=precomputed`, `GRAFIN_SCORES_PATH=/scores/scores.csv`.
 
 ## 4. Dashboard on Firebase Hosting
 ```bash

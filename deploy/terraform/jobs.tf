@@ -1,5 +1,5 @@
 resource "google_cloud_run_v2_job" "migrate" {
-  name     = "garda-migrate"
+  name     = "grafin-migrate"
   location = var.region
   template {
     template {
@@ -12,10 +12,10 @@ resource "google_cloud_run_v2_job" "migrate" {
         image   = var.backend_image
         command = ["uv", "run", "alembic", "upgrade", "head"]
         env {
-          name = "GARDA_DATABASE_URL"
+          name = "GRAFIN_DATABASE_URL"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.s["garda-database-url"].secret_id
+              secret  = google_secret_manager_secret.s["grafin-database-url"].secret_id
               version = "latest"
             }
           }
@@ -31,7 +31,7 @@ resource "google_cloud_run_v2_job" "migrate" {
 }
 
 resource "google_cloud_run_v2_job" "ingest" {
-  name     = "garda-ingest"
+  name     = "grafin-ingest"
   location = var.region
   template {
     template {
@@ -43,22 +43,22 @@ resource "google_cloud_run_v2_job" "ingest" {
       containers {
         image = var.ingest_image
         env {
-          name = "GARDA_DATABASE_URL"
+          name = "GRAFIN_DATABASE_URL"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.s["garda-database-url"].secret_id
+              secret  = google_secret_manager_secret.s["grafin-database-url"].secret_id
               version = "latest"
             }
           }
         }
         # The reference CSV is baked into the ingest image (simplest for the demo).
-        # GARDA_DATA_DIR defaults to the image's bundled data path.
+        # GRAFIN_DATA_DIR defaults to the image's bundled data path.
       }
     }
   }
 
   # terraform provisions this job; image rollout is owned by the operator
-  # (`make deploy` in garda-ai-ingest -> gcloud run jobs deploy).
+  # (`make deploy` in grafin-ai-ingest -> gcloud run jobs deploy).
   lifecycle {
     ignore_changes = [template[0].template[0].containers[0].image]
   }

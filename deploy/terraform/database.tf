@@ -1,5 +1,5 @@
 resource "google_sql_database_instance" "pg" {
-  name             = "garda-pg"
+  name             = "grafin-pg"
   database_version = "POSTGRES_16"
   region           = var.region
   depends_on       = [google_service_networking_connection.psa]
@@ -15,12 +15,12 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "db" {
-  name     = "garda"
+  name     = "grafin"
   instance = google_sql_database_instance.pg.name
 }
 
 resource "google_sql_user" "user" {
-  name     = "garda"
+  name     = "grafin"
   instance = google_sql_database_instance.pg.name
   password = var.db_password
 }

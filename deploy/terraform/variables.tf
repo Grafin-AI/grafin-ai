@@ -9,7 +9,7 @@ variable "region" {
 
 variable "domain" {
   type    = string
-  default = "" # e.g. garda.example.com; "" disables domain mappings
+  default = "" # e.g. grafin.example.com; "" disables domain mappings
 }
 
 variable "deploy_observability" {

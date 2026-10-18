@@ -15,13 +15,13 @@ locals {
 
 resource "google_service_account" "observability" {
   count       = local.observability_enabled ? 1 : 0
-  account_id  = "garda-observability"
+  account_id  = "grafin-observability"
   description = "Runs the self-hosted Prometheus + Grafana VM"
 }
 
 resource "google_compute_instance" "observability" {
   count        = local.observability_enabled ? 1 : 0
-  name         = "garda-observability"
+  name         = "grafin-observability"
   machine_type = "e2-small"
   zone         = "${var.region}-a"
 

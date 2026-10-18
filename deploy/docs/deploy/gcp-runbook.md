@@ -1,14 +1,14 @@
 # GCP Cloud Run Deployment Runbook
 
 **Date:** 2026-08-08
-**Scope:** Operator checklist for deploying Garda AI to GCP Cloud Run.
+**Scope:** Operator checklist for deploying Grafin AI to GCP Cloud Run.
 
 ## Prerequisites
 
 - GCP project with billing enabled
 - `gcloud` CLI installed and configured
 - Docker installed (for local testing)
-- Access to GitHub and the 4 service repos (`garda-ai-backend`, `garda-ai-dashboard-web`, `garda-ai-scoring`, `garda-ai-ingest`)
+- Access to GitHub and the 4 service repos (`grafin-ai-backend`, `grafin-ai-dashboard-web`, `grafin-ai-scoring`, `grafin-ai-ingest`)
 
 ---
 
@@ -21,13 +21,13 @@
 1. **Foundation:** `terraform apply -target=...` (VPC, Cloud SQL, Redis, Artifact Registry, secrets) — Phase 2.4.1.
 2. **Seed first images:** in each service repo, `make push` (build + push only — does NOT create the service) — Phase 2.4.2.
 3. **Create services/jobs:** full `terraform apply` — images now exist, so services get created with their VPC / secret / ingress wiring — Phase 2.4.3.
-4. **Init data:** `gcloud run jobs execute garda-migrate --region $REGION --wait`, then in `garda-ai-ingest` run `make execute` (seeds reference data) — Phase 3.
+4. **Init data:** `gcloud run jobs execute grafin-migrate --region $REGION --wait`, then in `grafin-ai-ingest` run `make execute` (seeds reference data) — Phase 3.
 
 **Routine redeploy (the common case):**
 
 - In the changed service repo: `make deploy` (build → push → `gcloud run deploy` a new revision). No terraform, no other services touched.
 - Or: GitHub Actions tab → **deploy** → **Run workflow** (`workflow_dispatch`).
-- Breaking DB migration: run the `garda-migrate` job first. Because the migrate job stays terraform-owned, refresh it with `terraform apply` (re-resolves the backend `:latest` digest) before `gcloud run jobs execute garda-migrate --wait`.
+- Breaking DB migration: run the `grafin-migrate` job first. Because the migrate job stays terraform-owned, refresh it with `terraform apply` (re-resolves the backend `:latest` digest) before `gcloud run jobs execute grafin-migrate --wait`.
 
 **Division of labor:** `terraform` owns resource creation and wiring; `make deploy` owns image rollout. The terraform `lifecycle { ignore_changes = [...image] }` on the three services and the ingest job keeps `terraform apply` from reverting an operator's rollout.
 
@@ -38,12 +38,12 @@
 ### Step 1.1: Create GCP Project & Enable Billing
 
 ```bash
-gcloud projects create garda-ai-platform --name="Garda AI Platform"
-gcloud config set project garda-ai-platform
+gcloud projects create grafin-ai-platform --name="Grafin AI Platform"
+gcloud config set project grafin-ai-platform
 
 # Link billing account
 gcloud billing accounts list
-gcloud billing projects link garda-ai-platform --billing-account=<YOUR_BILLING_ACCOUNT_ID>
+gcloud billing projects link grafin-ai-platform --billing-account=<YOUR_BILLING_ACCOUNT_ID>
 ```
 
 ### Step 1.2: Enable Required APIs
@@ -70,13 +70,13 @@ gcloud iam service-accounts create terraform-sa \
   --display-name="Terraform Deployment Account"
 
 # Grant required roles
-gcloud projects add-iam-policy-binding garda-ai-platform \
-  --member=serviceAccount:terraform-sa@garda-ai-platform.iam.gserviceaccount.com \
+gcloud projects add-iam-policy-binding grafin-ai-platform \
+  --member=serviceAccount:terraform-sa@grafin-ai-platform.iam.gserviceaccount.com \
   --role=roles/editor   # For demo; use least-privilege in production
 
 # Create and download key (only if not using Workload Identity)
 # gcloud iam service-accounts keys create terraform-key.json \
-#   --iam-account=terraform-sa@garda-ai-platform.iam.gserviceaccount.com
+#   --iam-account=terraform-sa@grafin-ai-platform.iam.gserviceaccount.com
 ```
 
 ---
@@ -85,15 +85,15 @@ gcloud projects add-iam-policy-binding garda-ai-platform \
 
 ### Step 2.1: Prepare Terraform Variables and Environment
 
-Navigate to `garda-ai-deploy/terraform/`:
+Navigate to `grafin-ai-deploy/terraform/`:
 
 ```bash
-cd garda-ai-deploy/terraform
+cd grafin-ai-deploy/terraform
 
 # Set region and project (MUST match across all commands below)
 export REGION="asia-southeast1"
 export PROJECT="your-gcp-project"
-export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/garda"
+export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/grafin"
 
 # Copy the example tfvars
 cp terraform.tfvars.example terraform.tfvars
@@ -103,10 +103,10 @@ cat > terraform.tfvars << 'EOF'
 project_id = "your-gcp-project"
 region     = "asia-southeast1"
 domain     = ""
-backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/backend:latest"
-frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/frontend:latest"
-scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/scoring:latest"
-ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/ingest:latest"
+backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/backend:latest"
+frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/frontend:latest"
+scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/scoring:latest"
+ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/ingest:latest"
 EOF
 
 # Secret values are supplied via environment variables (NOT committed to tfvars):
@@ -117,10 +117,10 @@ export TF_VAR_db_password="<postgres-password>"
 ```
 
 **Important:** The four secrets are created by Terraform (not out-of-band). They are:
-- `garda-jwt-secret` (JWT signing key)
-- `garda-ingest-token` (bearer token for `/api/v1/ingest`)
-- `garda-scoring-token` (bearer token for backend → scoring auth)
-- Database password is used to create the Cloud SQL user; the actual DSN is stored as `garda-database-url` secret
+- `grafin-jwt-secret` (JWT signing key)
+- `grafin-ingest-token` (bearer token for `/api/v1/ingest`)
+- `grafin-scoring-token` (bearer token for backend → scoring auth)
+- Database password is used to create the Cloud SQL user; the actual DSN is stored as `grafin-database-url` secret
 
 ### Step 2.2: Set Up Remote State Backend (Critical!)
 
@@ -128,16 +128,16 @@ Terraform state contains secrets and must be stored securely:
 
 ```bash
 # Create a GCS bucket for remote state
-gsutil mb -p ${PROJECT} -l ${REGION} gs://garda-ai-tf-state
+gsutil mb -p ${PROJECT} -l ${REGION} gs://grafin-ai-tf-state
 
 # Enable versioning for disaster recovery
-gsutil versioning set on gs://garda-ai-tf-state
+gsutil versioning set on gs://grafin-ai-tf-state
 
 # Create backend config
 cat > backend.tf << 'EOF'
 terraform {
   backend "gcs" {
-    bucket = "garda-ai-tf-state"
+    bucket = "grafin-ai-tf-state"
     prefix = "terraform/state"
   }
 }
@@ -194,7 +194,7 @@ Configure Docker for Artifact Registry and build images in each service repo:
 gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
 # For each service repo (backend, frontend, scoring, ingest):
-cd ../garda-ai-backend
+cd ../grafin-ai-backend
 
 # Build and tag image
 docker build -t ${REGISTRY}/backend:latest .
@@ -203,15 +203,15 @@ docker build -t ${REGISTRY}/backend:latest .
 docker push ${REGISTRY}/backend:latest
 
 # Repeat for frontend, scoring, ingest (or use `make push` in each repo)
-cd ../garda-ai-dashboard-web
+cd ../grafin-ai-dashboard-web
 docker build -t ${REGISTRY}/frontend:latest .
 docker push ${REGISTRY}/frontend:latest
 
-cd ../garda-ai-scoring
+cd ../grafin-ai-scoring
 docker build -t ${REGISTRY}/scoring:latest .
 docker push ${REGISTRY}/scoring:latest
 
-cd ../garda-ai-ingest
+cd ../grafin-ai-ingest
 docker build -t ${REGISTRY}/ingest:latest .
 docker push ${REGISTRY}/ingest:latest
 ```
@@ -220,7 +220,7 @@ docker push ${REGISTRY}/ingest:latest
 
 1. **Local (operator clones the repo):**
    ```bash
-   cd garda-ai-<service>
+   cd grafin-ai-<service>
    cp deploy.env.example deploy.env   # edit GCP_PROJECT / GCP_REGION (or export them)
    make deploy                        # build -> push -> gcloud run deploy
    ```
@@ -235,7 +235,7 @@ at that point — terraform creates them in Phase 2.4.3. Use `make deploy` for r
 #### Phase 2.4.3: Deploy Services and Jobs
 
 ```bash
-cd garda-ai-deploy/terraform
+cd grafin-ai-deploy/terraform
 
 # Now apply the FULL Terraform (services, jobs, domain mappings, etc.)
 # All images exist, so Cloud Run validation will pass.
@@ -253,12 +253,12 @@ Before services take traffic, run the initialization jobs in order:
 export REGION="asia-southeast1"
 
 # 1. Run database migrations
-gcloud run jobs execute garda-migrate \
+gcloud run jobs execute grafin-migrate \
   --region=${REGION} \
   --wait
 
 # 2. Load reference dataset (ingest seed)
-gcloud run jobs execute garda-ingest \
+gcloud run jobs execute grafin-ingest \
   --region=${REGION} \
   --wait
 ```
@@ -318,7 +318,7 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ### Step 4.3: Set Repository Secrets and Variables
 
-For each service repo (`garda-ai-backend`, `garda-ai-dashboard-web`, `garda-ai-scoring`, `garda-ai-ingest`):
+For each service repo (`grafin-ai-backend`, `grafin-ai-dashboard-web`, `grafin-ai-scoring`, `grafin-ai-ingest`):
 
 **Repository Variables** (Settings → Secrets and variables → Variables):
 - `GCP_PROJECT`: `your-gcp-project`
@@ -341,14 +341,14 @@ export REGION="asia-southeast1"
 
 # Map frontend
 gcloud run domain-mappings create \
-  --service=garda-frontend \
-  --domain=app.garda.example.com \
+  --service=grafin-frontend \
+  --domain=app.grafin.example.com \
   --region=${REGION}
 
 # Map backend
 gcloud run domain-mappings create \
-  --service=garda-backend \
-  --domain=api.garda.example.com \
+  --service=grafin-backend \
+  --domain=api.grafin.example.com \
   --region=${REGION}
 ```
 
@@ -362,19 +362,19 @@ terraform output domain_dns_backend
 ```
 
 Add CNAME or A records to your DNS provider:
-- `app.garda.example.com` → Cloud Run frontend IP
-- `api.garda.example.com` → Cloud Run backend IP
+- `app.grafin.example.com` → Cloud Run frontend IP
+- `api.grafin.example.com` → Cloud Run backend IP
 
 Wait for DNS to propagate (typically 5-30 minutes):
 
 ```bash
 # Test DNS resolution
-nslookup app.garda.example.com
-nslookup api.garda.example.com
+nslookup app.grafin.example.com
+nslookup api.grafin.example.com
 
 # Test HTTPS (Google manages certs via Cloud Run)
-curl -I https://app.garda.example.com
-curl -I https://api.garda.example.com/healthz
+curl -I https://app.grafin.example.com
+curl -I https://api.grafin.example.com/healthz
 ```
 
 ---
@@ -388,22 +388,22 @@ export REGION="asia-southeast1"
 
 gcloud run services list --region=${REGION}
 
-gcloud run services describe garda-backend --region=${REGION}
-gcloud run services describe garda-frontend --region=${REGION}
-gcloud run services describe garda-scoring --region=${REGION}
+gcloud run services describe grafin-backend --region=${REGION}
+gcloud run services describe grafin-frontend --region=${REGION}
+gcloud run services describe grafin-scoring --region=${REGION}
 ```
 
 ### Step 6.2: Test Live Endpoints
 
 ```bash
 # Backend health check
-curl https://api.garda.example.com/healthz
+curl https://api.grafin.example.com/healthz
 
 # Frontend SPA
-curl -I https://app.garda.example.com
+curl -I https://app.grafin.example.com
 
 # Backend ingest endpoint (requires valid token)
-curl -X POST https://api.garda.example.com/api/v1/ingest \
+curl -X POST https://api.grafin.example.com/api/v1/ingest \
   -H "Authorization: Bearer <INGEST_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"transactions": []}'
@@ -415,13 +415,13 @@ curl -X POST https://api.garda.example.com/api/v1/ingest \
 export REGION="asia-southeast1"
 
 # Backend logs
-gcloud run services logs read garda-backend --region=${REGION} --limit=50
+gcloud run services logs read grafin-backend --region=${REGION} --limit=50
 
 # Scoring service logs
-gcloud run services logs read garda-scoring --region=${REGION} --limit=50
+gcloud run services logs read grafin-scoring --region=${REGION} --limit=50
 
 # Ingest job execution logs
-gcloud run jobs describe garda-ingest --region=${REGION}
+gcloud run jobs describe grafin-ingest --region=${REGION}
 ```
 
 ---
@@ -431,17 +431,17 @@ gcloud run jobs describe garda-ingest --region=${REGION}
 Test the deployed backend with the local simulator:
 
 ```bash
-cd ../garda-ai-sim
+cd ../grafin-ai-sim
 
 # Set the deployed ingest URL and token
-export GARDA_INGEST_URL=https://api.garda.example.com/api/v1/ingest
-export GARDA_INGEST_TOKEN=<your-ingest-token>
+export GRAFIN_INGEST_URL=https://api.grafin.example.com/api/v1/ingest
+export GRAFIN_INGEST_TOKEN=<your-ingest-token>
 
 # Run the simulator against the live backend
-uv run garda-sim
+uv run grafin-sim
 ```
 
-Monitor the live feed in the dashboard at `https://app.garda.example.com`.
+Monitor the live feed in the dashboard at `https://app.grafin.example.com`.
 
 ---
 
@@ -514,10 +514,10 @@ To rollback a deployment:
 export REGION="asia-southeast1"
 
 # List Cloud Run service revisions
-gcloud run revisions list --service=garda-backend --region=${REGION}
+gcloud run revisions list --service=grafin-backend --region=${REGION}
 
 # Direct traffic to a previous revision
-gcloud run services update-traffic garda-backend \
+gcloud run services update-traffic grafin-backend \
   --to-revisions=<PREVIOUS_REVISION_ID>=100 \
   --region=${REGION}
 ```
@@ -528,14 +528,14 @@ gcloud run services update-traffic garda-backend \
 
 ### State Backup
 
-Terraform state is in GCS (`gs://garda-ai-tf-state`). GCS versioning is enabled for recovery.
+Terraform state is in GCS (`gs://grafin-ai-tf-state`). GCS versioning is enabled for recovery.
 
 ### Database Backup
 
 Cloud SQL automated backups are configured. To restore:
 
 ```bash
-gcloud sql backups describe <BACKUP_ID> --instance=garda-postgres
+gcloud sql backups describe <BACKUP_ID> --instance=grafin-postgres
 
 # Create new instance from backup (manual process)
 ```

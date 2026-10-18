@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Prefer the `cloud-infrastructure` / `terraform-specialist` implementer. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Author Terraform under `garda-ai-deploy/terraform/` that provisions the platform on **GCP Cloud Run**: 3 services (backend public, scoring internal, frontend public), 2 jobs (migrate, ingest), Cloud SQL (Postgres), Memorystore (Redis), a Serverless VPC Access connector, Secret Manager, Artifact Registry, and custom-domain mappings — with `deploy_observability` switchable.
+**Goal:** Author Terraform under `grafin-ai-deploy/terraform/` that provisions the platform on **GCP Cloud Run**: 3 services (backend public, scoring internal, frontend public), 2 jobs (migrate, ingest), Cloud SQL (Postgres), Memorystore (Redis), a Serverless VPC Access connector, Secret Manager, Artifact Registry, and custom-domain mappings — with `deploy_observability` switchable.
 
 **Architecture:** Cloud Run services reach the private Cloud SQL + Memorystore via a VPC connector. Secrets live in Secret Manager and are injected as env. Backend is public (`min_instances=1`, WS-friendly timeout); scoring is `internal` ingress (backend→scoring in-network, scoring-token enforced); frontend is public nginx. The `migrate` + `ingest` jobs run at deploy-init.
 
@@ -14,7 +14,7 @@
 
 ---
 
-## File structure (all under `garda-ai-deploy/terraform/`)
+## File structure (all under `grafin-ai-deploy/terraform/`)
 
 ```
 versions.tf      # terraform + google/google-beta provider pins
@@ -68,7 +68,7 @@ provider "google-beta" {
 ```hcl
 variable "project_id" { type = string }
 variable "region"     { type = string, default = "asia-southeast1" }
-variable "domain"     { type = string, default = "" } # e.g. garda.example.com; "" disables domain mappings
+variable "domain"     { type = string, default = "" } # e.g. grafin.example.com; "" disables domain mappings
 
 variable "deploy_observability" { type = bool, default = false }
 
@@ -115,7 +115,7 @@ resource "google_project_service" "enabled" {
 
 - [ ] **Step 4: Init + validate**
 
-Run: `cd garda-ai-deploy/terraform && rm -f main.tf README.md && terraform fmt && terraform init -backend=false && terraform validate`
+Run: `cd grafin-ai-deploy/terraform && rm -f main.tf README.md && terraform fmt && terraform init -backend=false && terraform validate`
 Expected: `Success! The configuration is valid.` (validate does not contact GCP.)
 
 - [ ] **Step 5: Commit**
@@ -134,20 +134,20 @@ git add -A && git commit -m "feat(iac): GCP providers, variables, API enablement
 
 ```hcl
 resource "google_compute_network" "vpc" {
-  name                    = "garda-vpc"
+  name                    = "grafin-vpc"
   auto_create_subnetworks = false
   depends_on              = [google_project_service.enabled]
 }
 
 resource "google_compute_subnetwork" "subnet" {
-  name          = "garda-subnet"
+  name          = "grafin-subnet"
   ip_cidr_range = "10.10.0.0/24"
   region        = var.region
   network       = google_compute_network.vpc.id
 }
 
 resource "google_vpc_access_connector" "connector" {
-  name          = "garda-vpc-conn"
+  name          = "grafin-vpc-conn"
   region        = var.region
   network       = google_compute_network.vpc.name
   ip_cidr_range = "10.8.0.0/28"
@@ -156,7 +156,7 @@ resource "google_vpc_access_connector" "connector" {
 
 # Private Services Access range for Cloud SQL private IP
 resource "google_compute_global_address" "psa_range" {
-  name          = "garda-psa"
+  name          = "grafin-psa"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16
@@ -175,7 +175,7 @@ resource "google_service_networking_connection" "psa" {
 ```hcl
 resource "google_artifact_registry_repository" "docker" {
   location      = var.region
-  repository_id = "garda"
+  repository_id = "grafin"
   format        = "DOCKER"
   depends_on    = [google_project_service.enabled]
 }
@@ -186,10 +186,10 @@ resource "google_artifact_registry_repository" "docker" {
 ```hcl
 locals {
   secrets = {
-    "garda-jwt-secret"    = var.jwt_secret
-    "garda-ingest-token"  = var.ingest_token
-    "garda-scoring-token" = var.scoring_token
-    "garda-db-password"   = var.db_password
+    "grafin-jwt-secret"    = var.jwt_secret
+    "grafin-ingest-token"  = var.ingest_token
+    "grafin-scoring-token" = var.scoring_token
+    "grafin-db-password"   = var.db_password
   }
 }
 
@@ -210,10 +210,10 @@ resource "google_secret_manager_secret_version" "v" {
 - [ ] **Step 4: `iam.tf` — one service account per workload + least-privilege roles**
 
 ```hcl
-resource "google_service_account" "backend" { account_id = "garda-backend" }
-resource "google_service_account" "scoring" { account_id = "garda-scoring" }
-resource "google_service_account" "frontend" { account_id = "garda-frontend" }
-resource "google_service_account" "jobs" { account_id = "garda-jobs" }
+resource "google_service_account" "backend" { account_id = "grafin-backend" }
+resource "google_service_account" "scoring" { account_id = "grafin-scoring" }
+resource "google_service_account" "frontend" { account_id = "grafin-frontend" }
+resource "google_service_account" "jobs" { account_id = "grafin-jobs" }
 
 # Backend + jobs need Cloud SQL client + secret access
 resource "google_project_iam_member" "backend_sql" {
@@ -263,7 +263,7 @@ git add -A && git commit -m "feat(iac): VPC + connector + PSA, Artifact Registry
 
 ```hcl
 resource "google_sql_database_instance" "pg" {
-  name             = "garda-pg"
+  name             = "grafin-pg"
   database_version = "POSTGRES_16"
   region           = var.region
   depends_on       = [google_service_networking_connection.psa]
@@ -279,12 +279,12 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "db" {
-  name     = "garda"
+  name     = "grafin"
   instance = google_sql_database_instance.pg.name
 }
 
 resource "google_sql_user" "user" {
-  name     = "garda"
+  name     = "grafin"
   instance = google_sql_database_instance.pg.name
   password = var.db_password
 }
@@ -294,7 +294,7 @@ resource "google_sql_user" "user" {
 
 ```hcl
 resource "google_redis_instance" "redis" {
-  name               = "garda-redis"
+  name               = "grafin-redis"
   tier               = var.redis_tier
   memory_size_gb     = var.redis_size_gb
   region             = var.region
@@ -321,7 +321,7 @@ git add -A && git commit -m "feat(iac): Cloud SQL Postgres + Memorystore Redis (
 
 ```hcl
 locals {
-  db_url = "postgresql+asyncpg://garda:${var.db_password}@${google_sql_database_instance.pg.private_ip_address}:5432/garda"
+  db_url = "postgresql+asyncpg://grafin:${var.db_password}@${google_sql_database_instance.pg.private_ip_address}:5432/grafin"
   redis_url = "redis://${google_redis_instance.redis.host}:${google_redis_instance.redis.port}/0"
 }
 ```
@@ -331,7 +331,7 @@ locals {
 
 ```hcl
 resource "google_cloud_run_v2_service" "scoring" {
-  name     = "garda-scoring"
+  name     = "grafin-scoring"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
@@ -345,15 +345,15 @@ resource "google_cloud_run_v2_service" "scoring" {
       image = var.scoring_image
       ports { container_port = 8000 }
       env {
-        name = "GARDA_SCORING_TOKEN"
-        value_source { secret_key_ref { secret = google_secret_manager_secret.s["garda-scoring-token"].secret_id, version = "latest" } }
+        name = "GRAFIN_SCORING_TOKEN"
+        value_source { secret_key_ref { secret = google_secret_manager_secret.s["grafin-scoring-token"].secret_id, version = "latest" } }
       }
     }
   }
 }
 
 resource "google_cloud_run_v2_service" "backend" {
-  name     = "garda-backend"
+  name     = "grafin-backend"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -368,28 +368,28 @@ resource "google_cloud_run_v2_service" "backend" {
       image = var.backend_image
       ports { container_port = 8000 }
       env {
-        name  = "GARDA_DATABASE_URL"
+        name  = "GRAFIN_DATABASE_URL"
         value = local.db_url
       }
       env {
-        name  = "GARDA_REDIS_URL"
+        name  = "GRAFIN_REDIS_URL"
         value = local.redis_url
       }
       env {
-        name  = "GARDA_SCORING_URL"
+        name  = "GRAFIN_SCORING_URL"
         value = google_cloud_run_v2_service.scoring.uri
       }
       env {
-        name = "GARDA_JWT_SECRET"
-        value_source { secret_key_ref { secret = google_secret_manager_secret.s["garda-jwt-secret"].secret_id, version = "latest" } }
+        name = "GRAFIN_JWT_SECRET"
+        value_source { secret_key_ref { secret = google_secret_manager_secret.s["grafin-jwt-secret"].secret_id, version = "latest" } }
       }
       env {
-        name = "GARDA_INGEST_TOKEN"
-        value_source { secret_key_ref { secret = google_secret_manager_secret.s["garda-ingest-token"].secret_id, version = "latest" } }
+        name = "GRAFIN_INGEST_TOKEN"
+        value_source { secret_key_ref { secret = google_secret_manager_secret.s["grafin-ingest-token"].secret_id, version = "latest" } }
       }
       env {
-        name = "GARDA_SCORING_TOKEN"
-        value_source { secret_key_ref { secret = google_secret_manager_secret.s["garda-scoring-token"].secret_id, version = "latest" } }
+        name = "GRAFIN_SCORING_TOKEN"
+        value_source { secret_key_ref { secret = google_secret_manager_secret.s["grafin-scoring-token"].secret_id, version = "latest" } }
       }
     }
     # WebSocket relay: allow long-lived requests
@@ -406,7 +406,7 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 }
 
 resource "google_cloud_run_v2_service" "frontend" {
-  name     = "garda-frontend"
+  name     = "grafin-frontend"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -435,7 +435,7 @@ resource "google_cloud_run_v2_service_iam_member" "frontend_public" {
 
 ```hcl
 resource "google_cloud_run_v2_job" "migrate" {
-  name     = "garda-migrate"
+  name     = "grafin-migrate"
   location = var.region
   template {
     template {
@@ -448,7 +448,7 @@ resource "google_cloud_run_v2_job" "migrate" {
         image   = var.backend_image
         command = ["uv", "run", "alembic", "upgrade", "head"]
         env {
-          name  = "GARDA_DATABASE_URL"
+          name  = "GRAFIN_DATABASE_URL"
           value = local.db_url
         }
       }
@@ -457,7 +457,7 @@ resource "google_cloud_run_v2_job" "migrate" {
 }
 
 resource "google_cloud_run_v2_job" "ingest" {
-  name     = "garda-ingest"
+  name     = "grafin-ingest"
   location = var.region
   template {
     template {
@@ -469,11 +469,11 @@ resource "google_cloud_run_v2_job" "ingest" {
       containers {
         image = var.ingest_image
         env {
-          name  = "GARDA_DATABASE_URL"
+          name  = "GRAFIN_DATABASE_URL"
           value = local.db_url
         }
         # The reference CSV is baked into the ingest image (simplest for the demo).
-        # GARDA_DATA_DIR defaults to the image's bundled data path.
+        # GRAFIN_DATA_DIR defaults to the image's bundled data path.
       }
     }
   }
@@ -550,14 +550,14 @@ output "domain_dns_api"  { value = try(google_cloud_run_domain_mapping.api[0].st
 ```hcl
 project_id = "your-gcp-project"
 region     = "asia-southeast1"
-domain     = "" # e.g. "garda.example.com" to enable app./api. mappings
+domain     = "" # e.g. "grafin.example.com" to enable app./api. mappings
 
 deploy_observability = false
 
-backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/backend:latest"
-scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/scoring:latest"
-frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/frontend:latest"
-ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/garda/ingest:latest"
+backend_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/backend:latest"
+scoring_image  = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/scoring:latest"
+frontend_image = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/frontend:latest"
+ingest_image   = "asia-southeast1-docker.pkg.dev/your-gcp-project/grafin/ingest:latest"
 
 # Secrets — provide via a *.auto.tfvars that is gitignored, or -var / TF_VAR_ env, NEVER commit real values.
 jwt_secret    = "CHANGE-ME-32+chars"
@@ -570,7 +570,7 @@ db_password   = "CHANGE-ME"
 
 - [ ] **Step 6: Ensure `terraform/.gitignore` excludes state + secret tfvars**
 
-Add/confirm `garda-ai-deploy/terraform/.gitignore`:
+Add/confirm `grafin-ai-deploy/terraform/.gitignore`:
 ```
 .terraform/
 *.tfstate
@@ -581,7 +581,7 @@ crash.log
 
 - [ ] **Step 7: Final fmt + validate + commit**
 
-Run: `cd garda-ai-deploy/terraform && terraform fmt -check && terraform init -backend=false && terraform validate`
+Run: `cd grafin-ai-deploy/terraform && terraform fmt -check && terraform init -backend=false && terraform validate`
 Expected: `Success! The configuration is valid.`
 ```bash
 git add -A && git commit -m "feat(iac): domain mappings, observability toggle, outputs, tfvars example + gitignore"

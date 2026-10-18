@@ -17,9 +17,9 @@
 ## Task 1: Templatize the frontend nginx upstream
 
 **Files:**
-- Rename/modify: `garda-ai-dashboard-web/nginx.conf` → `garda-ai-dashboard-web/nginx.conf.template`
-- Modify: `garda-ai-dashboard-web/Dockerfile`
-- Modify: `garda-ai-deploy/docker-compose.yml` (add `BACKEND_URL` to the frontend service)
+- Rename/modify: `grafin-ai-dashboard-web/nginx.conf` → `grafin-ai-dashboard-web/nginx.conf.template`
+- Modify: `grafin-ai-dashboard-web/Dockerfile`
+- Modify: `grafin-ai-deploy/docker-compose.yml` (add `BACKEND_URL` to the frontend service)
 
 - [ ] **Step 1: Create `nginx.conf.template` (from the current `nginx.conf`, with `${BACKEND_URL}`)**
 
@@ -76,10 +76,10 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 - [ ] **Step 3: Set `BACKEND_URL` for the frontend in local compose**
 
-In `garda-ai-deploy/docker-compose.yml`, add an `environment` block to the `frontend` service:
+In `grafin-ai-deploy/docker-compose.yml`, add an `environment` block to the `frontend` service:
 ```yaml
   frontend:
-    build: { context: ../garda-ai-dashboard-web }
+    build: { context: ../grafin-ai-dashboard-web }
     environment:
       BACKEND_URL: http://backend:8000
     depends_on: [backend]
@@ -90,8 +90,8 @@ In `garda-ai-deploy/docker-compose.yml`, add an `environment` block to the `fron
 
 Run:
 ```bash
-docker build -t garda-frontend-test ../garda-ai-dashboard-web  # from garda-ai-deploy, adjust path as needed
-docker run --rm -e BACKEND_URL=http://example:8000 garda-frontend-test sh -c "cat /etc/nginx/conf.d/default.conf" | grep -E "proxy_pass"
+docker build -t grafin-frontend-test ../grafin-ai-dashboard-web  # from grafin-ai-deploy, adjust path as needed
+docker run --rm -e BACKEND_URL=http://example:8000 grafin-frontend-test sh -c "cat /etc/nginx/conf.d/default.conf" | grep -E "proxy_pass"
 ```
 Expected: the `proxy_pass http://example:8000;` lines (BACKEND_URL substituted), nginx `$host` etc. intact. If Docker isn't available, SKIP and note it; the template + Dockerfile edits are the required change.
 
@@ -99,13 +99,13 @@ Expected: the `proxy_pass http://example:8000;` lines (BACKEND_URL substituted),
 
 Frontend repo:
 ```bash
-cd garda-ai-dashboard-web
+cd grafin-ai-dashboard-web
 git add nginx.conf.template Dockerfile && git rm nginx.conf
 git commit -m "feat: templatize nginx upstream via BACKEND_URL for local+cloud"
 ```
 Deploy repo:
 ```bash
-cd ../garda-ai-deploy
+cd ../grafin-ai-deploy
 git add docker-compose.yml
 git commit -m "chore: set BACKEND_URL for the frontend in local compose"
 ```
@@ -115,11 +115,11 @@ git commit -m "chore: set BACKEND_URL for the frontend in local compose"
 ## Task 2: Add CI to backend + frontend (they lack `.github/workflows`)
 
 **Files:**
-- Create: `garda-ai-backend/.github/workflows/ci.yml`, `garda-ai-dashboard-web/.github/workflows/ci.yml`
+- Create: `grafin-ai-backend/.github/workflows/ci.yml`, `grafin-ai-dashboard-web/.github/workflows/ci.yml`
 
 - [ ] **Step 1: Backend CI (uv + ruff + pytest; testcontainers works on ubuntu-latest Docker)**
 
-`garda-ai-backend/.github/workflows/ci.yml`:
+`grafin-ai-backend/.github/workflows/ci.yml`:
 ```yaml
 name: ci
 on:
@@ -135,20 +135,20 @@ jobs:
       - name: Sync
         run: uv sync --frozen
       - name: Lint (changed scope)
-        run: uv run ruff check garda_ai_backend || true   # repo has known pre-existing ruff debt; do not fail CI on it
+        run: uv run ruff check grafin_ai_backend || true   # repo has known pre-existing ruff debt; do not fail CI on it
       - name: Test
         env:
-          GARDA_JWT_SECRET: ci-secret-at-least-32-chars-long-xxxx
-          GARDA_SCORING_URL: http://scoring:8000
-          GARDA_SCORING_TOKEN: ci-scoring
-          GARDA_INGEST_TOKEN: ci-ingest-token-16chars
+          GRAFIN_JWT_SECRET: ci-secret-at-least-32-chars-long-xxxx
+          GRAFIN_SCORING_URL: http://scoring:8000
+          GRAFIN_SCORING_TOKEN: ci-scoring
+          GRAFIN_INGEST_TOKEN: ci-ingest-token-16chars
         run: uv run pytest -q
 ```
 > Note: the `|| true` on ruff reflects the repo's pre-existing lint debt documented in earlier phases; keep tests as the hard gate. If the debt has since been cleaned, drop the `|| true`.
 
 - [ ] **Step 2: Frontend CI (npm + vitest + build)**
 
-`garda-ai-dashboard-web/.github/workflows/ci.yml`:
+`grafin-ai-dashboard-web/.github/workflows/ci.yml`:
 ```yaml
 name: ci
 on:
@@ -172,8 +172,8 @@ jobs:
 - [ ] **Step 3: Commit (each repo)**
 
 ```bash
-cd garda-ai-backend && git add .github/workflows/ci.yml && git commit -m "ci: add backend test/lint workflow"
-cd ../garda-ai-dashboard-web && git add .github/workflows/ci.yml && git commit -m "ci: add frontend test/build workflow"
+cd grafin-ai-backend && git add .github/workflows/ci.yml && git commit -m "ci: add backend test/lint workflow"
+cd ../grafin-ai-dashboard-web && git add .github/workflows/ci.yml && git commit -m "ci: add frontend test/build workflow"
 ```
 
 ---
@@ -181,7 +181,7 @@ cd ../garda-ai-dashboard-web && git add .github/workflows/ci.yml && git commit -
 ## Task 3: Add a GCP deploy workflow to the 4 deployable repos
 
 **Files:**
-- Create: `.github/workflows/deploy.yml` in `garda-ai-backend`, `garda-ai-dashboard-web`, `garda-ai-scoring`, `garda-ai-ingest`
+- Create: `.github/workflows/deploy.yml` in `grafin-ai-backend`, `grafin-ai-dashboard-web`, `grafin-ai-scoring`, `grafin-ai-ingest`
 
 - [ ] **Step 1: Service deploy workflow template (backend / scoring / frontend)**
 
@@ -194,8 +194,8 @@ on:
 env:
   REGION: ${{ vars.GCP_REGION }}
   PROJECT: ${{ vars.GCP_PROJECT }}
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/garda/backend
-  SERVICE: garda-backend
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/grafin/backend
+  SERVICE: grafin-backend
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -220,33 +220,33 @@ jobs:
       - name: Deploy to Cloud Run
         run: gcloud run deploy "$SERVICE" --image "$IMAGE:${{ github.sha }}" --region "$REGION" --quiet
 ```
-- **scoring**: `IMAGE=.../garda/scoring`, `SERVICE=garda-scoring`.
-- **frontend**: `IMAGE=.../garda/frontend`, `SERVICE=garda-frontend`.
+- **scoring**: `IMAGE=.../grafin/scoring`, `SERVICE=grafin-scoring`.
+- **frontend**: `IMAGE=.../grafin/frontend`, `SERVICE=grafin-frontend`.
 
 - [ ] **Step 2: Job deploy workflow for `ingest`** (a Cloud Run **Job**, not a service)
 
-`garda-ai-ingest/.github/workflows/deploy.yml` — same auth/build/push, but the deploy step:
+`grafin-ai-ingest/.github/workflows/deploy.yml` — same auth/build/push, but the deploy step:
 ```yaml
       - name: Deploy Cloud Run Job
-        run: gcloud run jobs deploy garda-ingest --image "$IMAGE:${{ github.sha }}" --region "$REGION" --quiet
+        run: gcloud run jobs deploy grafin-ingest --image "$IMAGE:${{ github.sha }}" --region "$REGION" --quiet
 ```
-with `IMAGE=.../garda/ingest`.
+with `IMAGE=.../grafin/ingest`.
 
 - [ ] **Step 3: Validate workflow syntax**
 
 If `actionlint` is available: `actionlint` across the changed workflow files. Otherwise a YAML parse check:
 ```bash
-for f in garda-ai-backend/.github/workflows/deploy.yml garda-ai-dashboard-web/.github/workflows/deploy.yml garda-ai-scoring/.github/workflows/deploy.yml garda-ai-ingest/.github/workflows/deploy.yml; do python -c "import yaml,sys; yaml.safe_load(open('$f')); print('ok', '$f')"; done
+for f in grafin-ai-backend/.github/workflows/deploy.yml grafin-ai-dashboard-web/.github/workflows/deploy.yml grafin-ai-scoring/.github/workflows/deploy.yml grafin-ai-ingest/.github/workflows/deploy.yml; do python -c "import yaml,sys; yaml.safe_load(open('$f')); print('ok', '$f')"; done
 ```
 Expected: `ok` for each.
 
 - [ ] **Step 4: Commit (each repo)**
 
 ```bash
-cd garda-ai-backend && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
-cd ../garda-ai-dashboard-web && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
-cd ../garda-ai-scoring && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
-cd ../garda-ai-ingest && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run Job deploy workflow (WIF)"
+cd grafin-ai-backend && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
+cd ../grafin-ai-dashboard-web && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
+cd ../grafin-ai-scoring && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run deploy workflow (WIF)"
+cd ../grafin-ai-ingest && git add .github/workflows/deploy.yml && git commit -m "ci: GCP Cloud Run Job deploy workflow (WIF)"
 ```
 
 ---
@@ -254,17 +254,17 @@ cd ../garda-ai-ingest && git add .github/workflows/deploy.yml && git commit -m "
 ## Task 4: Delete legacy centralized CI + purge pipeline residue (deploy repo)
 
 **Files:**
-- Delete: `garda-ai-deploy/ci/backend.yml`, `ci/frontend.yml`, `ci/pipeline.yml`
+- Delete: `grafin-ai-deploy/ci/backend.yml`, `ci/frontend.yml`, `ci/pipeline.yml`
 
 - [ ] **Step 1: Remove the legacy CI dir (now superseded by per-repo workflows)**
 
 ```bash
-cd garda-ai-deploy && git rm -r ci/
+cd grafin-ai-deploy && git rm -r ci/
 ```
 
 - [ ] **Step 2: Scan for any remaining pipeline residue in the deploy repo**
 
-Run: `grep -rniE "garda-ai-pipeline|garda-etl|garda-replay|\betl\b|\breplay\b|sim_state" garda-ai-deploy --include="*.yml" --include="*.yaml" --include="*.md" --include="Makefile" --include="*.tf" | grep -v "docs/superpowers/specs" | grep -v "docs/superpowers/plans" || echo "clean"`
+Run: `grep -rniE "grafin-ai-pipeline|grafin-etl|grafin-replay|\betl\b|\breplay\b|sim_state" grafin-ai-deploy --include="*.yml" --include="*.yaml" --include="*.md" --include="Makefile" --include="*.tf" | grep -v "docs/superpowers/specs" | grep -v "docs/superpowers/plans" || echo "clean"`
 Expected: `clean` (historical specs/plans may mention them as record — those are excluded).
 
 - [ ] **Step 3: Commit**
@@ -278,11 +278,11 @@ git add -A && git commit -m "chore: delete legacy centralized CI (moved into per
 ## Task 5: Docs — C4 container diagram, GCP runbook, README
 
 **Files:**
-- Modify: `garda-ai-deploy/docs/c4/02-container.md`
-- Create: `garda-ai-deploy/docs/deploy/gcp-runbook.md`
-- Modify: `garda-ai-deploy/README.md`
+- Modify: `grafin-ai-deploy/docs/c4/02-container.md`
+- Create: `grafin-ai-deploy/docs/deploy/gcp-runbook.md`
+- Modify: `grafin-ai-deploy/README.md`
 
-- [ ] **Step 1: Update `docs/c4/02-container.md`** to the GCP Cloud Run topology: public `backend` + `frontend` (nginx), **internal** `scoring`, `migrate` + `ingest` Cloud Run Jobs, Cloud SQL + Memorystore (private via VPC connector), Secret Manager, Artifact Registry; `garda-ai-sim` shown as an **external local producer** posting to the public backend `/ingest`. Remove the pipeline `etl`/`replay` containers. Note the local-compose variant mirrors this minus the managed services.
+- [ ] **Step 1: Update `docs/c4/02-container.md`** to the GCP Cloud Run topology: public `backend` + `frontend` (nginx), **internal** `scoring`, `migrate` + `ingest` Cloud Run Jobs, Cloud SQL + Memorystore (private via VPC connector), Secret Manager, Artifact Registry; `grafin-ai-sim` shown as an **external local producer** posting to the public backend `/ingest`. Remove the pipeline `etl`/`replay` containers. Note the local-compose variant mirrors this minus the managed services.
 
 - [ ] **Step 2: Create `docs/deploy/gcp-runbook.md`** — the operator checklist (the "only you can do" steps):
   1. Create a GCP project; enable billing.
@@ -290,9 +290,9 @@ git add -A && git commit -m "chore: delete legacy centralized CI (moved into per
   3. `terraform init && terraform apply` (enables APIs, provisions network/DB/Redis/registry/secrets/services/jobs).
   4. Set up **Workload Identity Federation** for the 4 repos; set repo `vars` (`GCP_PROJECT`, `GCP_REGION`) + `secrets` (`GCP_WIF_PROVIDER`, `GCP_DEPLOYER_SA`).
   5. Push images (CI `deploy.yml` on push to `main`, or manual build/push).
-  6. Run the deploy-init jobs: `gcloud run jobs execute garda-migrate` then `gcloud run jobs execute garda-ingest`.
+  6. Run the deploy-init jobs: `gcloud run jobs execute grafin-migrate` then `gcloud run jobs execute grafin-ingest`.
   7. Map the domain: create the DNS records from `terraform output domain_dns_app/api`.
-  8. Run the sim locally: `GARDA_INGEST_URL=https://api.<domain>/api/v1/ingest GARDA_INGEST_TOKEN=... uv run garda-sim`.
+  8. Run the sim locally: `GRAFIN_INGEST_URL=https://api.<domain>/api/v1/ingest GRAFIN_INGEST_TOKEN=... uv run grafin-sim`.
 
 - [ ] **Step 3: Update `README.md`** — local-dev quickstart for the new compose (`cp .env.example .env`, set secrets/tokens, `make up`; `make sim` to stream; `make obs` for Prometheus/Grafana), and a pointer to `docs/deploy/gcp-runbook.md` for cloud. Remove any pipeline/replay mentions.
 
@@ -308,7 +308,7 @@ git add -A && git commit -m "docs: C4 container (GCP topology), GCP runbook, REA
 
 - Frontend nginx upstream is `${BACKEND_URL}`-templated; the image builds and serves with it; local compose sets `BACKEND_URL=http://backend:8000`.
 - backend + frontend have `.github/workflows/ci.yml`; all 4 deployable repos have a `deploy.yml` (services via `gcloud run deploy`, ingest via `gcloud run jobs deploy`), using WIF (no long-lived keys); workflows parse cleanly.
-- Legacy `garda-ai-deploy/ci/` deleted; no pipeline residue in deploy config (specs/plans excluded).
+- Legacy `grafin-ai-deploy/ci/` deleted; no pipeline residue in deploy config (specs/plans excluded).
 - Docs: C4 `02-container` shows the GCP topology; `docs/deploy/gcp-runbook.md` exists with the operator steps; README refreshed.
 - All commits authored as Thariq Iskandar Zulkarnain M P with the `Co-Authored-By: Claude` trailer, in each respective repo.
 

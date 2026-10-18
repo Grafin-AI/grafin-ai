@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Change a dashboard user's password in the RUNNING local stack.
 #
-#   ./scripts/set-admin-password.sh                    # admin@garda.local
+#   ./scripts/set-admin-password.sh                    # admin@grafin.local
 #   ./scripts/set-admin-password.sh someone@example.com
 #
 # The password is read silently and handed to the container on stdin, so it never
@@ -12,7 +12,7 @@
 # you wipe the database (`docker compose down -v`).
 set -euo pipefail
 
-EMAIL="${1:-admin@garda.local}"
+EMAIL="${1:-admin@grafin.local}"
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 docker compose ps --status running --services 2>/dev/null | grep -qx backend \
@@ -27,9 +27,9 @@ printf '%s' "$PW1" | docker compose exec -T -e TARGET_EMAIL="$EMAIL" backend \
   uv run --no-sync python -c '
 import asyncio, os, sys
 from sqlalchemy import update
-from garda_ai_backend.db import _maker
-from garda_ai_backend.schema.users import User
-from garda_ai_backend.security.passwords import hash_password
+from grafin_ai_backend.db import _maker
+from grafin_ai_backend.schema.users import User
+from grafin_ai_backend.security.passwords import hash_password
 
 async def main() -> None:
     password = sys.stdin.read()

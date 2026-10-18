@@ -1,11 +1,11 @@
-# Garda AI — GCP Cloud Run Terraform
+# Grafin AI — GCP Cloud Run Terraform
 
-Provisions the Garda platform on **GCP Cloud Run**:
+Provisions the Grafin platform on **GCP Cloud Run**:
 
-- **3 services:** `garda-backend` (public, `min_instances=1`, WebSocket-friendly 3600s
-  timeout), `garda-scoring` (`INGRESS_TRAFFIC_INTERNAL_ONLY`, only reachable in-network),
-  `garda-frontend` (public nginx).
-- **2 jobs:** `garda-migrate` (`alembic upgrade head`), `garda-ingest` (loads the
+- **3 services:** `grafin-backend` (public, `min_instances=1`, WebSocket-friendly 3600s
+  timeout), `grafin-scoring` (`INGRESS_TRAFFIC_INTERNAL_ONLY`, only reachable in-network),
+  `grafin-frontend` (public nginx).
+- **2 jobs:** `grafin-migrate` (`alembic upgrade head`), `grafin-ingest` (loads the
   reference dataset).
 - **Data:** Cloud SQL Postgres 16 (private IP only) + Memorystore Redis (private
   service access) — both reached from Cloud Run through a Serverless VPC Access
@@ -79,8 +79,8 @@ project, billing, and credentials.
       ```
 5. **Run deploy-init jobs before first traffic:**
    ```bash
-   gcloud run jobs execute garda-migrate --region <region> --wait
-   gcloud run jobs execute garda-ingest  --region <region> --wait
+   gcloud run jobs execute grafin-migrate --region <region> --wait
+   gcloud run jobs execute grafin-ingest  --region <region> --wait
    ```
    The backend also self-migrates on start (alembic is idempotent, so the explicit
    `migrate` job is a harmless, ordered belt-and-suspenders step). The `ingest`
@@ -96,19 +96,19 @@ project, billing, and credentials.
   through the connector and seen as internal). The `run.invoker` binding is
   `allUsers`, which does **not** expose scoring publicly (ingress still blocks
   that); it only drops the Google OIDC ID-token requirement so the app's
-  `GARDA_SCORING_TOKEN` header is the real service-to-service auth.
+  `GRAFIN_SCORING_TOKEN` header is the real service-to-service auth.
 - **Cloud SQL + Memorystore are private** (`ipv4_enabled=false`, PSA + VPC
   connector). No public database endpoint.
 - **Secrets** live in Secret Manager and are injected via
   `value_source.secret_key_ref` — never as plaintext env values. This includes
-  the assembled DB DSN (`garda-database-url`), so the password never rides in a
-  plaintext `GARDA_DATABASE_URL` env var readable by anyone with `run.viewer`.
+  the assembled DB DSN (`grafin-database-url`), so the password never rides in a
+  plaintext `GRAFIN_DATABASE_URL` env var readable by anyone with `run.viewer`.
 - **Least-privilege secret access:** each secret is readable only by the
-  workloads that need it — `garda-jwt-secret`/`garda-ingest-token` → backend;
-  `garda-scoring-token` → backend + scoring; `garda-database-url` → backend +
+  workloads that need it — `grafin-jwt-secret`/`grafin-ingest-token` → backend;
+  `grafin-scoring-token` → backend + scoring; `grafin-database-url` → backend +
   jobs. The internal scoring SA can therefore neither forge JWTs nor read the DB.
-- **Per-workload service accounts** (`garda-backend`, `garda-scoring`,
-  `garda-frontend`, `garda-jobs`) receive only the roles they need
+- **Per-workload service accounts** (`grafin-backend`, `grafin-scoring`,
+  `grafin-frontend`, `grafin-jobs`) receive only the roles they need
   (`cloudsql.client`, `secretmanager.secretAccessor`, `run.invoker`).
 
 ### Secret-in-state caveat (important)

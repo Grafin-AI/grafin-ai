@@ -2,7 +2,7 @@
 # Build all four service images for the VM's architecture and push them to
 # Artifact Registry. Run from a machine with the source repos checked out.
 #
-#   ./scripts/build-and-push.sh asia-southeast2-docker.pkg.dev/my-project/garda v1
+#   ./scripts/build-and-push.sh asia-southeast2-docker.pkg.dev/my-project/grafin v1
 #
 # CRITICAL: GCE VMs are linux/amd64. An Apple Silicon Mac builds linux/arm64 by
 # default, and those images will fail on the VM with "exec format error" — so we
@@ -15,10 +15,10 @@ TAG="${2:-latest}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 declare -a SERVICES=(
-  "garda-ai-backend:garda-ai-backend"
-  "garda-ai-scoring:garda-ai-scoring"
-  "garda-ai-ingest:garda-ai-ingest"
-  "garda-ai-dashboard-web:garda-ai-frontend"
+  "grafin-ai-backend:grafin-ai-backend"
+  "grafin-ai-scoring:grafin-ai-scoring"
+  "grafin-ai-ingest:grafin-ai-ingest"
+  "grafin-ai-dashboard-web:grafin-ai-frontend"
 )
 
 command -v docker >/dev/null || { echo "ERROR: docker not found"; exit 1; }

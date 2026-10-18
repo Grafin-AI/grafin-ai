@@ -1,10 +1,10 @@
 locals {
-  db_url    = "postgresql+asyncpg://garda:${var.db_password}@${google_sql_database_instance.pg.private_ip_address}:5432/garda"
+  db_url    = "postgresql+asyncpg://grafin:${var.db_password}@${google_sql_database_instance.pg.private_ip_address}:5432/grafin"
   redis_url = "redis://${google_redis_instance.redis.host}:${google_redis_instance.redis.port}/0"
 }
 
 resource "google_cloud_run_v2_service" "scoring" {
-  name     = "garda-scoring"
+  name     = "grafin-scoring"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
@@ -20,10 +20,10 @@ resource "google_cloud_run_v2_service" "scoring" {
         container_port = 8000
       }
       env {
-        name = "GARDA_SCORING_TOKEN"
+        name = "GRAFIN_SCORING_TOKEN"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.s["garda-scoring-token"].secret_id
+            secret  = google_secret_manager_secret.s["grafin-scoring-token"].secret_id
             version = "latest"
           }
         }
@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_service" "scoring" {
 }
 
 resource "google_cloud_run_v2_service" "backend" {
-  name     = "garda-backend"
+  name     = "grafin-backend"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -64,45 +64,45 @@ resource "google_cloud_run_v2_service" "backend" {
         container_port = 8000
       }
       env {
-        name = "GARDA_DATABASE_URL"
+        name = "GRAFIN_DATABASE_URL"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.s["garda-database-url"].secret_id
+            secret  = google_secret_manager_secret.s["grafin-database-url"].secret_id
             version = "latest"
           }
         }
       }
       env {
-        name  = "GARDA_REDIS_URL"
+        name  = "GRAFIN_REDIS_URL"
         value = local.redis_url
       }
       env {
-        name  = "GARDA_SCORING_URL"
+        name  = "GRAFIN_SCORING_URL"
         value = google_cloud_run_v2_service.scoring.uri
       }
       env {
-        name = "GARDA_JWT_SECRET"
+        name = "GRAFIN_JWT_SECRET"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.s["garda-jwt-secret"].secret_id
+            secret  = google_secret_manager_secret.s["grafin-jwt-secret"].secret_id
             version = "latest"
           }
         }
       }
       env {
-        name = "GARDA_INGEST_TOKEN"
+        name = "GRAFIN_INGEST_TOKEN"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.s["garda-ingest-token"].secret_id
+            secret  = google_secret_manager_secret.s["grafin-ingest-token"].secret_id
             version = "latest"
           }
         }
       }
       env {
-        name = "GARDA_SCORING_TOKEN"
+        name = "GRAFIN_SCORING_TOKEN"
         value_source {
           secret_key_ref {
-            secret  = google_secret_manager_secret.s["garda-scoring-token"].secret_id
+            secret  = google_secret_manager_secret.s["grafin-scoring-token"].secret_id
             version = "latest"
           }
         }
@@ -131,7 +131,7 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public" {
 }
 
 resource "google_cloud_run_v2_service" "frontend" {
-  name     = "garda-frontend"
+  name     = "grafin-frontend"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 

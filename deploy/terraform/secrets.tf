@@ -1,12 +1,12 @@
 locals {
-  # NOTE: the DB DSN (garda-database-url) is stored as a secret and injected via
+  # NOTE: the DB DSN (grafin-database-url) is stored as a secret and injected via
   # secret_key_ref so the password never rides in a plaintext env var. var.db_password
   # is still used directly to create the google_sql_user (see database.tf).
   secrets = {
-    "garda-jwt-secret"    = var.jwt_secret
-    "garda-ingest-token"  = var.ingest_token
-    "garda-scoring-token" = var.scoring_token
-    "garda-database-url"  = local.db_url
+    "grafin-jwt-secret"    = var.jwt_secret
+    "grafin-ingest-token"  = var.ingest_token
+    "grafin-scoring-token" = var.scoring_token
+    "grafin-database-url"  = local.db_url
   }
 }
 

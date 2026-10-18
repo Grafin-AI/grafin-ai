@@ -1,6 +1,6 @@
 # Demo final: persisted explanations, Insight Narrator+, network graph, UI revamp
 
-Date: 2026-10-18 (deadline mode: code freeze 22:30 WIB). Repos: garda-ai-backend, garda-ai-dashboard-web.
+Date: 2026-10-18 (deadline mode: code freeze 22:30 WIB). Repos: grafin-ai-backend, grafin-ai-dashboard-web.
 
 Scope: **A** persisted explanations + generate button, **C1** Insight Narrator+ (reason code,
 confidence, policy references, LTKM draft), **C2** network graph, **B-lite** UI/UX revamp
@@ -86,7 +86,7 @@ blocked, flagged_rate}], "flows": [{from_bank, to_bank, flagged_count, amount}] 
 
 ## B-lite + frontend
 
-- Mockup first (Claude Design artifact), then implement in garda-ai-dashboard-web keeping
+- Mockup first (Claude Design artifact), then implement in grafin-ai-dashboard-web keeping
   current data hooks. GSAP (`gsap` + `@gsap/react` useGSAP): KPI count-up, staggered card
   entrance, live-row slide-in, blocked-alert pulse, modal section reveal, graph build-in; all
   disabled under `prefers-reduced-motion`.

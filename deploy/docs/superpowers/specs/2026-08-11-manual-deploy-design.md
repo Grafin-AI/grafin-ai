@@ -12,7 +12,7 @@ Today each deployable service repo carries a `deploy.yml` that runs **automatica
 
 ## Goal
 
-For each of the four deployable repos (`garda-ai-backend`, `garda-ai-scoring`, `garda-ai-dashboard-web`, `garda-ai-ingest`):
+For each of the four deployable repos (`grafin-ai-backend`, `grafin-ai-scoring`, `grafin-ai-dashboard-web`, `grafin-ai-ingest`):
 
 1. Add a **local `make deploy`** an operator runs after cloning (build → push → deploy). It mirrors `deploy.yml` step-for-step so both routes produce identical results.
 2. Flip **`deploy.yml` from auto (`push: main`) to a manual button (`workflow_dispatch`)** — it never fires on a merge; it only runs when someone clicks *Run workflow*.
@@ -22,7 +22,7 @@ Plus one supporting infra change and doc updates:
 3. Add `lifecycle { ignore_changes = [...image] }` to the terraform Cloud Run **services** and the **ingest job**, so terraform (which *creates* the resource with its VPC/secret/ingress wiring) and `make deploy`/`gcloud` (which *rolls new images*) stop fighting over the image field.
 4. Update the GCP runbook to describe both manual routes and the corrected deploy sequence.
 
-**Non-goals / untouched:** `garda-ai-sim` (never deployed — no Makefile-deploy, no workflow change); the platform architecture; `docker-compose.yml`; the observability stack; the WIF setup itself (still used by the `workflow_dispatch` route). No new repos.
+**Non-goals / untouched:** `grafin-ai-sim` (never deployed — no Makefile-deploy, no workflow change); the platform architecture; `docker-compose.yml`; the observability stack; the WIF setup itself (still used by the `workflow_dispatch` route). No new repos.
 
 ---
 
@@ -47,7 +47,7 @@ Each of the four repos gets a root `Makefile`. Config comes from two env vars �
 - `GCP_REGION` (required)
 - `TAG` — optional; defaults to the git short SHA (falls back to `latest` outside a git checkout)
 
-Derived: `IMAGE = $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda/<name>`.
+Derived: `IMAGE = $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin/<name>`.
 
 **Config file mechanism.** A committed `deploy.env.example` holds `KEY=value` lines (valid as *both* a Makefile include and a shell-sourceable file). The operator copies it to `deploy.env` (gitignored) and edits, or ignores the file and `export`s the vars. The Makefile begins with `-include deploy.env` (the leading `-` makes a missing file a no-op). Recipes reference `$(GCP_PROJECT)`/`$(GCP_REGION)` directly, so no `export` gymnastics are needed; shell-exported env vars are auto-imported by make as a fallback.
 
@@ -65,11 +65,11 @@ Derived: `IMAGE = $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda/<name>`.
 # Then:   make deploy
 -include deploy.env
 
-SERVICE    := garda-backend        # garda-scoring / garda-frontend
+SERVICE    := grafin-backend        # grafin-scoring / grafin-frontend
 IMAGE_NAME := backend              # scoring / frontend
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy
@@ -105,16 +105,16 @@ deploy: push
 	@echo "Deployed $(SERVICE) -> $(IMAGE):$(TAG)"
 ```
 
-**ingest differs (it's a Cloud Run *job*, not a service):** it uses `JOB := garda-ingest`, its `deploy` target runs `gcloud run jobs deploy garda-ingest --image ... --region ...`, and it adds an `execute` convenience target (`gcloud run jobs execute garda-ingest --region $(GCP_REGION) --wait`) since deploying a job does not run it.
+**ingest differs (it's a Cloud Run *job*, not a service):** it uses `JOB := grafin-ingest`, its `deploy` target runs `gcloud run jobs deploy grafin-ingest --image ... --region ...`, and it adds an `execute` convenience target (`gcloud run jobs execute grafin-ingest --region $(GCP_REGION) --wait`) since deploying a job does not run it.
 
 **Image / service / job names** (must match the existing `deploy.yml` and terraform exactly):
 
 | Repo | `IMAGE_NAME` | Target name | Deploy verb |
 |---|---|---|---|
-| garda-ai-backend | `backend` | service `garda-backend` | `gcloud run deploy` |
-| garda-ai-scoring | `scoring` | service `garda-scoring` | `gcloud run deploy` |
-| garda-ai-dashboard-web | `frontend` | service `garda-frontend` | `gcloud run deploy` |
-| garda-ai-ingest | `ingest` | job `garda-ingest` | `gcloud run jobs deploy` (+ `make execute`) |
+| grafin-ai-backend | `backend` | service `grafin-backend` | `gcloud run deploy` |
+| grafin-ai-scoring | `scoring` | service `grafin-scoring` | `gcloud run deploy` |
+| grafin-ai-dashboard-web | `frontend` | service `grafin-frontend` | `gcloud run deploy` |
+| grafin-ai-ingest | `ingest` | job `grafin-ingest` | `gcloud run jobs deploy` (+ `make execute`) |
 
 **gitignore.** Add `deploy.env` to each repo's `.gitignore` (none currently ignore that exact name; the `.env.*` patterns in backend/dashboard do **not** match `deploy.env`, and their `!.env.example` negation would wrongly hide a `.env.deploy.example` — which is the reason for choosing the `deploy.env` name). `deploy.env.example` stays committed.
 
@@ -143,7 +143,7 @@ Everything else (WIF auth via `google-github-actions/auth@v2`, `permissions: {co
 
 ## Change 3 — terraform `ignore_changes` on the image
 
-In `garda-ai-deploy/terraform/cloudrun.tf`, add a `lifecycle` block to each of the three services:
+In `grafin-ai-deploy/terraform/cloudrun.tf`, add a `lifecycle` block to each of the three services:
 
 ```hcl
 lifecycle {
@@ -151,7 +151,7 @@ lifecycle {
 }
 ```
 
-In `garda-ai-deploy/terraform/jobs.tf`, add to the **ingest** job (nested template path):
+In `grafin-ai-deploy/terraform/jobs.tf`, add to the **ingest** job (nested template path):
 
 ```hcl
 lifecycle {
@@ -159,7 +159,7 @@ lifecycle {
 }
 ```
 
-The **migrate** job is left terraform-owned (no `lifecycle`): nobody runs `make deploy` against it, and it should track `var.backend_image`. Documented caveat: to run a *new* migration after a backend deploy, `terraform apply` (which re-resolves the backend `:latest` digest onto the migrate job) then `gcloud run jobs execute garda-migrate --wait`.
+The **migrate** job is left terraform-owned (no `lifecycle`): nobody runs `make deploy` against it, and it should track `var.backend_image`. Documented caveat: to run a *new* migration after a backend deploy, `terraform apply` (which re-resolves the backend `:latest` digest onto the migrate job) then `gcloud run jobs execute grafin-migrate --wait`.
 
 `terraform fmt` and `tofu validate` must stay green.
 
@@ -167,11 +167,11 @@ The **migrate** job is left terraform-owned (no `lifecycle`): nobody runs `make 
 
 ## Change 4 — docs
 
-Update `garda-ai-deploy/docs/deploy/gcp-runbook.md`:
+Update `grafin-ai-deploy/docs/deploy/gcp-runbook.md`:
 
 - Replace the "push each service repo to `main` → `deploy.yml` triggers" language with the two manual routes: local `make deploy`, or the GitHub *Run workflow* (`workflow_dispatch`) button.
 - Add a **Deploy sequence** section capturing both modes:
-  - **Cold start (once):** foundation `terraform apply` → `make push` per service (seed first image) → full `terraform apply` (creates services/jobs) → `gcloud run jobs execute garda-migrate --wait` → `make execute` in ingest (seed reference data).
+  - **Cold start (once):** foundation `terraform apply` → `make push` per service (seed first image) → full `terraform apply` (creates services/jobs) → `gcloud run jobs execute grafin-migrate --wait` → `make execute` in ingest (seed reference data).
   - **Routine redeploy (common):** in the service repo, `make deploy` (build → push → `gcloud run deploy`). No terraform, no other services touched.
 - Note WIF is required only for the `workflow_dispatch` route; local `make deploy` uses the operator's own `gcloud auth login`.
 
@@ -186,7 +186,7 @@ These are shell/YAML/HCL config, not app code — so no unit tests. Verification
 - `make -n deploy` prints the correct command sequence (build → push → deploy) with `GCP_PROJECT`/`GCP_REGION` set.
 - `make deploy` (or `make check-env`) **fails fast with a clear message** when `GCP_PROJECT` is unset. (No real build/push is exercised in CI-less verification — the point is the guard fires.)
 - Each `deploy.yml` parses as valid workflow YAML and its only trigger is `workflow_dispatch`.
-- `terraform fmt -check` and `tofu validate` pass in `garda-ai-deploy/terraform/`.
+- `terraform fmt -check` and `tofu validate` pass in `grafin-ai-deploy/terraform/`.
 - Grep confirms no `deploy.env` is committed and no stale `on: push` auto-deploy language remains in docs.
 
 ---

@@ -5,20 +5,20 @@
 **Supersedes:** the service topology + schema-ownership decisions in
 `2026-06-22-system-architecture-design.md` (that spec's auth, masking, consistency, and
 observability decisions still stand except where noted here).
-**Repos affected:** all (`garda-ai-backend`, `garda-ai-dashboard-web`, `garda-ai-deploy`, plus
-three new repos), and the retirement of `garda-ai-pipeline`.
+**Repos affected:** all (`grafin-ai-backend`, `grafin-ai-dashboard-web`, `grafin-ai-deploy`, plus
+three new repos), and the retirement of `grafin-ai-pipeline`.
 
 ## Purpose
 
 Two goals drive this reshape:
 
 1. **Independent deployability.** Deployment currently funnels through the single
-   `garda-ai-deploy` repo. Every service should build and deploy on its own; only *shared
+   `grafin-ai-deploy` repo. Every service should build and deploy on its own; only *shared
    platform infra* is provisioned centrally.
-2. **Cleaner service boundaries.** `garda-ai-pipeline` is a grab-bag (ETL + scoring + replay
+2. **Cleaner service boundaries.** `grafin-ai-pipeline` is a grab-bag (ETL + scoring + replay
    worker). Scoring becomes its own service; the simulation becomes a local-only tool (it is a
    demo/dev data source, not a production platform component); reference-data seeding becomes a
-   one-shot job. `garda-ai-pipeline` is retired.
+   one-shot job. `grafin-ai-pipeline` is retired.
 
 The through-line: transactions now enter the platform through a **backend ingest path** (not a
 5M-row bulk load), the backend calls a **stateless scoring service**, and a **local simulation
@@ -28,17 +28,17 @@ producer** is what feeds transactions during a demo.
 
 ### Deployed services
 
-**`garda-ai-backend`** — write + read core. Gains the ingest role; sheds simulation.
+**`grafin-ai-backend`** — write + read core. Gains the ingest role; sheds simulation.
 - `POST /ingest` — accepts a **batch** of transactions (from the sim or a real feed),
   authenticated by a machine **ingest token** (distinct from user JWTs).
 - For the batch: calls the scoring service over HTTP, then persists `transactions` +
-  `transaction_events` (+ `alerts` when blocked), and publishes to Redis `garda:events:live`.
+  `transaction_events` (+ `alerts` when blocked), and publishes to Redis `grafin:events:live`.
   This is the old replay-worker write logic, moved into the ingest handler.
 - Unchanged: read/serve view endpoints, auth/RBAC, PII masking, WS relay, and ownership of the
   schema + Alembic migrations (still the single source of truth).
 - **Removed:** `sim_state` table, `/sim/*` state+control endpoints, the accelerated-clock concept.
 
-**`garda-ai-scoring`** *(new)* — stateless scorer.
+**`grafin-ai-scoring`** *(new)* — stateless scorer.
 - `POST /score` — a batch of transactions → `[{fraud_score, typology, status}]`.
 - `ScoringProvider` protocol: `LabelReplayScorer` now (derives the score from the
   `is_laundering` field that arrives with each transaction), `MLModelScorer` later — same
@@ -46,14 +46,14 @@ producer** is what feeds transactions during a demo.
 - No DB, no Redis. Protected by a scoring token and/or private networking. Horizontally scalable
   (pure function of its input).
 
-**`garda-ai-dashboard-web`** — frontend.
+**`grafin-ai-dashboard-web`** — frontend.
 - Remove the admin **Simulation page**, its Sidebar item, the sim-clock indicator, and the
   `useSimState` / `useSimControl` hooks.
 - Everything else stays: live monitor (WS + REST resync), all view wiring, auth, role-gating.
 
 ### Tooling (not deployed as services)
 
-**`garda-ai-ingest`** *(new)* — one-shot reference/master-data seed.
+**`grafin-ai-ingest`** *(new)* — one-shot reference/master-data seed.
 - Loads `banks`, `entities` (+ seeded geo province), `accounts` (risk_score/risk_category),
   idempotent via `ON CONFLICT`. Streaming asyncpg load from the dataset CSVs.
 - Connects to the backend-owned DB via asyncpg (raw SQL). Carries a **committed DDL snapshot**
@@ -61,7 +61,7 @@ producer** is what feeds transactions during a demo.
   decouple). No code dependency on the backend.
 - Run before the sim streams (so FKs resolve) — at deploy init or on demand.
 
-**`garda-ai-sim`** *(new)* — local-only simulation producer.
+**`grafin-ai-sim`** *(new)* — local-only simulation producer.
 - Reads the HI-Small labeled CSV, assigns `event_time` at a configurable/accelerated rate, and
   streams **batches** to the backend's `/ingest` using the ingest token.
 - **Owns the clock, speed, and play/pause locally** (CLI flags / config). This is where the old
@@ -70,7 +70,7 @@ producer** is what feeds transactions during a demo.
 
 ### Infra
 
-**`garda-ai-deploy`** — slims to:
+**`grafin-ai-deploy`** — slims to:
 - Shared-infra IaC (network, managed Postgres + Redis, DNS/TLS, container registry / cluster) —
   provisioned once. Target platform (AWS ECS Fargate vs GCP Cloud Run) decided in Phase 6.
 - A local-dev `docker-compose` (backend + scoring + frontend + postgres + redis, with the ingest
@@ -78,19 +78,19 @@ producer** is what feeds transactions during a demo.
 - It is **no longer the deploy mechanism** — each service repo owns its Dockerfile + CI/CD and
   deploys itself.
 
-**Retired:** `garda-ai-pipeline` — code moves into `garda-ai-scoring` + `garda-ai-ingest` +
-`garda-ai-sim`.
+**Retired:** `grafin-ai-pipeline` — code moves into `grafin-ai-scoring` + `grafin-ai-ingest` +
+`grafin-ai-sim`.
 
 ## Data flow (deployed)
 
 ```
-[garda-ai-sim  (LOCAL)]  reads HI-Small CSV, paces at sim rate
+[grafin-ai-sim  (LOCAL)]  reads HI-Small CSV, paces at sim rate
         │  POST /ingest  (batch, ingest-token)
         ▼
    [backend] ──POST /score (batch)──▶ [scoring svc]  (stateless)
         │  ◀──── [{fraud_score, typology, status}] ────┘
         │  persist transactions + transaction_events (+ alerts)
-        │  publish  garda:events:live
+        │  publish  grafin:events:live
         ▼
    [postgres]        [redis] ──▶ [backend WS relay] ──▶ [dashboard]
         ▲                                                    │
@@ -106,15 +106,15 @@ covers the streamed transactions.)
 ## Contracts & boundaries
 
 Consistent with the 2026-06-23 principle — **shared by contract, not by code; no service imports
-another** (only `garda-ai-deploy` references the others, for infra/compose):
+another** (only `grafin-ai-deploy` references the others, for infra/compose):
 
 - **Scoring API** (backend → scoring) and **Ingest API** (producer → backend) are HTTP/OpenAPI
   contracts. Types are duplicated by contract or generated — no shared code package.
-- **Redis channel** `garda:events:live` and the **DB schema** remain shared by contract (backend
+- **Redis channel** `grafin:events:live` and the **DB schema** remain shared by contract (backend
   owns the schema/migrations; ingest keeps a committed DDL snapshot for its tests).
 - **Auth:** user JWTs for the dashboard (unchanged); a separate machine **ingest token**
-  (`GARDA_INGEST_TOKEN`) for the write path; scoring reached via a **scoring token**
-  (`GARDA_SCORING_TOKEN`) and/or private networking.
+  (`GRAFIN_INGEST_TOKEN`) for the write path; scoring reached via a **scoring token**
+  (`GRAFIN_SCORING_TOKEN`) and/or private networking.
 
 ### Scoring API (sketch — finalized in Phase 1's spec)
 - `POST /score` → request `{ "transactions": [ {id, from_*, to_*, amount_*, payment_format,
@@ -151,15 +151,15 @@ another** (only `garda-ai-deploy` references the others, for infra/compose):
 
 ## Build order (each phase is independently shippable; the platform keeps working between phases)
 
-1. **`garda-ai-scoring`** — extract `ScoringProvider` into a standalone `/score` service
+1. **`grafin-ai-scoring`** — extract `ScoringProvider` into a standalone `/score` service
    (additive, safe). *Own spec + plan.*
 2. **Backend ingest** — add `/ingest` + scoring client + score→persist→publish path. Until the
    sim is repointed, the existing replay worker can still run in parallel. *Own spec + plan.*
-3. **`garda-ai-ingest`** — extract the reference-seed ETL. *Plan (spec if needed).*
-4. **`garda-ai-sim`** — extract the producer, repointed to `POST /ingest`. *Plan (spec if needed).*
+3. **`grafin-ai-ingest`** — extract the reference-seed ETL. *Plan (spec if needed).*
+4. **`grafin-ai-sim`** — extract the producer, repointed to `POST /ingest`. *Plan (spec if needed).*
 5. **Shed simulation** — remove `sim_state`/`/sim` from backend + the Simulation page from
-   frontend; retire `garda-ai-pipeline`. *Own plan.*
-6. **Deploy split** — slim `garda-ai-deploy` to infra + compose; per-service Dockerfiles/CI;
+   frontend; retire `grafin-ai-pipeline`. *Own plan.*
+6. **Deploy split** — slim `grafin-ai-deploy` to infra + compose; per-service Dockerfiles/CI;
    choose AWS vs GCP and generate IaC via the cloud-infrastructure plugins. *Own spec + plan.*
 
 Each phase gets brainstormed→spec'd→planned→implemented in order (subagent-driven), the same flow

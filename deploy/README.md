@@ -1,4 +1,4 @@
-# Garda AI — Deployment & Infrastructure
+# Grafin AI — Deployment & Infrastructure
 
 **Status:** Local development (docker-compose) + GCP Cloud Run production deployment
 
@@ -13,12 +13,12 @@ This repo contains:
 ### Prerequisites
 
 - Docker + Docker Compose
-- The dataset at `../garda-ai-data/HI-Small-ID/` (or set `GARDA_DATA_HOST_DIR` to another path).
+- The dataset at `../grafin-ai-data/HI-Small-ID/` (or set `GRAFIN_DATA_HOST_DIR` to another path).
   Switching datasets needs `make reset` (`docker compose down -v`): old rows live in the
   Postgres volume.
-- Optional, for model scores (`GARDA_SCORER=precomputed`): `scores.csv` from
-  `garda-train export-scores --run <run-id>`, with `GARDA_SCORES_HOST_DIR` pointing at
-  `../garda-ai-training/runs/<run-id>/scores`.
+- Optional, for model scores (`GRAFIN_SCORER=precomputed`): `scores.csv` from
+  `grafin-train export-scores --run <run-id>`, with `GRAFIN_SCORES_HOST_DIR` pointing at
+  `../grafin-ai-training/runs/<run-id>/scores`.
 - Demo replay: `make demo-history` (validation days 2025-09-09..11, unpaced), then
   `make demo-test` (test period from 2025-09-12, speed 60).
 - `.env` file with required secrets (see `.env.example`)
@@ -29,7 +29,7 @@ This repo contains:
 # Copy example env and fill in secrets
 cp .env.example .env
 
-# Generate JWT secret (at least 32 chars) and paste into GARDA_JWT_SECRET
+# Generate JWT secret (at least 32 chars) and paste into GRAFIN_JWT_SECRET
 make seed-secret
 
 # Start the full local stack
@@ -65,7 +65,7 @@ Prometheus:       http://localhost:9090 (if --profile observability)
 Grafana:          http://localhost:3000 (if --profile observability)
 ```
 
-Default login: `admin@garda.local` / `admin`
+Default login: `admin@grafin.local` / `admin`
 
 ### Common Commands
 
@@ -93,10 +93,10 @@ docker compose logs -f frontend
 ### Environment Variables
 
 See `.env.example` for the full list. Key secrets:
-- `GARDA_JWT_SECRET` — Minimum 32 characters (for local dev, can be anything; for production, use Secret Manager)
-- `GARDA_INGEST_TOKEN` — Bearer token for the `/api/v1/ingest` endpoint
-- `GARDA_SCORING_TOKEN` — Bearer token for backend → scoring service auth
-- `POSTGRES_USER`, `POSTGRES_PASSWORD` — Database credentials (default: `garda`/`garda`)
+- `GRAFIN_JWT_SECRET` — Minimum 32 characters (for local dev, can be anything; for production, use Secret Manager)
+- `GRAFIN_INGEST_TOKEN` — Bearer token for the `/api/v1/ingest` endpoint
+- `GRAFIN_SCORING_TOKEN` — Bearer token for backend → scoring service auth
+- `POSTGRES_USER`, `POSTGRES_PASSWORD` — Database credentials (default: `grafin`/`grafin`)
 
 ### Architecture (Local)
 
@@ -128,7 +128,7 @@ See `.env.example` for the full list. Key secrets:
     └─────────────┘
 
 Optional profiles:
-─ sim: garda-ai-sim producer → POST /api/v1/ingest
+─ sim: grafin-ai-sim producer → POST /api/v1/ingest
 ─ observability: Prometheus scrapes /metrics → Grafana displays
 ```
 
@@ -140,7 +140,7 @@ See `docs/c4/02-container.md` for the full C4 architecture.
 
 ### Overview
 
-Garda AI runs on GCP Cloud Run with:
+Grafin AI runs on GCP Cloud Run with:
 - **Backend API** — Public Cloud Run service
 - **Frontend** — Public Cloud Run service (nginx reverse proxy)
 - **Scoring Service** — Internal Cloud Run service
@@ -163,7 +163,7 @@ Quick summary:
 4. **Phase 1:** `terraform apply -target=…artifact_registry…` (network, DB, secrets)
 5. Push service images to Artifact Registry (via CI/CD or manual)
 6. **Phase 2:** `terraform apply` (services, jobs, domain mappings)
-7. Run `gcloud run jobs execute garda-migrate` then `gcloud run jobs execute garda-ingest`
+7. Run `gcloud run jobs execute grafin-migrate` then `gcloud run jobs execute grafin-ingest`
 8. Set up DNS records for custom domain
 9. Test endpoints via HTTPS
 
@@ -189,10 +189,10 @@ Each service repo owns its pipeline:
 
 | Repo | CI Workflow | Deploy Workflow |
 |------|-------------|---|
-| **garda-ai-backend** | `test` + `lint` via `uv` + `pytest` + `ruff` | Build → push to Artifact Registry → `gcloud run deploy` |
-| **garda-ai-dashboard-web** | `test` + `build` via `npm` + `vitest` | Build → push to Artifact Registry → `gcloud run deploy` |
-| **garda-ai-scoring** | Inherited from Phase 1 | Build → push to Artifact Registry → `gcloud run deploy` |
-| **garda-ai-ingest** | Inherited from Phase 1 | Build → push to Artifact Registry → `gcloud run jobs deploy` |
+| **grafin-ai-backend** | `test` + `lint` via `uv` + `pytest` + `ruff` | Build → push to Artifact Registry → `gcloud run deploy` |
+| **grafin-ai-dashboard-web** | `test` + `build` via `npm` + `vitest` | Build → push to Artifact Registry → `gcloud run deploy` |
+| **grafin-ai-scoring** | Inherited from Phase 1 | Build → push to Artifact Registry → `gcloud run deploy` |
+| **grafin-ai-ingest** | Inherited from Phase 1 | Build → push to Artifact Registry → `gcloud run jobs deploy` |
 
 All deploy workflows:
 - Trigger on `push` to `main`
@@ -215,7 +215,7 @@ The `nginx:alpine` image's entrypoint automatically renders `/etc/nginx/template
 ## Project Structure
 
 ```
-garda-ai-deploy/
+grafin-ai-deploy/
 ├── docker-compose.yml          # Local dev stack definition
 ├── .env.example               # Environment variable template
 ├── Makefile                   # Common tasks
@@ -257,7 +257,7 @@ garda-ai-deploy/
 
 The frontend nginx config must point to different backend URLs depending on the environment:
 - **Local:** `http://backend:8000` (docker-compose service name)
-- **Cloud:** `https://api.garda.example.com` (Cloud Run backend URL)
+- **Cloud:** `https://api.grafin.example.com` (Cloud Run backend URL)
 
 Using `${BACKEND_URL}` templating means one image works everywhere.
 
@@ -316,8 +316,8 @@ See `docs/deploy/gcp-runbook.md` → **Troubleshooting** section.
 - **GCP deployment guide:** `docs/deploy/gcp-runbook.md`
 - **Security threat model:** `docs/security/threat-model.md`
 - **Service repos:**
-  - Backend: https://github.com/your-org/garda-ai-backend
-  - Frontend: https://github.com/your-org/garda-ai-dashboard-web
-  - Scoring: https://github.com/your-org/garda-ai-scoring
-  - Ingest: https://github.com/your-org/garda-ai-ingest
-  - Sim: https://github.com/your-org/garda-ai-sim
+  - Backend: https://github.com/your-org/grafin-ai-backend
+  - Frontend: https://github.com/your-org/grafin-ai-dashboard-web
+  - Scoring: https://github.com/your-org/grafin-ai-scoring
+  - Ingest: https://github.com/your-org/grafin-ai-ingest
+  - Sim: https://github.com/your-org/grafin-ai-sim

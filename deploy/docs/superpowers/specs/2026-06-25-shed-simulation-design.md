@@ -2,17 +2,17 @@
 
 **Date:** 2026-06-25
 **Status:** Approved (brainstorming)
-**Scope:** cross-repo — `garda-ai-backend`, `garda-ai-dashboard-web`, and the deletion of
-`garda-ai-pipeline`.
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
-**Depends on:** Phases 2 (backend `/ingest`) and 4 (`garda-ai-sim`) — the sim→ingest path is what
+**Scope:** cross-repo — `grafin-ai-backend`, `grafin-ai-dashboard-web`, and the deletion of
+`grafin-ai-pipeline`.
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
+**Depends on:** Phases 2 (backend `/ingest`) and 4 (`grafin-ai-sim`) — the sim→ingest path is what
 replaces the removed replay/sim-clock path.
 
 Phase 5 removes the accelerated-simulation machinery now that transactions enter through the sim →
 `/ingest` → scoring → persist → publish path. It re-anchors the read side from the DB-persisted
 simulation clock (`sim_state.sim_now`) to **wall-clock `now()`**, deletes the `/sim` control
 surface, the `sim_state` table, and the frontend Simulation page, and **deletes the retired
-`garda-ai-pipeline` repo**.
+`grafin-ai-pipeline` repo**.
 
 This is the first re-architecture phase that **modifies the two established repos** rather than
 adding new ones, so it is mostly *deletion + re-wiring* and leans hard on the review gates.
@@ -35,7 +35,7 @@ scorer** (honesty that accuracy is not a trained-model metric), NOT the sim cloc
 
 ---
 
-## ① Backend shed — `garda-ai-backend`
+## ① Backend shed — `grafin-ai-backend`
 
 ### Re-anchor (the core change)
 - `api/deps.py`: replace `get_sim_now` / `SimNowDep` with:
@@ -68,7 +68,7 @@ scorer** (honesty that accuracy is not a trained-model metric), NOT the sim cloc
 
 ### WS live-event message contract
 - `api/ingest.py`: stop publishing the redundant `sim_now` field in the Redis
-  `garda:events:live` message. The message already carries `surfaced_at` (the real timestamp the
+  `grafin:events:live` message. The message already carries `surfaced_at` (the real timestamp the
   frontend uses); `sim_now` was kept only for shape-compat in Phase 2. This is the one place the
   shed changes the live-event contract — the frontend change (②) matches it.
 
@@ -101,7 +101,7 @@ Follows the backend's existing bar (`backend-development`, `python-development`,
 
 ---
 
-## ② Frontend shed — `garda-ai-dashboard-web`
+## ② Frontend shed — `grafin-ai-dashboard-web`
 
 **Author note:** this repo's local git author is currently the BRI corp email — **set it to
 `Thariq Iskandar Zulkarnain M P <thariqiskandar9@gmail.com>` before the first commit** (as done in
@@ -135,16 +135,16 @@ security).
 
 ---
 
-## ③ Retire `garda-ai-pipeline` — DELETE
+## ③ Retire `grafin-ai-pipeline` — DELETE
 
-Its code has been fully redistributed (scoring → `garda-ai-scoring`, reference ETL →
-`garda-ai-ingest`, replay/producer → `garda-ai-sim`) and **nothing outside the pipeline imports
-`garda_ai_pipeline`** (verified). Per the decision, **delete the directory** (`rm -rf
-garda-ai-pipeline`). This removes its on-disk git history — **unrecoverable** unless pushed
+Its code has been fully redistributed (scoring → `grafin-ai-scoring`, reference ETL →
+`grafin-ai-ingest`, replay/producer → `grafin-ai-sim`) and **nothing outside the pipeline imports
+`grafin_ai_pipeline`** (verified). Per the decision, **delete the directory** (`rm -rf
+grafin-ai-pipeline`). This removes its on-disk git history — **unrecoverable** unless pushed
 elsewhere; done as the **last** Phase 5 step, after the backend + frontend sheds are complete and
 green, and reported explicitly.
 
-Its `docker-compose` services (`etl`, `replay`) are removed from `garda-ai-deploy` in **Phase 6**
+Its `docker-compose` services (`etl`, `replay`) are removed from `grafin-ai-deploy` in **Phase 6**
 (the compose rework); Phase 5 only deletes the repo. (If any Phase-5 change happens to touch the
 compose file, leave the pipeline services alone — that is Phase 6's job.)
 
@@ -153,9 +153,9 @@ compose file, leave the pipeline services alone — that is Phase 6's job.)
 ## Sequencing & decomposition
 
 One spec (this file), executed as **two plans then a deletion**, in order:
-1. **Backend shed plan** (`garda-ai-backend/docs/superpowers/plans/2026-06-25-shed-simulation-backend.md`)
+1. **Backend shed plan** (`grafin-ai-backend/docs/superpowers/plans/2026-06-25-shed-simulation-backend.md`)
    — it owns the contracts (WS message, `/sim` removal, `system/health`), so it goes first.
-2. **Frontend shed plan** (`garda-ai-dashboard-web/docs/superpowers/plans/2026-06-25-shed-simulation-frontend.md`)
+2. **Frontend shed plan** (`grafin-ai-dashboard-web/docs/superpowers/plans/2026-06-25-shed-simulation-frontend.md`)
    — adapts to the backend contract changes.
 3. **Pipeline deletion** — a single verified step after both are green.
 
@@ -164,7 +164,7 @@ Each plan is subagent-driven with review gates, per the established flow.
 ## Contract-change summary (for consumers)
 
 - **Removed endpoints:** `GET /api/v1/sim/state`, `POST /api/v1/sim/control` (both gone → 404).
-- **WS `garda:events:live` message:** loses the `sim_now` field; `surfaced_at` remains the
+- **WS `grafin:events:live` message:** loses the `sim_now` field; `surfaced_at` remains the
   authoritative event time.
 - **`GET /api/v1/system/health`:** same response shape; `events_surfaced` is now a total count and
   the endpoint no longer 404s on an uninitialized sim (there is no sim).

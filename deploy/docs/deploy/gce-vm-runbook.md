@@ -33,12 +33,12 @@ gcloud services enable compute.googleapis.com artifactregistry.googleapis.com
 ## 1. Create the image registry
 
 ```bash
-gcloud artifacts repositories create garda \
+gcloud artifacts repositories create grafin \
   --repository-format=docker \
   --location=${REGION} \
-  --description="Garda AI service images"
+  --description="Grafin AI service images"
 
-export REGISTRY=${REGION}-docker.pkg.dev/${PROJECT}/garda
+export REGISTRY=${REGION}-docker.pkg.dev/${PROJECT}/grafin
 echo $REGISTRY     # note this — it goes in the VM's .env
 ```
 
@@ -53,18 +53,18 @@ script forces `--platform linux/amd64`.
 ```bash
 gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 
-cd garda-ai-deploy
+cd grafin-ai-deploy
 ./scripts/build-and-push.sh ${REGISTRY} v1
 ```
 
-Builds and pushes `garda-ai-backend`, `garda-ai-scoring`, `garda-ai-ingest`, and
-`garda-ai-frontend`, each tagged `v1` and `latest`.
+Builds and pushes `grafin-ai-backend`, `grafin-ai-scoring`, `grafin-ai-ingest`, and
+`grafin-ai-frontend`, each tagged `v1` and `latest`.
 
 Cross-building under emulation is slow (often 5–15 minutes total). If that drags, build
 natively in the cloud instead — from each service repo:
 
 ```bash
-gcloud builds submit --tag ${REGISTRY}/garda-ai-backend:v1 .
+gcloud builds submit --tag ${REGISTRY}/grafin-ai-backend:v1 .
 ```
 
 Verify what landed:
@@ -81,7 +81,7 @@ gcloud artifacts docker images list ${REGISTRY}
 (4 GB) works but leaves little headroom once Postgres has a few million rows.
 
 ```bash
-gcloud compute instances create garda-demo \
+gcloud compute instances create grafin-demo \
   --zone=${ZONE} \
   --machine-type=e2-standard-2 \
   --image-family=debian-12 \
@@ -89,23 +89,23 @@ gcloud compute instances create garda-demo \
   --boot-disk-size=50GB \
   --boot-disk-type=pd-balanced \
   --scopes=https://www.googleapis.com/auth/cloud-platform \
-  --tags=garda-demo
+  --tags=grafin-demo
 ```
 
 `--scopes=cloud-platform` is what lets the VM pull from Artifact Registry without a key
 file. Open the dashboard port:
 
 ```bash
-gcloud compute firewall-rules create garda-allow-http \
+gcloud compute firewall-rules create grafin-allow-http \
   --allow=tcp:80 \
-  --target-tags=garda-demo \
-  --description="Garda dashboard"
+  --target-tags=grafin-demo \
+  --description="Grafin dashboard"
 ```
 
 Get the public address:
 
 ```bash
-gcloud compute instances describe garda-demo --zone=${ZONE} \
+gcloud compute instances describe grafin-demo --zone=${ZONE} \
   --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
 ```
 
@@ -114,7 +114,7 @@ gcloud compute instances describe garda-demo --zone=${ZONE} \
 ## 4. Install Docker on the VM
 
 ```bash
-gcloud compute ssh garda-demo --zone=${ZONE}
+gcloud compute ssh grafin-demo --zone=${ZONE}
 ```
 
 Then, on the VM:
@@ -128,7 +128,7 @@ exit                      # log out and back in so the group takes effect
 Reconnect, then let Docker authenticate to Artifact Registry:
 
 ```bash
-gcloud compute ssh garda-demo --zone=${ZONE}
+gcloud compute ssh grafin-demo --zone=${ZONE}
 gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 ```
 
@@ -139,15 +139,15 @@ gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 From your laptop:
 
 ```bash
-gcloud compute scp garda-ai-gce-bundle.zip garda-demo:~ --zone=${ZONE}
-gcloud compute ssh garda-demo --zone=${ZONE}
+gcloud compute scp grafin-ai-gce-bundle.zip grafin-demo:~ --zone=${ZONE}
+gcloud compute ssh grafin-demo --zone=${ZONE}
 ```
 
 On the VM:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y unzip
-unzip garda-ai-gce-bundle.zip -d garda && cd garda
+unzip grafin-ai-gce-bundle.zip -d grafin && cd grafin
 ```
 
 The bundle carries `docker-compose.prod.yml`, `.env.prod.example`, this runbook, and
@@ -160,7 +160,7 @@ The bundle carries `docker-compose.prod.yml`, `.env.prod.example`, this runbook,
 ```bash
 cp .env.prod.example .env
 head -c 48 /dev/urandom | base64      # run a few times for the secrets
-nano .env                             # fill in GARDA_REGISTRY and every CHANGE-ME
+nano .env                             # fill in GRAFIN_REGISTRY and every CHANGE-ME
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -178,7 +178,7 @@ docker compose -f docker-compose.prod.yml logs ingest --tail=20   # expect seed.
 
 ## 7. Verify
 
-Open `http://<VM_PUBLIC_IP>/` and sign in with `admin@garda.local` / `admin`.
+Open `http://<VM_PUBLIC_IP>/` and sign in with `admin@grafin.local` / `admin`.
 
 The dashboard will be empty of transactions — reference data only. That is expected.
 
@@ -191,16 +191,16 @@ network, so the simulator can reach the ingest endpoint through port 80 — the 
 itself never needs to be exposed.
 
 ```bash
-cd garda-ai-sim
-export GARDA_INGEST_URL=http://<VM_PUBLIC_IP>/api/v1/ingest
-export GARDA_INGEST_TOKEN=<the GARDA_INGEST_TOKEN from the VM's .env>
-export GARDA_DATA_DIR=../garda-ai-data/HI-Small
+cd grafin-ai-sim
+export GRAFIN_INGEST_URL=http://<VM_PUBLIC_IP>/api/v1/ingest
+export GRAFIN_INGEST_TOKEN=<the GRAFIN_INGEST_TOKEN from the VM's .env>
+export GRAFIN_DATA_DIR=../grafin-ai-data/HI-Small
 
 # history: six days (2025-09-03..08), unpaced
-GARDA_SKIP=1869370 GARDA_LIMIT=2345075 GARDA_MAX_GAP_S=0 GARDA_BATCH_SIZE=1000 uv run garda-sim
+GRAFIN_SKIP=1869370 GRAFIN_LIMIT=2345075 GRAFIN_MAX_GAP_S=0 GRAFIN_BATCH_SIZE=1000 uv run grafin-sim
 
 # live: 2025-09-09, one dataset-hour per wall-minute
-GARDA_SKIP=4214445 GARDA_SPEED=60 GARDA_BATCH_SIZE=100 uv run garda-sim
+GRAFIN_SKIP=4214445 GRAFIN_SPEED=60 GRAFIN_BATCH_SIZE=100 uv run grafin-sim
 ```
 
 Seeding over the internet is slower than locally — every batch is a round trip to GCP
@@ -217,11 +217,11 @@ IP. That is acceptable for a short private demo; it is not acceptable for anythi
 
 Minimum hardening before a public demo:
 
-1. **Change the seeded admin password.** `admin@garda.local` / `admin` is created on every
+1. **Change the seeded admin password.** `admin@grafin.local` / `admin` is created on every
    boot by the backend's entrypoint. Anyone who reaches the IP can sign in.
 2. **Restrict the firewall** to your own address rather than the whole internet:
    ```bash
-   gcloud compute firewall-rules update garda-allow-http --source-ranges=<YOUR_IP>/32
+   gcloud compute firewall-rules update grafin-allow-http --source-ranges=<YOUR_IP>/32
    ```
 3. **Add TLS** if it will live longer than a demo — a domain plus a reverse proxy with
    Let's Encrypt, or put the VM behind an HTTPS load balancer.
@@ -238,20 +238,20 @@ docker compose -f docker-compose.prod.yml logs -f --tail=100
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 
-# where did the replay get to (use as the next GARDA_SKIP)
+# where did the replay get to (use as the next GRAFIN_SKIP)
 docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U garda -d garda -tAc 'select max(id) from transactions'
+  psql -U grafin -d grafin -tAc 'select max(id) from transactions'
 
 # stop (keeps data) / wipe entirely
 docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml down -v
 
 # delete the VM when finished — this is what stops the billing
-gcloud compute instances delete garda-demo --zone=${ZONE}
+gcloud compute instances delete grafin-demo --zone=${ZONE}
 ```
 
 ## Costs
 
 An `e2-standard-2` with a 50 GB balanced disk runs roughly USD 50–60/month if left on
 around the clock. For demo use, stop it when idle (`gcloud compute instances stop
-garda-demo --zone=${ZONE}`) — a stopped instance bills only for the disk.
+grafin-demo --zone=${ZONE}`) — a stopped instance bills only for the disk.

@@ -5,7 +5,7 @@
 #
 # The simulator is deliberately absent: it is local-only and streams from your
 # laptop to this stack's public URL.
-name: garda-ai
+name: grafin-ai
 
 x-db-url: &db_url postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
 
@@ -35,10 +35,10 @@ services:
       retries: 10
 
   scoring:
-    image: ${GARDA_REGISTRY:?set GARDA_REGISTRY}/garda-ai-scoring:${GARDA_TAG:-latest}
+    image: ${GRAFIN_REGISTRY:?set GRAFIN_REGISTRY}/grafin-ai-scoring:${GRAFIN_TAG:-latest}
     restart: unless-stopped
     environment:
-      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      GRAFIN_SCORING_TOKEN: ${GRAFIN_SCORING_TOKEN:?set GRAFIN_SCORING_TOKEN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
       interval: 5s
@@ -47,16 +47,16 @@ services:
     # internal only — never published to the host
 
   backend:
-    image: ${GARDA_REGISTRY}/garda-ai-backend:${GARDA_TAG:-latest}
+    image: ${GRAFIN_REGISTRY}/grafin-ai-backend:${GRAFIN_TAG:-latest}
     restart: unless-stopped
     environment:
-      GARDA_DATABASE_URL: *db_url
-      GARDA_REDIS_URL: redis://redis:6379/0
-      GARDA_JWT_SECRET: ${GARDA_JWT_SECRET:?set a >=32 char secret}
-      GARDA_ENV: ${GARDA_ENV:-production}
-      GARDA_SCORING_URL: http://scoring:8000
-      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN}
-      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      GRAFIN_DATABASE_URL: *db_url
+      GRAFIN_REDIS_URL: redis://redis:6379/0
+      GRAFIN_JWT_SECRET: ${GRAFIN_JWT_SECRET:?set a >=32 char secret}
+      GRAFIN_ENV: ${GRAFIN_ENV:-production}
+      GRAFIN_SCORING_URL: http://scoring:8000
+      GRAFIN_SCORING_TOKEN: ${GRAFIN_SCORING_TOKEN}
+      GRAFIN_INGEST_TOKEN: ${GRAFIN_INGEST_TOKEN:?set GRAFIN_INGEST_TOKEN (>=16 chars)}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -72,18 +72,18 @@ services:
     ports: ["${BACKEND_HOST_PORT:-127.0.0.1:8000}:8000"]
 
   ingest:
-    image: ${GARDA_REGISTRY}/garda-ai-ingest:${GARDA_TAG:-latest}
+    image: ${GRAFIN_REGISTRY}/grafin-ai-ingest:${GRAFIN_TAG:-latest}
     environment:
-      GARDA_DATABASE_URL: *db_url
-      GARDA_DATA_DIR: /data
+      GRAFIN_DATABASE_URL: *db_url
+      GRAFIN_DATA_DIR: /data
     volumes:
-      - ${GARDA_DATA_HOST_DIR:-./data}:/data:ro
+      - ${GRAFIN_DATA_HOST_DIR:-./data}:/data:ro
     depends_on:
       backend: { condition: service_healthy }   # backend entrypoint runs alembic first
     restart: "no"
 
   frontend:
-    image: ${GARDA_REGISTRY}/garda-ai-frontend:${GARDA_TAG:-latest}
+    image: ${GRAFIN_REGISTRY}/grafin-ai-frontend:${GRAFIN_TAG:-latest}
     restart: unless-stopped
     environment:
       BACKEND_URL: http://backend:8000

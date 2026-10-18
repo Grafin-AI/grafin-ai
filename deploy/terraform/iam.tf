@@ -1,14 +1,14 @@
 resource "google_service_account" "backend" {
-  account_id = "garda-backend"
+  account_id = "grafin-backend"
 }
 resource "google_service_account" "scoring" {
-  account_id = "garda-scoring"
+  account_id = "grafin-scoring"
 }
 resource "google_service_account" "frontend" {
-  account_id = "garda-frontend"
+  account_id = "grafin-frontend"
 }
 resource "google_service_account" "jobs" {
-  account_id = "garda-jobs"
+  account_id = "grafin-jobs"
 }
 
 # Map of workload -> service account email, so we can index by the string keys
@@ -25,10 +25,10 @@ locals {
   # Least-privilege: each secret is readable ONLY by the workloads that need it.
   # (The internal scoring SA must NOT be able to read the JWT secret or the DB URL.)
   secret_access = {
-    "garda-jwt-secret"    = ["backend"]
-    "garda-ingest-token"  = ["backend"]
-    "garda-scoring-token" = ["backend", "scoring"]
-    "garda-database-url"  = ["backend", "jobs"]
+    "grafin-jwt-secret"    = ["backend"]
+    "grafin-ingest-token"  = ["backend"]
+    "grafin-scoring-token" = ["backend", "scoring"]
+    "grafin-database-url"  = ["backend", "jobs"]
   }
 
   # Flatten to { "<secret>-<workload>" => { secret, workload } } for for_each.
@@ -62,7 +62,7 @@ resource "google_secret_manager_secret_iam_member" "access" {
 # Scoring stays ingress = INGRESS_TRAFFIC_INTERNAL_ONLY (the network gate), so
 # it is never publicly reachable. Granting allUsers the invoker role does NOT
 # expose it — it only removes the Google OIDC ID-token requirement so that the
-# app's GARDA_SCORING_TOKEN header is the real service-to-service auth.
+# app's GRAFIN_SCORING_TOKEN header is the real service-to-service auth.
 resource "google_cloud_run_v2_service_iam_member" "scoring_invoker" {
   name     = google_cloud_run_v2_service.scoring.name
   location = var.region

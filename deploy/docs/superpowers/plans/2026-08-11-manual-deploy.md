@@ -8,7 +8,7 @@
 
 **Tech Stack:** GNU Make, GitHub Actions YAML, Terraform/OpenTofu HCL, gcloud. No app-code changes.
 
-**Spec:** `garda-ai-deploy/docs/superpowers/specs/2026-08-11-manual-deploy-design.md`
+**Spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-08-11-manual-deploy-design.md`
 
 **Repo root for all paths:** `/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/`
 
@@ -16,15 +16,15 @@
 
 ---
 
-## Task 1: `garda-ai-backend` — Makefile + workflow_dispatch
+## Task 1: `grafin-ai-backend` — Makefile + workflow_dispatch
 
 **Files:**
-- Create: `garda-ai-backend/Makefile`
-- Create: `garda-ai-backend/deploy.env.example`
-- Modify: `garda-ai-backend/.gitignore` (add `deploy.env`)
-- Modify: `garda-ai-backend/.github/workflows/deploy.yml` (trigger only)
+- Create: `grafin-ai-backend/Makefile`
+- Create: `grafin-ai-backend/deploy.env.example`
+- Modify: `grafin-ai-backend/.gitignore` (add `deploy.env`)
+- Modify: `grafin-ai-backend/.github/workflows/deploy.yml` (trigger only)
 
-- [ ] **Step 1: Create `garda-ai-backend/Makefile`**
+- [ ] **Step 1: Create `grafin-ai-backend/Makefile`**
 
 ```makefile
 # Manual, operator-run deploy to GCP Cloud Run.
@@ -38,11 +38,11 @@
 # Then:   make deploy
 -include deploy.env
 
-SERVICE    := garda-backend
+SERVICE    := grafin-backend
 IMAGE_NAME := backend
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy
@@ -80,7 +80,7 @@ deploy: push
 
 **Note on Makefile indentation:** recipe lines MUST be indented with a TAB, not spaces, or `make` errors with "missing separator".
 
-- [ ] **Step 2: Create `garda-ai-backend/deploy.env.example`**
+- [ ] **Step 2: Create `grafin-ai-backend/deploy.env.example`**
 
 ```bash
 # Copy this file to deploy.env (gitignored) and edit, OR export these in your shell.
@@ -91,13 +91,13 @@ GCP_REGION=asia-southeast1
 
 - [ ] **Step 3: Add `deploy.env` to `.gitignore`**
 
-Append this line to `garda-ai-backend/.gitignore` (the existing `.env.*` pattern does NOT match `deploy.env`):
+Append this line to `grafin-ai-backend/.gitignore` (the existing `.env.*` pattern does NOT match `deploy.env`):
 
 ```
 deploy.env
 ```
 
-- [ ] **Step 4: Flip the workflow trigger in `garda-ai-backend/.github/workflows/deploy.yml`**
+- [ ] **Step 4: Flip the workflow trigger in `grafin-ai-backend/.github/workflows/deploy.yml`**
 
 Replace:
 
@@ -118,22 +118,22 @@ Leave the rest of the file (env, permissions, jobs, WIF auth, build/push, `gclou
 
 - [ ] **Step 5: Verify the guard fires when config is missing**
 
-Run: `cd garda-ai-backend && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
+Run: `cd grafin-ai-backend && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
 Expected: prints `ERROR: GCP_PROJECT is not set ...` and `exit=1`.
 
 - [ ] **Step 6: Verify the deploy command sequence (dry run, executes nothing)**
 
-Run: `cd garda-ai-backend && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
+Run: `cd grafin-ai-backend && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
 Expected output includes, in order:
-- `docker build -t "asia-southeast1-docker.pkg.dev/demo-proj/garda/backend:<sha>" -t "asia-southeast1-docker.pkg.dev/demo-proj/garda/backend:latest" .`
+- `docker build -t "asia-southeast1-docker.pkg.dev/demo-proj/grafin/backend:<sha>" -t "asia-southeast1-docker.pkg.dev/demo-proj/grafin/backend:latest" .`
 - `docker push` of both tags
-- `gcloud run deploy garda-backend --image "asia-southeast1-docker.pkg.dev/demo-proj/garda/backend:<sha>" --region asia-southeast1 --quiet`
+- `gcloud run deploy grafin-backend --image "asia-southeast1-docker.pkg.dev/demo-proj/grafin/backend:<sha>" --region asia-southeast1 --quiet`
 
 - [ ] **Step 7: Verify the workflow parses and triggers only on workflow_dispatch**
 
 Run:
 ```bash
-cd garda-ai-backend
+cd grafin-ai-backend
 python3 -c "import yaml; d=yaml.safe_load(open('.github/workflows/deploy.yml')); print(d.get(True) or d.get('on'))"
 grep -nE "on:|workflow_dispatch|push:" .github/workflows/deploy.yml
 ```
@@ -142,7 +142,7 @@ Expected: the parsed trigger is `{'workflow_dispatch': None}` (note: PyYAML pars
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-backend
+cd grafin-ai-backend
 git add Makefile deploy.env.example .gitignore .github/workflows/deploy.yml
 git commit -m "feat: manual make deploy + workflow_dispatch (no auto-deploy on main)
 
@@ -151,15 +151,15 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 2: `garda-ai-scoring` — Makefile + workflow_dispatch
+## Task 2: `grafin-ai-scoring` — Makefile + workflow_dispatch
 
 **Files:**
-- Create: `garda-ai-scoring/Makefile`
-- Create: `garda-ai-scoring/deploy.env.example`
-- Modify: `garda-ai-scoring/.gitignore` (add `deploy.env`)
-- Modify: `garda-ai-scoring/.github/workflows/deploy.yml` (trigger only)
+- Create: `grafin-ai-scoring/Makefile`
+- Create: `grafin-ai-scoring/deploy.env.example`
+- Modify: `grafin-ai-scoring/.gitignore` (add `deploy.env`)
+- Modify: `grafin-ai-scoring/.github/workflows/deploy.yml` (trigger only)
 
-- [ ] **Step 1: Create `garda-ai-scoring/Makefile`** (identical to Task 1 except `SERVICE`/`IMAGE_NAME`)
+- [ ] **Step 1: Create `grafin-ai-scoring/Makefile`** (identical to Task 1 except `SERVICE`/`IMAGE_NAME`)
 
 ```makefile
 # Manual, operator-run deploy to GCP Cloud Run.
@@ -173,11 +173,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 # Then:   make deploy
 -include deploy.env
 
-SERVICE    := garda-scoring
+SERVICE    := grafin-scoring
 IMAGE_NAME := scoring
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy
@@ -215,7 +215,7 @@ deploy: push
 
 (Recipe lines MUST use TAB indentation.)
 
-- [ ] **Step 2: Create `garda-ai-scoring/deploy.env.example`**
+- [ ] **Step 2: Create `grafin-ai-scoring/deploy.env.example`**
 
 ```bash
 # Copy this file to deploy.env (gitignored) and edit, OR export these in your shell.
@@ -226,31 +226,31 @@ GCP_REGION=asia-southeast1
 
 - [ ] **Step 3: Add `deploy.env` to `.gitignore`**
 
-Append to `garda-ai-scoring/.gitignore` (currently only ignores `.venv`):
+Append to `grafin-ai-scoring/.gitignore` (currently only ignores `.venv`):
 
 ```
 deploy.env
 ```
 
-- [ ] **Step 4: Flip the workflow trigger in `garda-ai-scoring/.github/workflows/deploy.yml`**
+- [ ] **Step 4: Flip the workflow trigger in `grafin-ai-scoring/.github/workflows/deploy.yml`**
 
 Replace `on:\n  push:\n    branches: [main]` with `on:\n  workflow_dispatch:`. Leave everything else as-is.
 
 - [ ] **Step 5: Verify the guard fires**
 
-Run: `cd garda-ai-scoring && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
+Run: `cd grafin-ai-scoring && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
 Expected: `ERROR: GCP_PROJECT is not set ...` and `exit=1`.
 
 - [ ] **Step 6: Verify the deploy command sequence**
 
-Run: `cd garda-ai-scoring && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
-Expected: `docker build` of `.../garda/scoring:<sha>` + `:latest`, both `docker push`, then `gcloud run deploy garda-scoring --image ".../garda/scoring:<sha>" --region asia-southeast1 --quiet`.
+Run: `cd grafin-ai-scoring && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
+Expected: `docker build` of `.../grafin/scoring:<sha>` + `:latest`, both `docker push`, then `gcloud run deploy grafin-scoring --image ".../grafin/scoring:<sha>" --region asia-southeast1 --quiet`.
 
 - [ ] **Step 7: Verify the workflow parses and triggers only on workflow_dispatch**
 
 Run:
 ```bash
-cd garda-ai-scoring
+cd grafin-ai-scoring
 python3 -c "import yaml; d=yaml.safe_load(open('.github/workflows/deploy.yml')); print(d.get(True) or d.get('on'))"
 grep -nE "on:|workflow_dispatch|push:" .github/workflows/deploy.yml
 ```
@@ -259,7 +259,7 @@ Expected: trigger is `{'workflow_dispatch': None}`; NO `push:`.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-scoring
+cd grafin-ai-scoring
 git add Makefile deploy.env.example .gitignore .github/workflows/deploy.yml
 git commit -m "feat: manual make deploy + workflow_dispatch (no auto-deploy on main)
 
@@ -268,15 +268,15 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 3: `garda-ai-dashboard-web` — Makefile + workflow_dispatch
+## Task 3: `grafin-ai-dashboard-web` — Makefile + workflow_dispatch
 
 **Files:**
-- Create: `garda-ai-dashboard-web/Makefile`
-- Create: `garda-ai-dashboard-web/deploy.env.example`
-- Modify: `garda-ai-dashboard-web/.gitignore` (add `deploy.env`)
-- Modify: `garda-ai-dashboard-web/.github/workflows/deploy.yml` (trigger only)
+- Create: `grafin-ai-dashboard-web/Makefile`
+- Create: `grafin-ai-dashboard-web/deploy.env.example`
+- Modify: `grafin-ai-dashboard-web/.gitignore` (add `deploy.env`)
+- Modify: `grafin-ai-dashboard-web/.github/workflows/deploy.yml` (trigger only)
 
-- [ ] **Step 1: Create `garda-ai-dashboard-web/Makefile`** (service = `garda-frontend`, image = `frontend`)
+- [ ] **Step 1: Create `grafin-ai-dashboard-web/Makefile`** (service = `grafin-frontend`, image = `frontend`)
 
 ```makefile
 # Manual, operator-run deploy to GCP Cloud Run.
@@ -290,11 +290,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 # Then:   make deploy
 -include deploy.env
 
-SERVICE    := garda-frontend
+SERVICE    := grafin-frontend
 IMAGE_NAME := frontend
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy
@@ -332,7 +332,7 @@ deploy: push
 
 (Recipe lines MUST use TAB indentation.)
 
-- [ ] **Step 2: Create `garda-ai-dashboard-web/deploy.env.example`**
+- [ ] **Step 2: Create `grafin-ai-dashboard-web/deploy.env.example`**
 
 ```bash
 # Copy this file to deploy.env (gitignored) and edit, OR export these in your shell.
@@ -343,31 +343,31 @@ GCP_REGION=asia-southeast1
 
 - [ ] **Step 3: Add `deploy.env` to `.gitignore`**
 
-Append to `garda-ai-dashboard-web/.gitignore` (its `.env.*` pattern does NOT match `deploy.env`):
+Append to `grafin-ai-dashboard-web/.gitignore` (its `.env.*` pattern does NOT match `deploy.env`):
 
 ```
 deploy.env
 ```
 
-- [ ] **Step 4: Flip the workflow trigger in `garda-ai-dashboard-web/.github/workflows/deploy.yml`**
+- [ ] **Step 4: Flip the workflow trigger in `grafin-ai-dashboard-web/.github/workflows/deploy.yml`**
 
 Replace `on:\n  push:\n    branches: [main]` with `on:\n  workflow_dispatch:`. Leave everything else as-is.
 
 - [ ] **Step 5: Verify the guard fires**
 
-Run: `cd garda-ai-dashboard-web && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
+Run: `cd grafin-ai-dashboard-web && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
 Expected: `ERROR: GCP_PROJECT is not set ...` and `exit=1`.
 
 - [ ] **Step 6: Verify the deploy command sequence**
 
-Run: `cd garda-ai-dashboard-web && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
-Expected: `docker build` of `.../garda/frontend:<sha>` + `:latest`, both `docker push`, then `gcloud run deploy garda-frontend --image ".../garda/frontend:<sha>" --region asia-southeast1 --quiet`.
+Run: `cd grafin-ai-dashboard-web && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy`
+Expected: `docker build` of `.../grafin/frontend:<sha>` + `:latest`, both `docker push`, then `gcloud run deploy grafin-frontend --image ".../grafin/frontend:<sha>" --region asia-southeast1 --quiet`.
 
 - [ ] **Step 7: Verify the workflow parses and triggers only on workflow_dispatch**
 
 Run:
 ```bash
-cd garda-ai-dashboard-web
+cd grafin-ai-dashboard-web
 python3 -c "import yaml; d=yaml.safe_load(open('.github/workflows/deploy.yml')); print(d.get(True) or d.get('on'))"
 grep -nE "on:|workflow_dispatch|push:" .github/workflows/deploy.yml
 ```
@@ -376,7 +376,7 @@ Expected: trigger is `{'workflow_dispatch': None}`; NO `push:`.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-dashboard-web
+cd grafin-ai-dashboard-web
 git add Makefile deploy.env.example .gitignore .github/workflows/deploy.yml
 git commit -m "feat: manual make deploy + workflow_dispatch (no auto-deploy on main)
 
@@ -387,18 +387,18 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 4: `garda-ai-ingest` — Makefile (job variant) + workflow_dispatch
+## Task 4: `grafin-ai-ingest` — Makefile (job variant) + workflow_dispatch
 
 **Files:**
-- Create: `garda-ai-ingest/Makefile`
-- Create: `garda-ai-ingest/deploy.env.example`
-- Modify: `garda-ai-ingest/.gitignore` (add `deploy.env`)
-- Modify: `garda-ai-ingest/.github/workflows/deploy.yml` (trigger only)
+- Create: `grafin-ai-ingest/Makefile`
+- Create: `grafin-ai-ingest/deploy.env.example`
+- Modify: `grafin-ai-ingest/.gitignore` (add `deploy.env`)
+- Modify: `grafin-ai-ingest/.github/workflows/deploy.yml` (trigger only)
 
-- [ ] **Step 1: Create `garda-ai-ingest/Makefile`** (Cloud Run **job**, not service; adds `execute`)
+- [ ] **Step 1: Create `grafin-ai-ingest/Makefile`** (Cloud Run **job**, not service; adds `execute`)
 
 ```makefile
-# Manual, operator-run deploy of the garda-ingest Cloud Run JOB.
+# Manual, operator-run deploy of the grafin-ingest Cloud Run JOB.
 #
 # Prerequisites (once per machine):
 #   gcloud auth login && gcloud config set project <your-project>
@@ -410,11 +410,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 #         make execute   (run the job now to seed reference data)
 -include deploy.env
 
-JOB        := garda-ingest
+JOB        := grafin-ingest
 IMAGE_NAME := ingest
 TAG        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 
-REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/garda
+REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/grafin
 IMAGE    := $(REGISTRY)/$(IMAGE_NAME)
 
 .PHONY: help check-env print-config build push deploy execute
@@ -456,7 +456,7 @@ execute: check-env
 
 (Recipe lines MUST use TAB indentation.)
 
-- [ ] **Step 2: Create `garda-ai-ingest/deploy.env.example`**
+- [ ] **Step 2: Create `grafin-ai-ingest/deploy.env.example`**
 
 ```bash
 # Copy this file to deploy.env (gitignored) and edit, OR export these in your shell.
@@ -467,36 +467,36 @@ GCP_REGION=asia-southeast1
 
 - [ ] **Step 3: Add `deploy.env` to `.gitignore`**
 
-Append to `garda-ai-ingest/.gitignore` (it ignores `.env` exactly, which does NOT match `deploy.env`):
+Append to `grafin-ai-ingest/.gitignore` (it ignores `.env` exactly, which does NOT match `deploy.env`):
 
 ```
 deploy.env
 ```
 
-- [ ] **Step 4: Flip the workflow trigger in `garda-ai-ingest/.github/workflows/deploy.yml`**
+- [ ] **Step 4: Flip the workflow trigger in `grafin-ai-ingest/.github/workflows/deploy.yml`**
 
-Replace `on:\n  push:\n    branches: [main]` with `on:\n  workflow_dispatch:`. Leave the rest (including `gcloud run jobs deploy garda-ingest`) as-is.
+Replace `on:\n  push:\n    branches: [main]` with `on:\n  workflow_dispatch:`. Leave the rest (including `gcloud run jobs deploy grafin-ingest`) as-is.
 
 - [ ] **Step 5: Verify the guard fires**
 
-Run: `cd garda-ai-ingest && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
+Run: `cd grafin-ai-ingest && env -u GCP_PROJECT -u GCP_REGION make check-env; echo "exit=$?"`
 Expected: `ERROR: GCP_PROJECT is not set ...` and `exit=1`.
 
 - [ ] **Step 6: Verify the deploy + execute command sequences**
 
 Run:
 ```bash
-cd garda-ai-ingest
+cd grafin-ai-ingest
 GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy
 GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n execute
 ```
-Expected: `deploy` shows `docker build`/`docker push` of `.../garda/ingest:<sha>`+`:latest` then `gcloud run jobs deploy garda-ingest --image ".../garda/ingest:<sha>" --region asia-southeast1 --quiet`; `execute` shows `gcloud run jobs execute garda-ingest --region asia-southeast1 --wait`.
+Expected: `deploy` shows `docker build`/`docker push` of `.../grafin/ingest:<sha>`+`:latest` then `gcloud run jobs deploy grafin-ingest --image ".../grafin/ingest:<sha>" --region asia-southeast1 --quiet`; `execute` shows `gcloud run jobs execute grafin-ingest --region asia-southeast1 --wait`.
 
 - [ ] **Step 7: Verify the workflow parses and triggers only on workflow_dispatch**
 
 Run:
 ```bash
-cd garda-ai-ingest
+cd grafin-ai-ingest
 python3 -c "import yaml; d=yaml.safe_load(open('.github/workflows/deploy.yml')); print(d.get(True) or d.get('on'))"
 grep -nE "on:|workflow_dispatch|push:" .github/workflows/deploy.yml
 ```
@@ -505,7 +505,7 @@ Expected: trigger is `{'workflow_dispatch': None}`; NO `push:`.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-ingest
+cd grafin-ai-ingest
 git add Makefile deploy.env.example .gitignore .github/workflows/deploy.yml
 git commit -m "feat: manual make deploy/execute + workflow_dispatch (no auto-deploy on main)
 
@@ -514,11 +514,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 5: `garda-ai-deploy/terraform` — `ignore_changes` on the image
+## Task 5: `grafin-ai-deploy/terraform` — `ignore_changes` on the image
 
 **Files:**
-- Modify: `garda-ai-deploy/terraform/cloudrun.tf` (3 services)
-- Modify: `garda-ai-deploy/terraform/jobs.tf` (ingest job only)
+- Modify: `grafin-ai-deploy/terraform/cloudrun.tf` (3 services)
+- Modify: `grafin-ai-deploy/terraform/jobs.tf` (ingest job only)
 
 - [ ] **Step 1: Add `lifecycle` to the `scoring` service in `cloudrun.tf`**
 
@@ -566,7 +566,7 @@ Do NOT add a lifecycle block to the `migrate` job — it stays terraform-owned s
 
 Run:
 ```bash
-cd garda-ai-deploy/terraform
+cd grafin-ai-deploy/terraform
 terraform fmt
 terraform validate 2>/dev/null || tofu validate
 ```
@@ -574,13 +574,13 @@ Expected: `fmt` leaves files formatted (reports the two changed files at most); 
 
 - [ ] **Step 6: Confirm exactly four lifecycle blocks, none on migrate**
 
-Run: `cd garda-ai-deploy/terraform && grep -c "ignore_changes" cloudrun.tf jobs.tf`
+Run: `cd grafin-ai-deploy/terraform && grep -c "ignore_changes" cloudrun.tf jobs.tf`
 Expected: `cloudrun.tf:3` and `jobs.tf:1`. Then `grep -n "migrate" jobs.tf` and confirm no `lifecycle`/`ignore_changes` appears within the migrate resource block.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd garda-ai-deploy
+cd grafin-ai-deploy
 git add terraform/cloudrun.tf terraform/jobs.tf
 git commit -m "feat(tf): ignore image changes on Cloud Run services + ingest job
 
@@ -592,11 +592,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 6: `garda-ai-deploy` docs — runbook + stale-language sweep
+## Task 6: `grafin-ai-deploy` docs — runbook + stale-language sweep
 
 **Files:**
-- Modify: `garda-ai-deploy/docs/deploy/gcp-runbook.md`
-- Possibly modify: other files under `garda-ai-deploy/docs/` if the grep in Step 3 finds stale auto-deploy language
+- Modify: `grafin-ai-deploy/docs/deploy/gcp-runbook.md`
+- Possibly modify: other files under `grafin-ai-deploy/docs/` if the grep in Step 3 finds stale auto-deploy language
 
 - [ ] **Step 1: Update the CI/CD alternative in `gcp-runbook.md`**
 
@@ -607,7 +607,7 @@ Find the "Alternative: Let CI/CD do the build and push" text (around the Phase 2
 
 1. **Local (operator clones the repo):**
    ```bash
-   cd garda-ai-<service>
+   cd grafin-ai-<service>
    cp deploy.env.example deploy.env   # edit GCP_PROJECT / GCP_REGION (or export them)
    make deploy                        # build -> push -> gcloud run deploy
    ```
@@ -628,24 +628,24 @@ Add this section (place it near the top of the deploy phases, or right after Pha
 1. Foundation: `terraform apply -target=...` (VPC, Cloud SQL, Redis, Artifact Registry, secrets).
 2. Seed first images: in each service repo, `make push` (build + push only — does NOT create the service).
 3. Create services/jobs: full `terraform apply` (images now exist; services get their VPC/secret/ingress wiring).
-4. Init data: `gcloud run jobs execute garda-migrate --region $REGION --wait`, then in `garda-ai-ingest` run `make execute` (seeds reference data).
+4. Init data: `gcloud run jobs execute grafin-migrate --region $REGION --wait`, then in `grafin-ai-ingest` run `make execute` (seeds reference data).
 
 **Routine redeploy (the common case):**
 - In the changed service repo: `make deploy` (build -> push -> `gcloud run deploy` a new revision). No terraform, no other services touched.
-- Breaking DB migration: run the `garda-migrate` job first. Because the migrate job stays terraform-owned, refresh it with `terraform apply` (re-resolves the backend `:latest` digest) before `gcloud run jobs execute garda-migrate --wait`.
+- Breaking DB migration: run the `grafin-migrate` job first. Because the migrate job stays terraform-owned, refresh it with `terraform apply` (re-resolves the backend `:latest` digest) before `gcloud run jobs execute grafin-migrate --wait`.
 
 `terraform` owns resource creation and wiring; `make deploy` owns image rollout. The terraform `lifecycle { ignore_changes = [...image] }` keeps `terraform apply` from reverting an operator's rollout.
 ```
 
 - [ ] **Step 3: Sweep docs for stale auto-deploy language**
 
-Run: `cd garda-ai-deploy && grep -rniE "push to main|on push to|auto-deploy|automatically deploy|triggers on push|on: *push" docs/ || echo "clean"`
+Run: `cd grafin-ai-deploy && grep -rniE "push to main|on push to|auto-deploy|automatically deploy|triggers on push|on: *push" docs/ || echo "clean"`
 For each hit, correct it to reflect the manual model (`workflow_dispatch` / `make deploy`). Common candidates: `docs/deploy/02-container.md`, `docs/deploy/01-context.md`. If a hit is describing `ci.yml` (lint/test on PRs — which legitimately still runs on push/PR), leave it. Re-run the grep until only legitimate CI references (or `clean`) remain.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd garda-ai-deploy
+cd grafin-ai-deploy
 git add docs/
 git commit -m "docs: manual deploy runbook (make deploy + workflow_dispatch) and deploy sequence
 
@@ -663,7 +663,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Run:
 ```bash
 cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories"
-for r in garda-ai-backend garda-ai-scoring garda-ai-dashboard-web garda-ai-ingest; do
+for r in grafin-ai-backend grafin-ai-scoring grafin-ai-dashboard-web grafin-ai-ingest; do
   echo "=== $r ==="
   python3 -c "import yaml; d=yaml.safe_load(open('$r/.github/workflows/deploy.yml')); t=d.get(True) or d.get('on'); print('trigger:', t); assert t=={'workflow_dispatch': None}, 'NOT dispatch-only'"
 done
@@ -675,19 +675,19 @@ Expected: each prints `trigger: {'workflow_dispatch': None}` with no assertion e
 Run:
 ```bash
 cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories"
-for r in garda-ai-backend garda-ai-scoring garda-ai-dashboard-web; do
+for r in grafin-ai-backend grafin-ai-scoring grafin-ai-dashboard-web; do
   echo "=== $r ==="; (cd $r && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy | grep -E "gcloud run deploy")
 done
-(cd garda-ai-ingest && echo "=== garda-ai-ingest ===" && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy | grep -E "gcloud run jobs deploy")
+(cd grafin-ai-ingest && echo "=== grafin-ai-ingest ===" && GCP_PROJECT=demo-proj GCP_REGION=asia-southeast1 make -n deploy | grep -E "gcloud run jobs deploy")
 ```
-Expected: `garda-backend`, `garda-scoring`, `garda-frontend` service deploys; `garda-ingest` job deploy.
+Expected: `grafin-backend`, `grafin-scoring`, `grafin-frontend` service deploys; `grafin-ingest` job deploy.
 
 - [ ] **Step 2b: Every guard fails clean with no config**
 
 Run:
 ```bash
 cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories"
-for r in garda-ai-backend garda-ai-scoring garda-ai-dashboard-web garda-ai-ingest; do
+for r in grafin-ai-backend grafin-ai-scoring grafin-ai-dashboard-web grafin-ai-ingest; do
   (cd $r && env -u GCP_PROJECT -u GCP_REGION make check-env >/dev/null 2>&1; echo "$r exit=$?")
 done
 ```
@@ -698,7 +698,7 @@ Expected: every line ends `exit=1`.
 Run:
 ```bash
 cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories"
-for r in garda-ai-backend garda-ai-scoring garda-ai-dashboard-web garda-ai-ingest; do
+for r in grafin-ai-backend grafin-ai-scoring grafin-ai-dashboard-web grafin-ai-ingest; do
   echo "=== $r ==="
   git -C $r ls-files | grep -E "deploy.env" || echo "  (none tracked)"
 done
@@ -707,7 +707,7 @@ Expected: each repo tracks `deploy.env.example` but NOT `deploy.env`.
 
 - [ ] **Step 4: terraform lifecycle count**
 
-Run: `cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/garda-ai-deploy/terraform" && grep -c ignore_changes cloudrun.tf jobs.tf`
+Run: `cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/grafin-ai-deploy/terraform" && grep -c ignore_changes cloudrun.tf jobs.tf`
 Expected: `cloudrun.tf:3`, `jobs.tf:1`.
 
 - [ ] **Step 5: All five repos clean, last commit authored correctly**
@@ -715,7 +715,7 @@ Expected: `cloudrun.tf:3`, `jobs.tf:1`.
 Run:
 ```bash
 cd "/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories"
-for r in garda-ai-backend garda-ai-scoring garda-ai-dashboard-web garda-ai-ingest garda-ai-deploy; do
+for r in grafin-ai-backend grafin-ai-scoring grafin-ai-dashboard-web grafin-ai-ingest grafin-ai-deploy; do
   echo "=== $r ==="
   git -C $r status --porcelain | head -5
   git -C $r log -1 --format="  %an <%ae> — %s"
@@ -731,5 +731,5 @@ Expected: each repo clean (no uncommitted changes) and the last commit authored 
 - All four `deploy.yml` trigger ONLY on `workflow_dispatch` — no `push: main` auto-deploy remains.
 - terraform: 3 services + the ingest job carry `ignore_changes` on the image; the migrate job does not; `validate` is green.
 - The runbook describes both manual routes and the cold-start vs routine sequence; no stale auto-deploy language remains in docs (except legitimate `ci.yml` PR triggers).
-- `garda-ai-sim` is untouched.
+- `grafin-ai-sim` is untouched.
 - Every commit authored as Thariq Iskandar Zulkarnain M P with the `Co-Authored-By: Claude` trailer; nothing pushed to any remote.

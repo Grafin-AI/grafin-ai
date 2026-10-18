@@ -1,5 +1,5 @@
 resource "google_redis_instance" "redis" {
-  name               = "garda-redis"
+  name               = "grafin-redis"
   tier               = var.redis_tier
   memory_size_gb     = var.redis_size_gb
   region             = var.region

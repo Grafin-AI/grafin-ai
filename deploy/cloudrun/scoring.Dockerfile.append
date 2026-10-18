@@ -1,4 +1,4 @@
-# Cloud Run: model scores (garda-train export-scores, run small-id-s2) baked into the image.
+# Cloud Run: model scores (grafin-train export-scores, run small-id-s2) baked into the image.
 COPY scores /scores
-ENV GARDA_SCORER=precomputed GARDA_SCORES_PATH=/scores/scores.csv
-CMD ["sh", "-c", "uv run --no-sync uvicorn garda_ai_scoring.api.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+ENV GRAFIN_SCORER=precomputed GRAFIN_SCORES_PATH=/scores/scores.csv
+CMD ["sh", "-c", "uv run --no-sync uvicorn grafin_ai_scoring.api.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

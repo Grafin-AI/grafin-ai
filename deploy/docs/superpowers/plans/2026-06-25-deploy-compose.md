@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Rework `garda-ai-deploy/docker-compose.yml` into the new local-dev stack: drop the deleted pipeline `etl`/`replay`, add `scoring` + the `ingest` one-shot seed + the backend's ingest env, and put `sim` and Prometheus/Grafana behind opt-in profiles.
+**Goal:** Rework `grafin-ai-deploy/docker-compose.yml` into the new local-dev stack: drop the deleted pipeline `etl`/`replay`, add `scoring` + the `ingest` one-shot seed + the backend's ingest env, and put `sim` and Prometheus/Grafana behind opt-in profiles.
 
 **Architecture:** The stack is local-dev only. Boot order: `postgres`/`redis` healthy → `backend` (its entrypoint runs `alembic upgrade head` + seeds admin, then serves → becomes healthy) → `ingest` one-shot (seeds reference data; depends on `backend: service_healthy`, so the schema exists) → `frontend`. `scoring` runs alongside (backend calls it on `/ingest`). `sim` (profile `sim`) streams into the stack; Prometheus/Grafana (profile `observability`) are off by default.
 
@@ -17,24 +17,24 @@
 ## Task 1: Rewrite `docker-compose.yml`
 
 **Files:**
-- Modify: `garda-ai-deploy/docker-compose.yml`
+- Modify: `grafin-ai-deploy/docker-compose.yml`
 
 - [ ] **Step 1: Replace the file with the new service set**
 
 ```yaml
-name: garda-ai
+name: grafin-ai
 
-x-db-url: &db_url postgresql+asyncpg://${POSTGRES_USER:-garda}:${POSTGRES_PASSWORD:-garda}@postgres:5432/${POSTGRES_DB:-garda}
+x-db-url: &db_url postgresql+asyncpg://${POSTGRES_USER:-grafin}:${POSTGRES_PASSWORD:-grafin}@postgres:5432/${POSTGRES_DB:-grafin}
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-garda}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garda}
-      POSTGRES_DB: ${POSTGRES_DB:-garda}
+      POSTGRES_USER: ${POSTGRES_USER:-grafin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-grafin}
+      POSTGRES_DB: ${POSTGRES_DB:-grafin}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garda}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-grafin}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -50,9 +50,9 @@ services:
       retries: 10
 
   scoring:
-    build: { context: ../garda-ai-scoring }
+    build: { context: ../grafin-ai-scoring }
     environment:
-      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
+      GRAFIN_SCORING_TOKEN: ${GRAFIN_SCORING_TOKEN:?set GRAFIN_SCORING_TOKEN}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else sys.exit(1)"]
       interval: 5s
@@ -61,15 +61,15 @@ services:
     # internal only — not published to the host
 
   backend:
-    build: { context: ../garda-ai-backend }
+    build: { context: ../grafin-ai-backend }
     environment:
-      GARDA_DATABASE_URL: *db_url
-      GARDA_REDIS_URL: redis://redis:6379/0
-      GARDA_JWT_SECRET: ${GARDA_JWT_SECRET:?set a >=32 char secret}
-      GARDA_ENV: ${GARDA_ENV:-production}
-      GARDA_SCORING_URL: http://scoring:8000
-      GARDA_SCORING_TOKEN: ${GARDA_SCORING_TOKEN:?set GARDA_SCORING_TOKEN}
-      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
+      GRAFIN_DATABASE_URL: *db_url
+      GRAFIN_REDIS_URL: redis://redis:6379/0
+      GRAFIN_JWT_SECRET: ${GRAFIN_JWT_SECRET:?set a >=32 char secret}
+      GRAFIN_ENV: ${GRAFIN_ENV:-production}
+      GRAFIN_SCORING_URL: http://scoring:8000
+      GRAFIN_SCORING_TOKEN: ${GRAFIN_SCORING_TOKEN:?set GRAFIN_SCORING_TOKEN}
+      GRAFIN_INGEST_TOKEN: ${GRAFIN_INGEST_TOKEN:?set GRAFIN_INGEST_TOKEN (>=16 chars)}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -82,30 +82,30 @@ services:
     ports: ["8000:8000"]
 
   ingest:
-    build: { context: ../garda-ai-ingest }
+    build: { context: ../grafin-ai-ingest }
     environment:
-      GARDA_DATABASE_URL: *db_url
-      GARDA_DATA_DIR: /data
+      GRAFIN_DATABASE_URL: *db_url
+      GRAFIN_DATA_DIR: /data
     volumes:
-      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+      - ${GRAFIN_DATA_HOST_DIR:-../grafin-ai-data/HI-Small}:/data:ro
     depends_on:
       backend: { condition: service_healthy }   # backend entrypoint ran alembic upgrade -> schema exists
     restart: "no"
 
   frontend:
-    build: { context: ../garda-ai-dashboard-web }
+    build: { context: ../grafin-ai-dashboard-web }
     depends_on: [backend]
     ports: ["8080:8080"]
 
   sim:
-    build: { context: ../garda-ai-sim }
+    build: { context: ../grafin-ai-sim }
     profiles: ["sim"]
     environment:
-      GARDA_INGEST_URL: http://backend:8000/api/v1/ingest
-      GARDA_INGEST_TOKEN: ${GARDA_INGEST_TOKEN:?set GARDA_INGEST_TOKEN (>=16 chars)}
-      GARDA_DATA_DIR: /data
+      GRAFIN_INGEST_URL: http://backend:8000/api/v1/ingest
+      GRAFIN_INGEST_TOKEN: ${GRAFIN_INGEST_TOKEN:?set GRAFIN_INGEST_TOKEN (>=16 chars)}
+      GRAFIN_DATA_DIR: /data
     volumes:
-      - ${GARDA_DATA_HOST_DIR:-../garda-ai-data/HI-Small}:/data:ro
+      - ${GRAFIN_DATA_HOST_DIR:-../grafin-ai-data/HI-Small}:/data:ro
     depends_on:
       backend: { condition: service_healthy }
       scoring: { condition: service_started }
@@ -135,7 +135,7 @@ volumes:
 
 - [ ] **Step 2: Validate the compose file**
 
-Run: `cd garda-ai-deploy && cp -n .env.example .env 2>/dev/null; GARDA_JWT_SECRET=x GARDA_SCORING_TOKEN=y GARDA_INGEST_TOKEN=0123456789abcdef docker compose config >/dev/null && echo "compose OK"`
+Run: `cd grafin-ai-deploy && cp -n .env.example .env 2>/dev/null; GRAFIN_JWT_SECRET=x GRAFIN_SCORING_TOKEN=y GRAFIN_INGEST_TOKEN=0123456789abcdef docker compose config >/dev/null && echo "compose OK"`
 Expected: `compose OK` (no `etl`/`replay`; `sim`/`prometheus`/`grafana` present but profile-gated).
 
 - [ ] **Step 3: Confirm the profile gating**
@@ -155,21 +155,21 @@ git commit -m "feat: rework compose for the new service set (drop pipeline, add 
 ## Task 2: Update `.env.example` and `prometheus.yml`
 
 **Files:**
-- Modify: `garda-ai-deploy/.env.example`, `garda-ai-deploy/observability/prometheus.yml`
+- Modify: `grafin-ai-deploy/.env.example`, `grafin-ai-deploy/observability/prometheus.yml`
 
 - [ ] **Step 1: Rewrite `.env.example`**
 
 ```bash
-POSTGRES_USER=garda
-POSTGRES_PASSWORD=garda
-POSTGRES_DB=garda
-GARDA_JWT_SECRET=change-me-to-a-long-random-secret-of-at-least-32-bytes
-GARDA_ENV=production
+POSTGRES_USER=grafin
+POSTGRES_PASSWORD=grafin
+POSTGRES_DB=grafin
+GRAFIN_JWT_SECRET=change-me-to-a-long-random-secret-of-at-least-32-bytes
+GRAFIN_ENV=production
 # Machine tokens (distinct from user JWTs). Ingest token must be >= 16 chars.
-GARDA_SCORING_TOKEN=change-me-scoring-token
-GARDA_INGEST_TOKEN=change-me-ingest-token-at-least-16-chars
+GRAFIN_SCORING_TOKEN=change-me-scoring-token
+GRAFIN_INGEST_TOKEN=change-me-ingest-token-at-least-16-chars
 # Absolute or relative path (from this compose file) to the dataset dir
-GARDA_DATA_HOST_DIR=../garda-ai-data/HI-Small
+GRAFIN_DATA_HOST_DIR=../grafin-ai-data/HI-Small
 ```
 
 - [ ] **Step 2: Update `observability/prometheus.yml` (add scoring, drop the stale replay note)**
@@ -179,11 +179,11 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: garda-backend
+  - job_name: grafin-backend
     metrics_path: /metrics
     static_configs:
       - targets: ['backend:8000']
-  - job_name: garda-scoring
+  - job_name: grafin-scoring
     metrics_path: /metrics
     static_configs:
       - targets: ['scoring:8000']
@@ -201,7 +201,7 @@ git commit -m "chore: add scoring/ingest tokens to env example; scrape scoring m
 ## Task 3: Update the `Makefile`
 
 **Files:**
-- Modify: `garda-ai-deploy/Makefile`
+- Modify: `grafin-ai-deploy/Makefile`
 
 - [ ] **Step 1: Rewrite the Makefile (drop `demo-reset` which used the deleted replay; add `sim`/`obs` helpers)**
 
@@ -235,7 +235,7 @@ seed-secret:
 
 - [ ] **Step 2: Verify**
 
-Run: `cd garda-ai-deploy && make config`
+Run: `cd grafin-ai-deploy && make config`
 Expected: `compose OK`. Confirm `demo-reset` is gone: `grep -c demo-reset Makefile` → `0`.
 
 - [ ] **Step 3: Commit**
@@ -253,15 +253,15 @@ git commit -m "chore: Makefile — drop replay demo-reset, add sim/obs profile h
 
 - [ ] **Step 1: Confirm no pipeline residue in deploy config**
 
-Run: `cd garda-ai-deploy && grep -rniE "etl|replay|pipeline|garda-ai-pipeline|garda-etl|garda-replay|sim_state" docker-compose.yml Makefile .env.example observability/ || echo "clean"`
+Run: `cd grafin-ai-deploy && grep -rniE "etl|replay|pipeline|grafin-ai-pipeline|grafin-etl|grafin-replay|sim_state" docker-compose.yml Makefile .env.example observability/ || echo "clean"`
 Expected: `clean`.
 
 - [ ] **Step 2: Best-effort stack bring-up (if Docker is available and the images build)**
 
 Run:
 ```bash
-cd garda-ai-deploy
-printf 'GARDA_JWT_SECRET=%s\nGARDA_SCORING_TOKEN=devscoringtoken\nGARDA_INGEST_TOKEN=devingesttoken16plus\n' "$(head -c 48 /dev/urandom | base64)" >> .env 2>/dev/null || true
+cd grafin-ai-deploy
+printf 'GRAFIN_JWT_SECRET=%s\nGRAFIN_SCORING_TOKEN=devscoringtoken\nGRAFIN_INGEST_TOKEN=devingesttoken16plus\n' "$(head -c 48 /dev/urandom | base64)" >> .env 2>/dev/null || true
 docker compose up -d --build postgres redis scoring backend frontend
 ```
 Then wait for backend healthy and check the ingest one-shot completed:
@@ -287,7 +287,7 @@ git add -A && git commit -m "chore: compose smoke-test fixups" || echo "nothing 
 
 - `docker compose config` valid; default services = postgres/redis/scoring/backend/ingest/frontend; `sim` + `prometheus`/`grafana` are profile-gated (`sim`, `observability`).
 - No `etl`/`replay`/pipeline references anywhere in the deploy config.
-- `.env.example` documents `GARDA_SCORING_TOKEN` + `GARDA_INGEST_TOKEN`; prometheus scrapes backend + scoring.
+- `.env.example` documents `GRAFIN_SCORING_TOKEN` + `GRAFIN_INGEST_TOKEN`; prometheus scrapes backend + scoring.
 - `Makefile` has no `demo-reset`; `make config` prints `compose OK`; `make sim`/`make obs` work.
 - (Best-effort) a default `up` brings the stack healthy and the ingest seed completes.
 - All commits authored as Thariq Iskandar Zulkarnain M P with the `Co-Authored-By: Claude` trailer.

@@ -1,4 +1,4 @@
-# Garda AI AML Platform — STRIDE Threat Model
+# Grafin AI AML Platform — STRIDE Threat Model
 
 **Version:** 2.0  
 **Date:** 2026-08-08 (Updated for GCP Cloud Run deployment architecture)  
@@ -14,11 +14,11 @@ Browser (React SPA)
                  |-- /api  --> FastAPI Backend (JWT-authenticated REST)
                  |-- /ws   --> FastAPI Backend (JWT-authenticated WebSocket)
                               |-- Cloud SQL (Postgres, parameterized SQL, source of truth)
-                              |-- Memorystore (Redis: refresh tokens, cache, pub/sub garda:events:live)
+                              |-- Memorystore (Redis: refresh tokens, cache, pub/sub grafin:events:live)
                               |
                               |-- Scoring Service (HTTP, bearer scoring token)
 
-External Producer (garda-ai-sim or real feed)
+External Producer (grafin-ai-sim or real feed)
   |-- HTTPS --> Backend POST /api/v1/ingest (bearer ingest token)
                  |-- Scores batches via Scoring Service
                  |-- Persists events to Postgres
@@ -36,7 +36,7 @@ Trust boundaries: Internet / nginx perimeter; nginx / FastAPI internal; FastAPI 
 
 | Category | Threat | Current Mitigations |
 |---|---|---|
-| **Spoofing** | Attacker presents forged or replayed JWT to access API | JWT access tokens signed with `GARDA_JWT_SECRET` (from Secret Manager; fail-closed: refuses to boot if secret is missing or <32 chars). 15 min access TTL limits replay window. Refresh tokens stored in Redis and consumed with atomic GETDEL on rotation — a stolen refresh token can be used at most once before the legitimate holder's next use invalidates it. Logout explicitly revokes the refresh token from Redis. |
+| **Spoofing** | Attacker presents forged or replayed JWT to access API | JWT access tokens signed with `GRAFIN_JWT_SECRET` (from Secret Manager; fail-closed: refuses to boot if secret is missing or <32 chars). 15 min access TTL limits replay window. Refresh tokens stored in Redis and consumed with atomic GETDEL on rotation — a stolen refresh token can be used at most once before the legitimate holder's next use invalidates it. Logout explicitly revokes the refresh token from Redis. |
 | **Spoofing** | Attacker guesses or brute-forces credentials | Passwords hashed with Argon2id. Per-IP login rate limiting via Redis fixed-window counter (10 attempts/min). |
 | **Spoofing** | Attacker forges ingest or scoring bearer tokens | Ingest and scoring tokens are uniformly random, stored in Secret Manager, and supplied to Cloud Run services via secret_key_ref. Backend validates ingest token on every `POST /api/v1/ingest` request. Backend validates scoring token before calling the Scoring Service. |
 | **Tampering** | Attacker modifies transaction or alert data in Postgres | Parameterized SQL only — no string-concatenated queries. Only two writers: Backend ingest path (guarded by ingest token) and Ingest Job (one-shot, service-account authenticated). FastAPI endpoints are read-oriented for analysts; writes are controlled and RBAC-guarded. |
@@ -76,13 +76,13 @@ The following are known design tradeoffs. Each has a concrete remediation path.
 
 ### 3. Default demo admin credential must be rotated before any non-demo use
 
-**Risk:** The docker-compose deploy ships with `admin@garda.local / admin` as the seeded admin account. Any non-demo environment that does not rotate this credential is fully compromised on first access.  
+**Risk:** The docker-compose deploy ships with `admin@grafin.local / admin` as the seeded admin account. Any non-demo environment that does not rotate this credential is fully compromised on first access.  
 **Remediation:** Add a pre-flight check (or compose entrypoint script) that refuses to start with the default admin password in production mode. Rotate the password and revoke all existing sessions as part of the initial production deployment runbook.
 
-### 4. GARDA_JWT_SECRET strength in production
+### 4. GRAFIN_JWT_SECRET strength in production
 
 **Risk:** A weak or default JWT secret allows token forgery.  
-**Current control (good):** The backend already fails closed — it refuses to start in non-dev mode if `GARDA_JWT_SECRET` is the default value or shorter than 32 characters.  
+**Current control (good):** The backend already fails closed — it refuses to start in non-dev mode if `GRAFIN_JWT_SECRET` is the default value or shorter than 32 characters.  
 **Remediation:** Document the minimum recommended entropy (256-bit / 32-byte random value, e.g. `openssl rand -hex 32`) in the deployment runbook. Inject via Secret Manager, not a plain environment variable.
 
 ### 5. No per-user WebSocket connection cap — connection flooding via token abuse

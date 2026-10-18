@@ -1,19 +1,19 @@
-# Garda AI — System Architecture Design
+# Grafin AI — System Architecture Design
 
 **Date:** 2026-06-22
 **Status:** Approved (brainstorming)
-**Scope:** Cross-cutting anchor spec for the Garda AI real-time AML detection platform. Owns the system-wide contracts that the per-repo specs depend on.
+**Scope:** Cross-cutting anchor spec for the Grafin AI real-time AML detection platform. Owns the system-wide contracts that the per-repo specs depend on.
 
 Related specs:
-- `garda-ai-backend/docs/superpowers/specs/2026-06-22-backend-api-design.md`
-- `garda-ai-pipeline/docs/superpowers/specs/2026-06-22-pipeline-scoring-design.md`
-- `garda-ai-dashboard-web/docs/superpowers/specs/2026-06-22-frontend-integration-design.md`
+- `grafin-ai-backend/docs/superpowers/specs/2026-06-22-backend-api-design.md`
+- `grafin-ai-pipeline/docs/superpowers/specs/2026-06-22-pipeline-scoring-design.md`
+- `grafin-ai-dashboard-web/docs/superpowers/specs/2026-06-22-frontend-integration-design.md`
 
 ---
 
 ## 1. Purpose
 
-Turn the static `garda-ai-dashboard-web` mock dashboard into a real-time Anti-Money-Laundering (AML) monitoring platform backed by a database and live transaction feed, optimized across architecture, performance, security, observability, and deployment.
+Turn the static `grafin-ai-dashboard-web` mock dashboard into a real-time Anti-Money-Laundering (AML) monitoring platform backed by a database and live transaction feed, optimized across architecture, performance, security, observability, and deployment.
 
 Built for the OJK Hackathon 2025. Data source is the IBM AML **HI-Small** dataset, localized to Indonesian banks and IDR.
 
@@ -21,14 +21,14 @@ Built for the OJK Hackathon 2025. Data source is the IBM AML **HI-Small** datase
 
 | Repo | Function |
 |---|---|
-| `garda-ai-dashboard-web` *(exists)* | React 18 frontend — all dashboard views, API client, WS hook, auth UI |
-| `garda-ai-backend` | FastAPI REST + WebSocket gateway, auth/RBAC, view aggregations. **Owns canonical DB schema + migrations.** |
-| `garda-ai-pipeline` | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine module (`ScoringProvider`) |
-| `garda-ai-deploy` | docker-compose, Terraform, Prometheus, Grafana, CI/CD glue, this spec |
-| `garda-ai-data` *(exists)* | Dataset CSVs (kept out of code repos) |
+| `grafin-ai-dashboard-web` *(exists)* | React 18 frontend — all dashboard views, API client, WS hook, auth UI |
+| `grafin-ai-backend` | FastAPI REST + WebSocket gateway, auth/RBAC, view aggregations. **Owns canonical DB schema + migrations.** |
+| `grafin-ai-pipeline` | ETL (CSV→Postgres), replay worker (accelerated clock), scoring engine module (`ScoringProvider`) |
+| `grafin-ai-deploy` | docker-compose, Terraform, Prometheus, Grafana, CI/CD glue, this spec |
+| `grafin-ai-data` *(exists)* | Dataset CSVs (kept out of code repos) |
 
 **Boundary decisions:**
-- **Backend is the schema source of truth via Alembic migrations**, applied at deploy init. The pipeline imports nothing from the backend: it keeps a committed DDL snapshot (`tests/schema.sql`) for its tests and writes to the same tables via raw SQL. One source of truth for the data model, shared **by contract** (duplicated, not imported). **No service repo depends on another — only `garda-ai-deploy` integrates them.**
+- **Backend is the schema source of truth via Alembic migrations**, applied at deploy init. The pipeline imports nothing from the backend: it keeps a committed DDL snapshot (`tests/schema.sql`) for its tests and writes to the same tables via raw SQL. One source of truth for the data model, shared **by contract** (duplicated, not imported). **No service repo depends on another — only `grafin-ai-deploy` integrates them.**
 - **API/WS contract is OpenAPI.** Backend publishes OpenAPI; frontend generates its TypeScript types from it. No shared package across the language boundary.
 - **Scoring stays a module inside pipeline**, hidden behind the transport-agnostic `ScoringProvider` interface, so it can be extracted into a standalone model-serving API later with no change to the worker, DB, or dashboard.
 
@@ -117,9 +117,9 @@ Authoritative requirements; per-repo specs implement their slice.
 
 ## 9. Deployment
 
-- **Local/demo:** `docker-compose.yml` in `garda-ai-deploy` brings up the whole stack with one command — postgres, redis, backend, pipeline (ETL job + replay worker), frontend (nginx), prometheus, grafana.
+- **Local/demo:** `docker-compose.yml` in `grafin-ai-deploy` brings up the whole stack with one command — postgres, redis, backend, pipeline (ETL job + replay worker), frontend (nginx), prometheus, grafana.
 - **Cloud path:** Terraform skeleton for managed Postgres + container hosting; not required for the demo but scaffolded.
-- **CI/CD:** GitHub Actions per repo — lint, test, SAST, build image, push; deploy workflow in `garda-ai-deploy`.
+- **CI/CD:** GitHub Actions per repo — lint, test, SAST, build image, push; deploy workflow in `grafin-ai-deploy`.
 
 ## 10. Build sequence (cross-repo)
 
@@ -136,7 +136,7 @@ Authoritative requirements; per-repo specs implement their slice.
 
 Documented at all four C4 levels, split by what each level needs:
 
-- **Context + Container (system-wide, authored now):** live in `garda-ai-deploy/docs/c4/` (`01-context.md`, `02-container.md`). Derived from this approved design — the correct source for these architectural levels — with Mermaid C4 diagrams. Judge/onboarding facing.
+- **Context + Container (system-wide, authored now):** live in `grafin-ai-deploy/docs/c4/` (`01-context.md`, `02-container.md`). Derived from this approved design — the correct source for these architectural levels — with Mermaid C4 diagrams. Judge/onboarding facing.
 - **Component + Code (per repo, post-implementation):** generated by the **c4-architecture plugin** (bottom-up: `c4-code` → `c4-component`) against each repo's real code, as the final deliverable of that repo's build. Output goes in each repo under `docs/c4/`. Regenerated when code changes materially.
 - After all repos are implemented, an optional full c4-architecture pass reconciles the per-repo Component/Code docs back up into the system Container/Context docs.
 

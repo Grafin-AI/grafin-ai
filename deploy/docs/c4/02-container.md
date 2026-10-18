@@ -1,4 +1,4 @@
-# Garda AI — C4 Level 2: Container
+# Grafin AI — C4 Level 2: Container
 
 **Date:** 2026-08-08 (GCP Cloud Run deployment topology)
 **Source:** Authored from the approved design (`docs/superpowers/specs/2026-06-25-deploy-split-design.md`). Component + Code levels are generated per repo (bottom-up) after implementation.
@@ -7,11 +7,11 @@
 
 | Container | Repo / Service | Tech | Responsibility | Ingress |
 |---|---|---|---|---|
-| **Dashboard Web** | `garda-ai-dashboard-web` / Cloud Run Service | React 18, Vite, TanStack Query, nginx | SPA frontend + reverse proxy; terminates TLS; proxies `/api` + `/ws` to backend. | Public (`https://app.<domain>`) |
-| **Backend API** | `garda-ai-backend` / Cloud Run Service | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** Token-gated `POST /api/v1/ingest` write-path: scores each batch via scoring service, persists transactions/events/alerts, publishes to Redis for WS relay. | Public (`https://api.<domain>`) |
-| **Scoring Service** | `garda-ai-scoring` / Cloud Run Service | FastAPI (stateless) | Stateless scorer exposing `POST /v1/score`; returns scores/labels for a batch. Called by backend ingest path via internal URL. | Internal (VPC only) |
-| **Migrate Job** | `garda-ai-backend` / Cloud Run Job | FastAPI + Alembic | One-shot schema migration: `alembic upgrade head`. Runs before ingest + services take traffic. | None (one-shot) |
-| **Ingest Job** | `garda-ai-ingest` / Cloud Run Job | Python | Reference dataset seed: loads HI-Small transactions into Postgres. Runs after migrate. | None (one-shot) |
+| **Dashboard Web** | `grafin-ai-dashboard-web` / Cloud Run Service | React 18, Vite, TanStack Query, nginx | SPA frontend + reverse proxy; terminates TLS; proxies `/api` + `/ws` to backend. | Public (`https://app.<domain>`) |
+| **Backend API** | `grafin-ai-backend` / Cloud Run Service | FastAPI, SQLAlchemy 2.0, asyncpg | REST aggregations, WS relay, auth/RBAC, PII masking. **Owns DB schema + migrations.** Token-gated `POST /api/v1/ingest` write-path: scores each batch via scoring service, persists transactions/events/alerts, publishes to Redis for WS relay. | Public (`https://api.<domain>`) |
+| **Scoring Service** | `grafin-ai-scoring` / Cloud Run Service | FastAPI (stateless) | Stateless scorer exposing `POST /v1/score`; returns scores/labels for a batch. Called by backend ingest path via internal URL. | Internal (VPC only) |
+| **Migrate Job** | `grafin-ai-backend` / Cloud Run Job | FastAPI + Alembic | One-shot schema migration: `alembic upgrade head`. Runs before ingest + services take traffic. | None (one-shot) |
+| **Ingest Job** | `grafin-ai-ingest` / Cloud Run Job | Python | Reference dataset seed: loads HI-Small transactions into Postgres. Runs after migrate. | None (one-shot) |
 | **Cloud SQL** | GCP Managed Service | PostgreSQL 16 | Source of truth: accounts, transactions, events, alerts, users. Private IP via VPC connector. | VPC Private |
 | **Memorystore** | GCP Managed Service | Redis 7 | Pub/sub (live events), cache, rate-limit, refresh-token store. Private IP. | VPC Private |
 | **Secret Manager** | GCP Managed Service | — | Centralized secrets: JWT secret, ingest token, scoring token, DB password. | Service-account scoped |
@@ -22,11 +22,11 @@
 
 ```mermaid
 C4Container
-    title Container — Garda AI AML Platform (GCP Cloud Run)
+    title Container — Grafin AI AML Platform (GCP Cloud Run)
 
     Person(analyst, "AML Analyst", "Masked PII")
     Person(admin, "Platform Admin", "Unmasked PII (audited)")
-    System_Ext(sim, "garda-ai-sim", "Local producer — streams via /api/v1/ingest")
+    System_Ext(sim, "grafin-ai-sim", "Local producer — streams via /api/v1/ingest")
 
     System_Boundary(gcp, "GCP Project") {
         System_Boundary(pubsub, "Public (TLS)") {
@@ -96,7 +96,7 @@ See `README.md` for full quickstart.
 ## Critical flows
 
 **Live transaction (commit-then-notify):**
-Backend ingest → score via scoring service → INSERT `transaction_events` + alerts → **COMMIT** (Postgres durable) → publish to Redis `garda:events:live` → WS relay → Dashboard. On reconnect, dashboard backfills via `GET /transactions/live?after_seq=` from Postgres. Postgres is authoritative; WS is notification only.
+Backend ingest → score via scoring service → INSERT `transaction_events` + alerts → **COMMIT** (Postgres durable) → publish to Redis `grafin:events:live` → WS relay → Dashboard. On reconnect, dashboard backfills via `GET /transactions/live?after_seq=` from Postgres. Postgres is authoritative; WS is notification only.
 
 **Dashboard read:** Dashboard → Backend REST → SQL aggregation over persisted events. Redis-cached per time bucket.
 
@@ -105,11 +105,11 @@ Backend ingest → score via scoring service → INSERT `transaction_events` + a
 Deploys are **always a deliberate operator action** — nothing deploys automatically on a merge to `main`.
 
 1. **CI (automatic):** Each service repo runs `.github/workflows/ci.yml` (test/lint) on pushes and PRs. CI never deploys.
-2. **Terraform provisioning:** `garda-ai-deploy/terraform/` provisions GCP infrastructure: networking, Cloud SQL, Memorystore, Secret Manager, services, jobs. Terraform owns resource creation and wiring; it ignores subsequent image changes.
+2. **Terraform provisioning:** `grafin-ai-deploy/terraform/` provisions GCP infrastructure: networking, Cloud SQL, Memorystore, Secret Manager, services, jobs. Terraform owns resource creation and wiring; it ignores subsequent image changes.
 3. **Image build + rollout (manual):** Either route, operator-triggered:
    - **Local:** `make deploy` in the service repo (build → push to Artifact Registry → `gcloud run deploy`), using the operator's own `gcloud auth login`.
    - **GitHub:** Actions tab → **deploy** → **Run workflow** (`workflow_dispatch`), authenticating via Workload Identity Federation.
-4. **Deploy-init jobs:** Operator runs `gcloud run jobs execute garda-migrate` then (in `garda-ai-ingest`) `make execute` to prepare data.
+4. **Deploy-init jobs:** Operator runs `gcloud run jobs execute grafin-migrate` then (in `grafin-ai-ingest`) `make execute` to prepare data.
 
 ## Notes
 
@@ -126,13 +126,13 @@ Deploys are **always a deliberate operator action** — nothing deploys automati
 
 | Component | Status | Evidence |
 |---|---|---|
-| Backend API | ✅ Implemented | `garda-ai-backend` with per-repo CI + GCP deploy workflow |
-| Frontend SPA | ✅ Implemented | `garda-ai-dashboard-web` with nginx templating + per-repo CI + deploy workflow |
-| Scoring Service | ✅ Implemented | `garda-ai-scoring` with per-repo CI + deploy workflow |
-| Ingest Job | ✅ Implemented | `garda-ai-ingest` with per-repo CI + deploy workflow |
+| Backend API | ✅ Implemented | `grafin-ai-backend` with per-repo CI + GCP deploy workflow |
+| Frontend SPA | ✅ Implemented | `grafin-ai-dashboard-web` with nginx templating + per-repo CI + deploy workflow |
+| Scoring Service | ✅ Implemented | `grafin-ai-scoring` with per-repo CI + deploy workflow |
+| Ingest Job | ✅ Implemented | `grafin-ai-ingest` with per-repo CI + deploy workflow |
 | Migrate Job | ✅ Implemented | Alembic integration in backend, deployed as Cloud Run Job |
 | Local Compose | ✅ Working | `docker-compose.yml` with `sim` and `observability` profiles |
-| GCP Terraform IaC | ✅ Authored | `garda-ai-deploy/terraform/` (validate + plan ready; apply is operator step) |
+| GCP Terraform IaC | ✅ Authored | `grafin-ai-deploy/terraform/` (validate + plan ready; apply is operator step) |
 | CI/CD Workflows | ✅ Wired | 4 service repos with `.github/workflows/{ci,deploy}.yml` |
 | Docs (C4 + Runbook) | ✅ Updated | This file + `docs/deploy/gcp-runbook.md` |
 

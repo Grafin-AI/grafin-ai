@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI, SQLAlchemy 2.0 async, Alembic, Postgres, pytest, React/TypeScript.
 
-**Spec:** `garda-ai-deploy/docs/superpowers/specs/2026-08-12-dataset-time-design.md`
+**Spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-08-12-dataset-time-design.md`
 
 **Repo root:** `/Users/thariqiskandar/Documents/Career/BI - OJK Hackathon 2025/repositories/`
 
@@ -16,17 +16,17 @@
 
 **Task order matters:** Task 1 (schema + fixtures) must precede Task 4 (views), because the new column is NOT NULL and fixtures must populate it before queries depend on it.
 
-**Backend test baseline:** 98 tests currently pass (`cd garda-ai-backend && uv run pytest -q`). Run this first and record the number; it must not regress.
+**Backend test baseline:** 98 tests currently pass (`cd grafin-ai-backend && uv run pytest -q`). Run this first and record the number; it must not regress.
 
 ---
 
 ## Task 1: Backend — add `event_time` to `transaction_events`
 
 **Files:**
-- Modify: `garda-ai-backend/garda_ai_backend/schema/transactions.py`
-- Create: `garda-ai-backend/migrations/versions/d3c7e1f5a204_add_event_time_to_events.py`
-- Modify: `garda-ai-backend/tests/conftest.py`
-- Modify: `garda-ai-backend/tests/test_schema.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/schema/transactions.py`
+- Create: `grafin-ai-backend/migrations/versions/d3c7e1f5a204_add_event_time_to_events.py`
+- Modify: `grafin-ai-backend/tests/conftest.py`
+- Modify: `grafin-ai-backend/tests/test_schema.py`
 
 - [ ] **Step 1: Add the column to the model**
 
@@ -130,14 +130,14 @@ In `tests/test_schema.py`, the assertion listing `transaction_events` columns mu
 
 - [ ] **Step 5: Run the backend tests**
 
-Run: `cd garda-ai-backend && uv run pytest -q`
+Run: `cd grafin-ai-backend && uv run pytest -q`
 Expected: same pass count as the baseline (98), no failures. Views still read `surfaced_at` at this point, and because fixture hours now align, results are unchanged.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd garda-ai-backend
-git add garda_ai_backend/schema/transactions.py migrations/versions/d3c7e1f5a204_add_event_time_to_events.py tests/conftest.py tests/test_schema.py
+cd grafin-ai-backend
+git add grafin_ai_backend/schema/transactions.py migrations/versions/d3c7e1f5a204_add_event_time_to_events.py tests/conftest.py tests/test_schema.py
 git commit -m "feat: denormalize event_time onto transaction_events
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -148,8 +148,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 2: Backend — ingest populates `event_time`
 
 **Files:**
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/ingest.py`
-- Modify: `garda-ai-backend/tests/test_ingest_api.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/ingest.py`
+- Modify: `grafin-ai-backend/tests/test_ingest_api.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -184,7 +184,7 @@ Note: tests in this file do not carry a `@pytest.mark.asyncio` decorator (asynci
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `cd garda-ai-backend && uv run pytest tests/test_ingest_api.py::test_event_row_carries_transaction_event_time -q`
+Run: `cd grafin-ai-backend && uv run pytest tests/test_ingest_api.py::test_event_row_carries_transaction_event_time -q`
 Expected: FAIL — `event_time` is not populated (NOT NULL violation or missing attribute).
 
 - [ ] **Step 3: Populate it in the repository**
@@ -215,14 +215,14 @@ Then add the field to each event dict:
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cd garda-ai-backend && uv run pytest -q`
+Run: `cd grafin-ai-backend && uv run pytest -q`
 Expected: baseline + 1 test, all passing.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd garda-ai-backend
-git add garda_ai_backend/repositories/ingest.py tests/test_ingest_api.py
+cd grafin-ai-backend
+git add grafin_ai_backend/repositories/ingest.py tests/test_ingest_api.py
 git commit -m "feat: ingest writes denormalized event_time on the event row
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -233,8 +233,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 3: Backend — the data clock
 
 **Files:**
-- Modify: `garda-ai-backend/garda_ai_backend/api/deps.py`
-- Create: `garda-ai-backend/tests/test_data_clock.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/api/deps.py`
+- Create: `grafin-ai-backend/tests/test_data_clock.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -245,7 +245,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from garda_ai_backend.api import deps
+from grafin_ai_backend.api import deps
 
 
 @pytest.mark.asyncio
@@ -264,7 +264,7 @@ async def test_data_clock_falls_back_to_wall_clock_when_empty(session):
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `cd garda-ai-backend && uv run pytest tests/test_data_clock.py -q`
+Run: `cd grafin-ai-backend && uv run pytest tests/test_data_clock.py -q`
 Expected: FAIL with `AttributeError: module ... has no attribute 'get_data_now'`.
 
 - [ ] **Step 3: Replace `get_now` with `get_data_now`**
@@ -274,7 +274,7 @@ In `api/deps.py`, add these imports to the existing import block:
 ```python
 from sqlalchemy import func, select
 
-from garda_ai_backend.schema import TransactionEvent
+from grafin_ai_backend.schema import TransactionEvent
 ```
 
 Then replace the whole `get_now` function and the `NowDep` line (currently lines ~81-88) with:
@@ -300,7 +300,7 @@ NowDep = Annotated[datetime, Depends(get_data_now)]
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cd garda-ai-backend && uv run pytest tests/test_data_clock.py -q`
+Run: `cd grafin-ai-backend && uv run pytest tests/test_data_clock.py -q`
 Expected: 2 passed.
 
 - [ ] **Step 5: Update the 5 dependency overrides**
@@ -320,19 +320,19 @@ to:
 
 - [ ] **Step 6: Confirm no stale references remain**
 
-Run: `cd garda-ai-backend && grep -rn "get_now" garda_ai_backend/ tests/ || echo "clean"`
+Run: `cd grafin-ai-backend && grep -rn "get_now" grafin_ai_backend/ tests/ || echo "clean"`
 Expected: `clean`.
 
 - [ ] **Step 7: Run the full suite**
 
-Run: `cd garda-ai-backend && uv run pytest -q`
+Run: `cd grafin-ai-backend && uv run pytest -q`
 Expected: baseline + 3, all passing.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-backend
-git add garda_ai_backend/api/deps.py tests/
+cd grafin-ai-backend
+git add grafin_ai_backend/api/deps.py tests/
 git commit -m "feat: data clock — 'now' is max(event_time), not the wall clock
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -343,11 +343,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 4: Backend — read views window on `event_time`
 
 **Files:**
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/metrics.py`
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/analytics.py`
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/geo.py`
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/users_view.py`
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/transactions.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/metrics.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/analytics.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/geo.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/users_view.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/transactions.py`
 
 Every `surfaced_at` used as a **window bound or bucket key** becomes `event_time`. `surfaced_at` stays in SELECT payloads.
 
@@ -390,19 +390,19 @@ Change `.where(TransactionEvent.surfaced_at <= now)` → `.where(TransactionEven
 
 - [ ] **Step 6: Confirm no window filter was missed**
 
-Run: `cd garda-ai-backend && grep -rn "surfaced_at" garda_ai_backend/repositories/`
+Run: `cd grafin-ai-backend && grep -rn "surfaced_at" grafin_ai_backend/repositories/`
 Expected: the only remaining hits are `ingest.py` (`"surfaced_at": now` on write) and `transactions.py` (the SELECT column + payload key). No `surfaced_at <= now`, `>= lower`, `date_trunc`, or `extract` remain.
 
 - [ ] **Step 7: Run the full suite**
 
-Run: `cd garda-ai-backend && uv run pytest -q`
+Run: `cd grafin-ai-backend && uv run pytest -q`
 Expected: all passing (fixture hours were aligned in Task 1, so results are unchanged).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd garda-ai-backend
-git add garda_ai_backend/repositories/
+cd grafin-ai-backend
+git add grafin_ai_backend/repositories/
 git commit -m "feat: read views window on event_time (dataset timeline)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -413,10 +413,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 5: Backend — live feed carries `event_time`
 
 **Files:**
-- Modify: `garda-ai-backend/garda_ai_backend/api/ingest.py`
-- Modify: `garda-ai-backend/garda_ai_backend/repositories/transactions.py`
-- Modify: `garda-ai-backend/garda_ai_backend/api/view_schemas.py`
-- Modify: `garda-ai-backend/tests/test_ingest_api.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/api/ingest.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/repositories/transactions.py`
+- Modify: `grafin-ai-backend/grafin_ai_backend/api/view_schemas.py`
+- Modify: `grafin-ai-backend/tests/test_ingest_api.py`
 
 The WS push and the `after_seq=` backfill must agree field-for-field, or the dashboard's live list and its reconnect-backfill would disagree.
 
@@ -442,7 +442,7 @@ Simpler alternative if the existing publish test is easy to extend: add the two 
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `cd garda-ai-backend && uv run pytest tests/test_ingest_api.py::test_published_message_includes_event_time -q`
+Run: `cd grafin-ai-backend && uv run pytest tests/test_ingest_api.py::test_published_message_includes_event_time -q`
 Expected: FAIL — `KeyError: 'event_time'`.
 
 - [ ] **Step 3: Add `event_time` to the published message**
@@ -477,14 +477,14 @@ Do **not** confuse it with `TransactionDetail`, which already has its own `event
 
 - [ ] **Step 6: Run the full suite**
 
-Run: `cd garda-ai-backend && uv run pytest -q`
+Run: `cd grafin-ai-backend && uv run pytest -q`
 Expected: baseline + 4, all passing.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd garda-ai-backend
-git add garda_ai_backend/api/ingest.py garda_ai_backend/repositories/transactions.py garda_ai_backend/api/view_schemas.py tests/test_ingest_api.py
+cd grafin-ai-backend
+git add grafin_ai_backend/api/ingest.py grafin_ai_backend/repositories/transactions.py grafin_ai_backend/api/view_schemas.py tests/test_ingest_api.py
 git commit -m "feat: live feed and backfill carry event_time
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -495,13 +495,13 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 6: Sim — send each row's CSV timestamp
 
 **Files:**
-- Modify: `garda-ai-sim/garda_ai_sim/producer.py`
-- Modify: `garda-ai-sim/garda_ai_sim/reader.py`
-- Modify: `garda-ai-sim/tests/` (the producer tests)
+- Modify: `grafin-ai-sim/grafin_ai_sim/producer.py`
+- Modify: `grafin-ai-sim/grafin_ai_sim/reader.py`
+- Modify: `grafin-ai-sim/tests/` (the producer tests)
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `garda-ai-sim/tests/test_producer.py`, reusing the file's existing `StubClient` and `_txn(ordinal, minute)` helpers and `_noop_sleep` (all already defined there). Note `Producer` takes explicit kwargs — there is no `settings=` parameter.
+Add to `grafin-ai-sim/tests/test_producer.py`, reusing the file's existing `StubClient` and `_txn(ordinal, minute)` helpers and `_noop_sleep` (all already defined there). Note `Producer` takes explicit kwargs — there is no `settings=` parameter.
 
 `batch_size=10` puts both rows in ONE batch, which is what proves the stamp is per-row rather than one shared per-batch value:
 
@@ -523,7 +523,7 @@ async def test_event_time_is_per_row_csv_timestamp():
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `cd garda-ai-sim && uv run pytest tests/test_producer.py -q`
+Run: `cd grafin-ai-sim && uv run pytest tests/test_producer.py -q`
 Expected: FAIL. Two distinct failures are expected and both are correct:
 - the new test fails on the wall-clock/shared stamp, **or** errors on the removed `now=` kwarg not yet being optional — either way it is red before the change;
 - it may also fail construction because `now` is still a parameter — that is fine, Step 3/4 fix both.
@@ -577,18 +577,18 @@ Change to:
 
 Run:
 ```bash
-cd garda-ai-sim
+cd grafin-ai-sim
 uv run pytest -q
 uv run ruff check .
-uv run mypy --strict garda_ai_sim
+uv run mypy --strict grafin_ai_sim
 ```
 Expected: all tests pass; ruff clean (it will flag unused imports if Step 4 left any); mypy clean.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd garda-ai-sim
-git add garda_ai_sim/ tests/
+cd grafin-ai-sim
+git add grafin_ai_sim/ tests/
 git commit -m "feat: send each row's CSV timestamp as event_time
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -599,11 +599,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 7: Frontend — show dataset time in the live feed
 
 **Files:**
-- Modify: `garda-ai-dashboard-web/src/api/types.ts`
-- Modify: `garda-ai-dashboard-web/src/api/useLiveTransactions.ts`
-- Modify: `garda-ai-dashboard-web/src/components/TransactionMonitor.tsx`
-- Modify: `garda-ai-dashboard-web/src/api/types.test.ts`
-- Modify: `garda-ai-dashboard-web/src/api/useLiveTransactions.test.tsx`
+- Modify: `grafin-ai-dashboard-web/src/api/types.ts`
+- Modify: `grafin-ai-dashboard-web/src/api/useLiveTransactions.ts`
+- Modify: `grafin-ai-dashboard-web/src/components/TransactionMonitor.tsx`
+- Modify: `grafin-ai-dashboard-web/src/api/types.test.ts`
+- Modify: `grafin-ai-dashboard-web/src/api/useLiveTransactions.test.tsx`
 
 **Note:** this repo has no TypeScript toolchain (no `tsconfig.json`, no `typescript` dependency), so `tsc --noEmit` is unavailable. Verify with `npm test` and `npm run build`.
 
@@ -642,7 +642,7 @@ to:
 
 Run:
 ```bash
-cd garda-ai-dashboard-web
+cd grafin-ai-dashboard-web
 npm test -- --watchAll=false
 npm run build
 ```
@@ -651,7 +651,7 @@ Expected: all tests pass; build succeeds.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd garda-ai-dashboard-web
+cd grafin-ai-dashboard-web
 git add src/
 git commit -m "feat: live feed shows dataset event_time
 
@@ -671,7 +671,7 @@ The DB currently holds wall-clock-stamped rows dated 2026-08-12. They would out-
 - [ ] **Step 1: Wipe and rebuild**
 
 ```bash
-cd garda-ai-deploy
+cd grafin-ai-deploy
 docker compose down -v
 docker compose up -d --build
 ```
@@ -687,15 +687,15 @@ Expected: `backend` healthy; `ingest` exited 0 with `seed.done` (~30470 banks / 
 - [ ] **Step 3: Stream a bounded slice of the dataset**
 
 ```bash
-cd garda-ai-deploy
-docker compose run --rm -e GARDA_LIMIT=20000 -e GARDA_SPEED=600 sim
+cd grafin-ai-deploy
+docker compose run --rm -e GRAFIN_LIMIT=20000 -e GRAFIN_SPEED=600 sim
 ```
 Expected: `sim.batch` logs, ending with the run summary; no errors.
 
 - [ ] **Step 4: Verify the stored timestamps are dataset time**
 
 ```bash
-docker compose exec -T postgres psql -U "${POSTGRES_USER:-garda}" -d "${POSTGRES_DB:-garda}" \
+docker compose exec -T postgres psql -U "${POSTGRES_USER:-grafin}" -d "${POSTGRES_DB:-grafin}" \
   -c "select min(event_time), max(event_time), min(surfaced_at), max(surfaced_at) from transaction_events;"
 ```
 Expected: `event_time` min/max fall inside **2025-09-01 → 2025-09-10**, while `surfaced_at` shows today's date — proving the two clocks are correctly distinct.
@@ -705,7 +705,7 @@ Expected: `event_time` min/max fall inside **2025-09-01 → 2025-09-10**, while 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:${BACKEND_HOST_PORT:-8000}/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@garda.local","password":"admin"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+  -d '{"email":"admin@grafin.local","password":"admin"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 curl -s "http://localhost:${BACKEND_HOST_PORT:-8000}/api/v1/metrics/volume?range=24h" \
   -H "Authorization: Bearer $TOKEN" | head -c 400
 ```
@@ -713,7 +713,7 @@ Expected: bucket timestamps in **September 2025**, not 2026.
 
 - [ ] **Step 6: Verify the dashboard**
 
-Open `http://localhost:${FRONTEND_HOST_PORT:-8080}`, sign in as `admin@garda.local` / `admin`.
+Open `http://localhost:${FRONTEND_HOST_PORT:-8080}`, sign in as `admin@grafin.local` / `admin`.
 Expected: the Transaction Volume Trends X axis and the live feed both show **September 2025** timestamps; stat cards are populated (not zero).
 
 - [ ] **Step 7: Record the outcome**

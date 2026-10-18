@@ -1,7 +1,7 @@
 .PHONY: up down reset logs seed-secret config sim obs dataset-sort demo-history demo-test demo-seed \
 	demo-live tunnel admin-password
 
-DATA_DIR ?= ../garda-ai-data/HI-Small
+DATA_DIR ?= ../grafin-ai-data/HI-Small
 
 config:
 	docker compose config >/dev/null && echo "compose OK"
@@ -32,7 +32,7 @@ seed-secret:
 # backwards), which breaks gap-based pacing and the backend's max(event_time) clock.
 # Timestamps are `YYYY/MM/DD HH:MM`, zero-padded and leading, so a lexicographic
 # sort is chronological. Takes ~20s, writes ~433MB. Safe to re-run (idempotent).
-# Raw HI-Small only: ../garda-ai-data/HI-Small-ID already ships HI-Small_Trans_sorted.csv.
+# Raw HI-Small only: ../grafin-ai-data/HI-Small-ID already ships HI-Small_Trans_sorted.csv.
 dataset-sort:
 	@test -f "$(DATA_DIR)/HI-Small_Trans_part1.csv" || \
 		(echo "ERROR: $(DATA_DIR)/HI-Small_Trans_part1.csv not found (override with DATA_DIR=...)" && exit 1)
@@ -55,27 +55,27 @@ DEMO_TEST_SPEED    ?= 60
 #    ~2,400 txn/s the stack sustains with BATCH_SIZE=1000.
 demo-history:
 	docker compose --profile sim run --rm --build \
-	  -e GARDA_SKIP=$(DEMO_HISTORY_SKIP) -e GARDA_LIMIT=$(DEMO_HISTORY_LIMIT) \
-	  -e GARDA_MAX_GAP_S=0 -e GARDA_BATCH_SIZE=1000 sim
+	  -e GRAFIN_SKIP=$(DEMO_HISTORY_SKIP) -e GRAFIN_LIMIT=$(DEMO_HISTORY_LIMIT) \
+	  -e GRAFIN_MAX_GAP_S=0 -e GRAFIN_BATCH_SIZE=1000 sim
 
 # 2) Replay the test period live from 2025-09-12, right where demo-history stopped:
 #    1 dataset-hour per wall-minute at speed 60. Ctrl-C to stop.
 demo-test:
 	docker compose --profile sim run --rm --build \
-	  -e GARDA_SKIP=$(DEMO_TEST_SKIP) -e GARDA_SPEED=$(DEMO_TEST_SPEED) \
-	  -e GARDA_BATCH_SIZE=100 sim
+	  -e GRAFIN_SKIP=$(DEMO_TEST_SKIP) -e GRAFIN_SPEED=$(DEMO_TEST_SPEED) \
+	  -e GRAFIN_BATCH_SIZE=100 sim
 
 # Old names, kept for muscle memory.
 demo-seed: demo-history
 demo-live: demo-test
 
 # Wipe the stack INCLUDING the Postgres volume. Required when switching datasets
-# (GARDA_DATA_HOST_DIR) or scorers: ingest/sim rows from the old one stay otherwise.
+# (GRAFIN_DATA_HOST_DIR) or scorers: ingest/sim rows from the old one stay otherwise.
 reset:
 	docker compose --profile sim --profile observability down -v
 
 # --- Public access -----------------------------------------------------------
-# Change a dashboard password (default admin@garda.local). Do this BEFORE sharing a
+# Change a dashboard password (default admin@grafin.local). Do this BEFORE sharing a
 # public URL: the seeded admin/admin would otherwise work for anyone who finds it.
 admin-password:
 	@./scripts/set-admin-password.sh $(EMAIL)
