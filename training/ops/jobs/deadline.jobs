@@ -1,0 +1,8 @@
+# Batch 4096 (paper: 8192) — 8192 x [100,100] needs >14.6 GB and OOMs on a T4.
+# Prototype deadline wave (HI-Small only, ~9 h budget, early stopping).
+# gpu0/gpu1: the model we ship (2 seeds). gpu2: raw HI-Small = paper-parity evidence.
+# gpu3: faster backup (half the neighbours) in case full-size batches are too slow / OOM.
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda --batch-size 4096 --max-hours 9 --patience 8 --run-id small-id-s1
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 2 --device cuda --batch-size 4096 --max-hours 9 --patience 8 --run-id small-id-s2
+gnn --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 1 --device cuda --batch-size 4096 --max-hours 9 --patience 8 --run-id small-raw-s1
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda --batch-size 4096 --max-hours 9 --patience 8 --num-neighs 50 50 --run-id small-id-s1-n50

@@ -1,0 +1,5 @@
+# Wave 1 — paper protocol on HI-Small: parity (raw, criterion 1) and currency check (ID, criterion 2).
+gnn --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 1 --device cuda
+gnn --data ../garda-ai-data/raw/HI-Small/HI-Small_Trans.csv --source raw --seed 2 --device cuda
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 1 --device cuda
+gnn --data ../garda-ai-data/HI-Small-ID/HI-Small_Trans_sorted.csv --source id --seed 2 --device cuda
