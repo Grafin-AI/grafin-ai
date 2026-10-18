@@ -1,4 +1,4 @@
-"""`garda-train` command line: prepare | gnn | score | export-scores | compare."""
+"""`garda-train` command line: prepare | gnn | score | export-scores | compare | mlflow-log."""
 
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ from garda_training.tracking import (
     DEFAULT_MLFLOW_URI,
     RunDir,
     Tracker,
+    default_tracking_uri,
     environment_info,
+    log_run_to_mlflow,
     make_run_id,
 )
 from garda_training.train.export import SPLITS, export_scores
@@ -86,6 +88,15 @@ def build_parser() -> argparse.ArgumentParser:
     cmp = sub.add_parser("compare", help="markdown table of finished runs")
     cmp.add_argument("--runs-dir", type=Path, default=Path("runs"))
     cmp.set_defaults(func=cmd_compare)
+
+    ml = sub.add_parser("mlflow-log", help="mirror a finished run directory into MLflow")
+    ml.add_argument("--run", required=True, metavar="RUN_ID")
+    ml.add_argument("--runs-dir", type=Path, default=Path("runs"))
+    ml.add_argument(
+        "--tracking-uri", help="default: $MLFLOW_TRACKING_URI, else sqlite:///mlruns/mlflow.db"
+    )
+    ml.add_argument("--experiment", default="grafin-ai-multignn")
+    ml.set_defaults(func=cmd_mlflow_log)
     return parser
 
 
@@ -247,6 +258,14 @@ def cmd_compare(args: argparse.Namespace) -> int:
     if not args.runs_dir.is_dir():
         raise ConfigError(f"no runs directory at {args.runs_dir}")
     print(render_markdown(collect_runs(args.runs_dir)))
+    return 0
+
+
+def cmd_mlflow_log(args: argparse.Namespace) -> int:
+    uri = args.tracking_uri or default_tracking_uri()
+    mlflow_run_id = log_run_to_mlflow(args.runs_dir / args.run, uri, args.experiment)
+    log.info("mlflow-log: %s -> %s (experiment %s)", args.run, uri, args.experiment)
+    print(mlflow_run_id)
     return 0
 
 
