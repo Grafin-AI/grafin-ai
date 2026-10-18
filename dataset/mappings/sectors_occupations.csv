@@ -1,0 +1,21 @@
+applies_to,label,weight
+individual,Karyawan Swasta,30
+individual,Wiraswasta,20
+individual,Ibu Rumah Tangga,12
+individual,Pelajar/Mahasiswa,10
+individual,Pegawai Negeri Sipil,8
+individual,Petani/Nelayan,6
+individual,Profesional,6
+individual,Pensiunan,4
+individual,TNI/Polri,2
+individual,Lainnya,2
+business,Perdagangan Besar dan Eceran,25
+business,Industri Pengolahan,12
+business,Jasa Lainnya,12
+business,Penyediaan Akomodasi dan Makan Minum,10
+business,Konstruksi,9
+business,Pertanian Kehutanan dan Perikanan,8
+business,Transportasi dan Pergudangan,7
+business,Jasa Keuangan dan Asuransi,6
+business,Informasi dan Komunikasi,6
+business,Real Estat,5

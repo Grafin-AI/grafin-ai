@@ -1,0 +1,13 @@
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+# data never lives in this repo
+*.csv
+!mappings/*.csv
+!tests/fixtures/**/*.csv
+*.txt
+!tests/fixtures/**/*.txt
+kaggle.json
