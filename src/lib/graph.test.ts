@@ -33,8 +33,8 @@ describe('graph helpers', () => {
   it('styles nodes by role and flagged count', () => {
     expect(nodeStyle(net.nodes[0]).stroke).toBe('#139EF6');
     expect(nodeStyle(net.nodes[1]).stroke).toBe('#139EF6'); // focal role wins over flagged
-    expect(nodeStyle(net.nodes[2]).stroke).toBe('#F5B14C');
-    expect(nodeStyle(net.nodes[3]).stroke).toBe('#2B3B5C');
+    expect(nodeStyle(net.nodes[2]).stroke).toBe('#B26A00');
+    expect(nodeStyle(net.nodes[3]).stroke).toBe('#94A3B8');
     expect(nodeStyle(net.nodes[0]).r).toBeGreaterThan(nodeStyle(net.nodes[3]).r);
   });
 

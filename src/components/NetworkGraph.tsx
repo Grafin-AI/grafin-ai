@@ -48,7 +48,7 @@ export function NetworkGraphView({ network, animate = true }: { network: Transac
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="relative rounded-[10px] bg-[#0A1020] overflow-hidden">
+      <div className="relative rounded-[10px] border border-border bg-card-2 overflow-hidden">
         <svg
           ref={scope}
           role="img"
@@ -110,7 +110,7 @@ export function NetworkGraphView({ network, animate = true }: { network: Transac
                     dominantBaseline="central"
                     fontSize={10}
                     fontWeight={600}
-                    fill="#E6EDF7"
+                    fill="#0B6FB8"
                     style={{ pointerEvents: 'none' }}
                   >
                     {n.badge}
@@ -120,19 +120,19 @@ export function NetworkGraphView({ network, animate = true }: { network: Transac
             ))}
           </g>
         </svg>
-        <span className="absolute left-3 bottom-2 text-[11px] text-[#93A3BC] pointer-events-none">
+        <span className="absolute left-3 bottom-2 text-[11px] text-muted-foreground pointer-events-none">
           PGR = pengirim · PNR = penerima · arahkan kursor untuk detail
         </span>
       </div>
-      <div className="flex flex-wrap gap-3.5 text-xs text-[#B4C1D6]" aria-label="Legenda grafik">
-        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-1 bg-[#F2546B]" />transaksi ini / diblokir</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-[3px] bg-[#F5B14C]" />ditandai</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-[2px] bg-[#2B3B5C]" />normal</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-[#139EF6] bg-[#12305A]" />pihak transaksi</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-[#F5B14C] bg-[#172138]" />rekening terflag</span>
+      <div className="flex flex-wrap gap-3.5 text-xs text-text-secondary" aria-label="Legenda grafik">
+        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-1 bg-[#D12C47]" />transaksi ini / diblokir</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-[3px] bg-[#B26A00]" />ditandai</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-[18px] h-[2px] bg-[#A3AFC2]" />normal</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-[#139EF6] bg-white" />pihak transaksi</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-[#B26A00] bg-white" />rekening terflag</span>
       </div>
       {network.truncated && (
-        <p className="text-xs text-[#F7C878]">
+        <p className="text-xs text-flagged">
           Grafik dipangkas ke {network.nodes.length} rekening dan {network.edges.length} transaksi paling relevan.
         </p>
       )}

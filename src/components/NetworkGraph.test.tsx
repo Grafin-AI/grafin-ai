@@ -25,8 +25,8 @@ describe('NetworkGraphView', () => {
     expect(img.tagName.toLowerCase()).toBe('svg');
     expect(container.querySelectorAll('path.ng-edge')).toHaveLength(2);
     expect(container.querySelectorAll('g.ng-node')).toHaveLength(3);
-    expect(container.querySelector('path[data-kind="focal"]')).toHaveAttribute('stroke', '#F2546B');
-    expect(container.querySelector('path[data-kind="flagged"]')).toHaveAttribute('stroke', '#F5B14C');
+    expect(container.querySelector('path[data-kind="focal"]')).toHaveAttribute('stroke', '#D12C47');
+    expect(container.querySelector('path[data-kind="flagged"]')).toHaveAttribute('stroke', '#B26A00');
     expect(screen.getByText('PGR')).toBeInTheDocument();
     expect(screen.getByText('PNR')).toBeInTheDocument();
   });

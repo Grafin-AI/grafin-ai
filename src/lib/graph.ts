@@ -8,10 +8,10 @@ import {
 import type { NetworkEdge, NetworkNode, TransactionNetwork } from '../api/types';
 
 export const EDGE_COLORS = {
-  focal: '#F2546B',
-  blocked: '#F2546B',
-  flagged: '#F5B14C',
-  normal: '#2B3B5C',
+  focal: '#D12C47',
+  blocked: '#D12C47',
+  flagged: '#B26A00',
+  normal: '#A3AFC2',
 } as const;
 
 export type EdgeKind = keyof typeof EDGE_COLORS;
@@ -39,10 +39,10 @@ export interface NodeStyle {
 }
 
 export function nodeStyle(node: Pick<NetworkNode, 'role' | 'flagged_count'>): NodeStyle {
-  if (node.role === 'sender') return { r: 18, fill: '#12305A', stroke: '#139EF6', strokeWidth: 2, badge: 'PGR' };
-  if (node.role === 'receiver') return { r: 18, fill: '#12305A', stroke: '#139EF6', strokeWidth: 2, badge: 'PNR' };
-  if (node.flagged_count > 0) return { r: 10, fill: '#172138', stroke: '#F5B14C', strokeWidth: 2, badge: null };
-  return { r: 9, fill: '#172138', stroke: '#2B3B5C', strokeWidth: 2, badge: null };
+  if (node.role === 'sender') return { r: 18, fill: '#FFFFFF', stroke: '#139EF6', strokeWidth: 2.5, badge: 'PGR' };
+  if (node.role === 'receiver') return { r: 18, fill: '#FFFFFF', stroke: '#139EF6', strokeWidth: 2.5, badge: 'PNR' };
+  if (node.flagged_count > 0) return { r: 10, fill: '#FFFFFF', stroke: '#B26A00', strokeWidth: 2, badge: null };
+  return { r: 9, fill: '#FFFFFF', stroke: '#94A3B8', strokeWidth: 2, badge: null };
 }
 
 export interface LayoutNode extends NetworkNode, NodeStyle {

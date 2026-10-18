@@ -19,12 +19,12 @@ interface TransactionDetailsModalProps {
 }
 
 const STATUS_PILL: Record<Status, { label: string; cls: string }> = {
-  blocked: { label: 'DIBLOKIR', cls: 'bg-[#3A1420] text-[#F2546B]' },
-  flagged: { label: 'DITANDAI', cls: 'bg-[#33250D] text-[#F5B14C]' },
-  approved: { label: 'DISETUJUI', cls: 'bg-[#0F2E25] text-[#2FD3A0]' },
+  blocked: { label: 'DIBLOKIR', cls: 'bg-blocked-bg text-blocked' },
+  flagged: { label: 'DITANDAI', cls: 'bg-flagged-bg text-flagged' },
+  approved: { label: 'DISETUJUI', cls: 'bg-approved-bg text-approved' },
 };
 
-const scoreColor = (s: number) => (s >= 0.85 ? 'text-[#F2546B]' : s >= 0.6 ? 'text-[#F5B14C]' : 'text-[#2FD3A0]');
+const scoreColor = (s: number) => (s >= 0.85 ? 'text-blocked' : s >= 0.6 ? 'text-flagged' : 'text-approved');
 
 const formatAmount = (amount: number, currency = 'IDR') =>
   new Intl.NumberFormat('id-ID', {
@@ -54,7 +54,7 @@ function PartyCard({ txn, side, onOpenUserProfile }: {
     <div className="bg-card border border-border rounded-xl px-4 py-3.5 flex flex-col gap-1.5 min-w-0">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-[15px] font-semibold truncate">{entityName || '—'}</span>
-      <span className="font-mono tabular-nums text-[13px] text-[#B4C1D6] truncate">
+      <span className="font-mono tabular-nums text-[13px] text-text-secondary truncate">
         <span>{bank}</span> · <span>{account}</span>
       </span>
       {onOpenUserProfile && (
@@ -63,7 +63,7 @@ function PartyCard({ txn, side, onOpenUserProfile }: {
           aria-label={`Buka profil ${label.toLowerCase()}`}
           disabled={!entityId}
           onClick={() => entityId && onOpenUserProfile(entityId)}
-          className="self-start font-mono text-xs text-[#7CC4FA] hover:text-[#B5DDFC] disabled:text-[#93A3BC] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#139EF6] rounded"
+          className="self-start font-mono text-xs text-link hover:text-[#095A96] disabled:text-muted-foreground disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8] rounded"
         >
           {entityId ? `Profil ${entityId}` : 'Profil tidak tersedia'}
         </button>
@@ -94,10 +94,10 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
         aria-describedby={undefined}
-        className="max-w-[1200px] sm:max-w-[1200px] w-[calc(100%-2rem)] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden rounded-2xl border-[#23304A] bg-[#0B1120] text-[#E6EDF7]"
+        className="max-w-[1200px] sm:max-w-[1200px] w-[calc(100%-2rem)] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden rounded-2xl border-border-strong bg-white text-foreground"
       >
         {/* Header */}
-        <div className="flex justify-between items-start gap-4 px-[26px] py-[22px] pr-14 border-b border-[#1C2740]">
+        <div className="flex justify-between items-start gap-4 px-[26px] py-[22px] pr-14 border-b border-border">
           <div className="flex flex-col gap-2 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <DialogTitle className="m-0 text-xl font-semibold">
@@ -107,18 +107,18 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
               </DialogTitle>
               {pill && <span className={`px-2.5 py-[3px] rounded-full text-xs font-semibold ${pill.cls}`}>{pill.label}</span>}
               {txn?.typology && (
-                <span className="px-2.5 py-[3px] rounded-full text-xs bg-[#142238] text-[#7CC4FA]">{txn.typology}</span>
+                <span className="px-2.5 py-[3px] rounded-full text-xs bg-brand-soft text-link">{txn.typology}</span>
               )}
             </div>
             {txn && (
-              <span className="font-mono tabular-nums text-[13px] text-[#93A3BC]">
+              <span className="font-mono tabular-nums text-[13px] text-muted-foreground">
                 {formatDateTime(txn.event_time)} · {txn.type} · {formatAmount(txn.amount, txn.currency || 'IDR')}
               </span>
             )}
           </div>
           {txn && (
             <div className="flex flex-col items-end shrink-0">
-              <span className="text-xs text-[#93A3BC]">Skor risiko</span>
+              <span className="text-xs text-muted-foreground">Skor risiko</span>
               <span className={`font-mono tabular-nums text-[30px] leading-tight font-semibold ${scoreColor(txn.fraud_score)}`}>
                 {txn.fraud_score.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
@@ -141,7 +141,7 @@ export function TransactionDetailsModal({ transactionId, isOpen, onClose, onOpen
           )}
 
           {isError && (
-            <div className="p-8 text-center text-[#F2546B]" role="alert">
+            <div className="p-8 text-center text-blocked" role="alert">
               <AlertTriangle className="w-8 h-8 mx-auto mb-2" aria-hidden="true" />
               <p>Gagal memuat data transaksi. Silakan coba lagi.</p>
             </div>

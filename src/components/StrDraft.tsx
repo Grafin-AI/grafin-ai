@@ -113,14 +113,14 @@ export function StrDraft({ draft, pending = false, error = null, canGenerate = f
 
       {draft ? (
         <>
-          <div role="note" className="px-3 py-2 rounded-lg bg-[#33250D] text-[#F7C878] text-xs font-medium">
+          <div role="note" className="px-3 py-2 rounded-lg bg-flagged-bg text-flagged text-xs font-medium">
             {draft.catatan || DEFAULT_DRAFT_NOTE}
           </div>
           <dl className="m-0 flex flex-col gap-2">
             {fields.map(([k, v]) => (
               <div key={k} className="grid grid-cols-[110px_1fr] gap-2.5 text-[13px] leading-normal">
-                <dt className="text-[#93A3BC]">{k}</dt>
-                <dd className="m-0 text-[#D3DCEA]">{v}</dd>
+                <dt className="text-muted-foreground">{k}</dt>
+                <dd className="m-0 text-text-secondary">{v}</dd>
               </div>
             ))}
           </dl>
@@ -128,15 +128,15 @@ export function StrDraft({ draft, pending = false, error = null, canGenerate = f
             <button
               type="button"
               onClick={copy}
-              className="h-10 px-3.5 rounded-lg border border-[#2B3B5C] bg-transparent text-[13px] inline-flex items-center gap-2 hover:bg-[#111A2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#139EF6]"
+              className="h-10 px-3.5 rounded-lg border border-[#C9D3E1] bg-transparent text-[13px] inline-flex items-center gap-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8]"
             >
-              {copied ? <Check className="w-4 h-4 text-[#2FD3A0]" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
+              {copied ? <Check className="w-4 h-4 text-approved" aria-hidden="true" /> : <Copy className="w-4 h-4" aria-hidden="true" />}
               {copied ? 'Tersalin' : 'Salin'}
             </button>
             <button
               type="button"
               onClick={() => ref.current && printSection(ref.current)}
-              className="h-10 px-3.5 rounded-lg border border-[#2B3B5C] bg-transparent text-[13px] inline-flex items-center gap-2 hover:bg-[#111A2E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#139EF6]"
+              className="h-10 px-3.5 rounded-lg border border-[#C9D3E1] bg-transparent text-[13px] inline-flex items-center gap-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8]"
             >
               <Printer className="w-4 h-4" aria-hidden="true" />
               Cetak
@@ -156,7 +156,7 @@ export function StrDraft({ draft, pending = false, error = null, canGenerate = f
         </p>
       )}
       {error && !draft && (
-        <p role="alert" className="m-0 text-sm text-[#F2546B]">{error}</p>
+        <p role="alert" className="m-0 text-sm text-blocked">{error}</p>
       )}
     </section>
   );

@@ -18,15 +18,15 @@ export const REASON_CODE_LABELS: Record<string, string> = {
 };
 
 const ACTION: Record<Status, { label: string; cls: string }> = {
-  blocked: { label: 'BLOKIR', cls: 'bg-[#3A1420] text-[#FF8A9B]' },
-  flagged: { label: 'TINJAU', cls: 'bg-[#33250D] text-[#F7C878]' },
-  approved: { label: 'LOLOS', cls: 'bg-[#0F2E25] text-[#5BE3B5]' },
+  blocked: { label: 'BLOKIR', cls: 'bg-blocked-bg text-blocked' },
+  flagged: { label: 'TINJAU', cls: 'bg-flagged-bg text-flagged' },
+  approved: { label: 'LOLOS', cls: 'bg-approved-bg text-approved' },
 };
 
 const CONFIDENCE_CLS: Record<string, string> = {
-  Tinggi: 'bg-[#3A1420] text-[#FF8A9B]',
-  Sedang: 'bg-[#33250D] text-[#F7C878]',
-  Rendah: 'bg-[#142238] text-[#7CC4FA]',
+  Tinggi: 'bg-blocked-bg text-blocked',
+  Sedang: 'bg-flagged-bg text-flagged',
+  Rendah: 'bg-brand-soft text-link',
 };
 
 const SECTIONS: Array<[keyof TransactionExplanation, string]> = [
@@ -47,9 +47,9 @@ export function explanationSummaryText(e: TransactionExplanation): string {
 }
 
 const primaryBtn =
-  'h-11 px-[18px] rounded-lg border-0 bg-[#139EF6] text-[#04121F] text-sm font-semibold inline-flex items-center gap-2 hover:bg-[#3AAFF8] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC4FA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1424]';
+  'h-11 px-[18px] rounded-lg border-0 bg-[#0B6FB8] text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-[#095A96] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8] focus-visible:ring-offset-2 focus-visible:ring-offset-white';
 const ghostBtn =
-  'h-11 px-4 rounded-lg border border-[#2B3B5C] bg-transparent text-sm inline-flex items-center gap-2 hover:bg-[#111A2E] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#139EF6]';
+  'h-11 px-4 rounded-lg border border-[#C9D3E1] bg-transparent text-sm inline-flex items-center gap-2 hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6FB8]';
 
 export interface InsightNarratorProps {
   /** undefined = loading/unknown, null = not generated yet. */
@@ -134,7 +134,7 @@ export function InsightNarrator({
           </span>
         </div>
       ) : !explanation ? (
-        <div className="rounded-xl border border-dashed border-[#2B3B5C] bg-[#0A1020] p-4 flex flex-col gap-3">
+        <div className="rounded-xl border border-dashed border-[#C9D3E1] bg-card-2 p-4 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <span className="text-sm">
               {loadError ? 'Penjelasan AI gagal dimuat.' : 'Penjelasan AI belum dibuat untuk transaksi ini.'}
@@ -143,7 +143,7 @@ export function InsightNarrator({
               Penjelasan disusun oleh AI berdasarkan bukti model dan disimpan untuk audit.
             </span>
           </div>
-          {generateError && <p role="alert" className="m-0 text-sm text-[#F2546B]">{generateError}</p>}
+          {generateError && <p role="alert" className="m-0 text-sm text-blocked">{generateError}</p>}
           <div>
             <button type="button" className={primaryBtn} onClick={onGenerate}>
               <Sparkles className="w-4 h-4" aria-hidden="true" />
@@ -154,8 +154,8 @@ export function InsightNarrator({
       ) : (
         <>
           {!persisted && (
-            <div role="status" className="narr-reveal flex items-center justify-between gap-3 flex-wrap rounded-lg bg-[#33250D] px-3 py-2">
-              <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#F7C878]">
+            <div role="status" className="narr-reveal flex items-center justify-between gap-3 flex-wrap rounded-lg bg-flagged-bg px-3 py-2">
+              <span className="inline-flex items-center gap-2 text-xs font-semibold text-flagged">
                 <AlertTriangle className="w-4 h-4" aria-hidden="true" />
                 Mode cadangan (aturan)
                 <span className="font-normal">— layanan AI tidak tersedia, penjelasan tidak disimpan.</span>
@@ -163,19 +163,19 @@ export function InsightNarrator({
               <button
                 type="button"
                 onClick={onGenerate}
-                className="h-9 px-3 rounded-md border border-[#F5B14C]/50 text-[#F7C878] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-[#3D2C10] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B14C]"
+                className="h-9 px-3 rounded-md border border-[#F5D9A8] text-flagged text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-[#FCEBC8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B26A00]"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                 Coba lagi
               </button>
             </div>
           )}
-          {generateError && <p role="alert" className="m-0 text-sm text-[#F2546B]">{generateError}</p>}
+          {generateError && <p role="alert" className="m-0 text-sm text-blocked">{generateError}</p>}
 
           <div className="narr-reveal flex gap-2.5 flex-wrap">
             {explanation.reason_code && (
               <span
-                className="font-mono tabular-nums px-2.5 py-1 rounded-md bg-[#142238] text-[#7CC4FA] text-xs font-semibold"
+                className="font-mono tabular-nums px-2.5 py-1 rounded-md bg-brand-soft text-link text-xs font-semibold"
                 title={REASON_CODE_LABELS[explanation.reason_code] ?? explanation.reason_code}
               >
                 {explanation.reason_code}
@@ -191,8 +191,8 @@ export function InsightNarrator({
 
           {SECTIONS.map(([key, title]) => (
             <div key={key} className="narr-reveal flex flex-col gap-1">
-              <h4 className="m-0 text-xs font-semibold text-[#7CC4FA] uppercase tracking-[0.6px]">{title}</h4>
-              <p className="m-0 text-sm leading-[1.55] text-[#D3DCEA]">{String(explanation[key] ?? '')}</p>
+              <h4 className="m-0 text-xs font-semibold text-link uppercase tracking-[0.6px]">{title}</h4>
+              <p className="m-0 text-sm leading-[1.55] text-text-secondary">{String(explanation[key] ?? '')}</p>
             </div>
           ))}
 
@@ -201,7 +201,7 @@ export function InsightNarrator({
               <span className="text-xs text-muted-foreground">Faktor risiko</span>
               <ul className="m-0 p-0 list-none flex flex-wrap gap-1.5">
                 {explanation.risk_factors.map((f) => (
-                  <li key={f.code} title={f.detail} className="px-2.5 py-1 rounded-full border border-[#2B3B5C] text-xs text-[#D3DCEA]">
+                  <li key={f.code} title={f.detail} className="px-2.5 py-1 rounded-full border border-[#C9D3E1] text-xs text-text-secondary">
                     {f.label}
                   </li>
                 ))}
@@ -214,7 +214,7 @@ export function InsightNarrator({
               <span className="text-xs text-muted-foreground">Rujukan kebijakan</span>
               <ul className="m-0 p-0 list-none flex flex-wrap gap-1.5">
                 {explanation.references.map((r) => (
-                  <li key={r.id} title={r.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#111A2E] border border-[#23304A] text-xs text-[#B4C1D6]">
+                  <li key={r.id} title={r.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-card-2 border border-border-strong text-xs text-text-secondary">
                     <FileText className="w-3 h-3" aria-hidden="true" />
                     {r.title}
                   </li>
@@ -237,7 +237,7 @@ export function InsightNarrator({
               </button>
             )}
             <button type="button" className={ghostBtn} onClick={copySummary}>
-              {copied && <Check className="w-4 h-4 text-[#2FD3A0]" aria-hidden="true" />}
+              {copied && <Check className="w-4 h-4 text-approved" aria-hidden="true" />}
               {copied ? 'Tersalin' : 'Salin ringkasan'}
             </button>
           </div>
