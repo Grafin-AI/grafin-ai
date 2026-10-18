@@ -67,6 +67,15 @@ Each run writes `runs/<run-id>/` with `config.json`, `env.json` (git SHA, versio
 `mlruns/mlflow.db`) mirrors the parameters and metrics:
 `uvx mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`.
 
+### Experiment tracking (MLflow)
+
+`uv run garda-train mlflow-log --run <run-id> [--tracking-uri URI]` mirrors a finished run
+directory into MLflow (experiment `grafin-ai-multignn`, run name = run id, re-logging replaces it):
+config params, per-epoch loss/F1 (step = epoch), final val/test F1, PR-AUC, ROC-AUC,
+precision/recall, thresholds, typology counts, and the small JSON files as artifacts (never
+`scores.csv`/parquet or checkpoints). Default URI: `$MLFLOW_TRACKING_URI`, else
+`sqlite:///mlruns/mlflow.db`. Details and the logged runs: [`docs/mlflow.md`](docs/mlflow.md).
+
 Exit codes: `0` ok · `1` unexpected or training diverged · `2` dataset missing or hash mismatch ·
 `3` bad config or arguments · `4` export check failed (Plan B) · `5` CUDA requested but missing.
 
