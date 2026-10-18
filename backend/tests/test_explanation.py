@@ -393,7 +393,9 @@ async def test_gemini_and_ollama_request_shape(make_client, session):
             )
         return httpx.Response(200, json={"message": {"content": text}})
 
-    c = await make_client(_settings(llm_provider="gemini", llm_api_key="g-key"), handler)
+    c = await make_client(
+        _settings(llm_provider="gemini", llm_api_key="g-key", llm_tools=False), handler
+    )
     body = (await c.post(URL, headers=_auth())).json()
     assert body["source"] == "llm" and body["model"] == "gemini-3.8-flash"
     assert seen[0].url.path == "/v1beta/models/gemini-3.8-flash:generateContent"
@@ -550,3 +552,88 @@ async def test_str_draft_llm_failure_is_502_and_not_stored(make_client, session,
     r = await c.post(STR_URL, headers=_auth())
     assert r.status_code == 502 and r.json() == {"detail": "str_generation_failed"}
     assert (await ExplanationsRepository(session).get(TARGET)).str_draft is None
+
+
+# ---------------------------------------------------------------- gemini tool calling
+
+def _gemini_resp(parts: list) -> httpx.Response:
+    return httpx.Response(200, json={"candidates": [{"content": {"parts": parts}}]})
+
+
+async def test_gemini_tool_loop_executes_calls_then_parses_json(make_client, session):
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        if len(seen) == 1:
+            return _gemini_resp([
+                {"functionCall": {"name": "get_transaction_evidence",
+                                  "args": {"transaction_id": TARGET}},
+                 "thoughtSignature": "sig-1"},
+                {"functionCall": {"name": "get_policy_references",
+                                  "args": {"reason_code": "GA-FANIN"}}},
+            ])
+        return _gemini_resp([{"text": json.dumps(LLM_NARRATIVE), "thoughtSignature": "x"}])
+
+    c = await make_client(_settings(llm_provider="gemini", llm_api_key="g-key"), handler)
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "llm" and body["persisted"] is True
+    assert len(seen) == 2
+    first = seen[0]
+    names = [d["name"] for d in first["tools"][0]["functionDeclarations"]]
+    assert names == ["get_policy_references", "get_transaction_evidence"]
+    assert "responseMimeType" not in first["generationConfig"]
+    model_turn, fn_turn = seen[1]["contents"][1], seen[1]["contents"][2]
+    assert model_turn["role"] == "model" and model_turn["parts"][0]["thoughtSignature"] == "sig-1"
+    assert fn_turn["role"] == "user"
+    ev_resp, ref_resp = (p["functionResponse"] for p in fn_turn["parts"])
+    assert ev_resp["name"] == "get_transaction_evidence"
+    assert ev_resp["response"]["transaction_id"] == TARGET
+    assert ev_resp["response"]["evidence"]["typology"] == "Fan-In"
+    assert ref_resp["name"] == "get_policy_references"
+    ids = [r["id"] for r in ref_resp["response"]["references"]]
+    assert "tipologi-fan-in" in ids
+    assert all({"id", "title", "summary"} <= set(r) for r in ref_resp["response"]["references"])
+
+
+async def test_gemini_tool_loop_final_json_mode_call_when_text_not_json(make_client):
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        if len(seen) == 1:
+            return _gemini_resp([{"text": "Baik, berikut analisisnya."}])
+        return _gemini_resp([{"text": json.dumps(LLM_NARRATIVE)}])
+
+    c = await make_client(_settings(llm_provider="gemini", llm_api_key="g"), handler)
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "llm" and len(seen) == 2
+    final = seen[1]
+    assert final["generationConfig"]["responseMimeType"] == "application/json"
+    assert final["toolConfig"]["functionCallingConfig"]["mode"] == "NONE"
+
+
+async def test_gemini_tool_loop_error_falls_back_to_single_call(make_client):
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent = json.loads(request.content)
+        seen.append(sent)
+        if "tools" in sent:
+            return httpx.Response(400, json={"error": {"message": "tools unsupported"}})
+        return _gemini_resp([{"text": json.dumps(LLM_NARRATIVE)}])
+
+    c = await make_client(_settings(llm_provider="gemini", llm_api_key="g"), handler)
+    body = (await c.post(URL, headers=_auth())).json()
+    assert body["source"] == "llm" and body["persisted"] is True
+    assert len(seen) == 2 and "tools" in seen[0] and "tools" not in seen[1]
+    assert seen[1]["generationConfig"]["responseMimeType"] == "application/json"
+
+
+def test_policy_references_by_reason_code():
+    from garda_ai_backend.services.explain.llm import policy_references
+
+    ids = [e["id"] for e in policy_references("ga-fanout")]
+    assert "tipologi-fan-out" in ids and set(kb.GENERAL_IDS) <= set(ids)
+    assert policy_references("NOPE") == []

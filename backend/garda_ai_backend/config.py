@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     llm_model: str = ""  # empty = provider default (see services/explain/llm.py)
     llm_base_url: str = ""  # empty = provider default
     llm_timeout_s: float = 20.0
+    llm_tools: bool = True  # gemini: function-calling grounding round(s) before the JSON answer
 
     # --- Explanation / LTKM draft store ("firestore" = Google Cloud Firestore via ADC) ---
     explanation_store: Literal["postgres", "firestore"] = "postgres"
