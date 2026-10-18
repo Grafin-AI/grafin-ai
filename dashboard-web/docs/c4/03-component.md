@@ -3,7 +3,7 @@
 ## Overview
 
 - **Container**: Dashboard Web
-- **Description**: React 18 TypeScript single-page application providing authenticated, real-time visibility into AML transaction flows, fraud scores, geographic risk, user-risk profiles, and system health. Fully wired to the Garda AI FastAPI backend over REST and WebSocket.
+- **Description**: React 18 TypeScript single-page application providing authenticated, real-time visibility into AML transaction flows, fraud scores, geographic risk, user-risk profiles, and system health. Fully wired to the Grafin AI FastAPI backend over REST and WebSocket.
 - **Technology**: React 18, TypeScript 5, Vite, TanStack Query v5, Axios, Recharts, Radix UI / shadcn
 - **Deployment context**: Served as a static build behind nginx, which proxies `/api/v1/*` REST and `/api/v1/ws/live` WebSocket to the Backend API container.
 
@@ -26,7 +26,7 @@ Provides all outbound communication with the Backend API container. Centralises 
 - **Authenticated HTTP client**: Axios instance with `baseURL` from `VITE_API_BASE_URL` (default `/api/v1`); request interceptor injects `Authorization: Bearer <access_token>` on every outgoing call.
 - **Single-flight token refresh**: Module-level `refreshing` promise coalesces concurrent 401 failures into one `POST /auth/refresh` call; all waiting requests are retried with the new token.
 - **Auth-failure callback**: `onAuthFailure(cb)` lets the Auth component register a logout trigger when refresh also fails.
-- **Token persistence**: `tokenStore` reads/writes `garda.access` and `garda.refresh` keys in `localStorage`; exposes `getAccess`, `getRefresh`, `set`, and `clear`.
+- **Token persistence**: `tokenStore` reads/writes `grafin.access` and `grafin.refresh` keys in `localStorage`; exposes `getAccess`, `getRefresh`, `set`, and `clear`.
 - **Response type contracts**: Hand-authored TypeScript mirrors of backend Pydantic models (`TokenResponse`, `Me`, `MetricsOverview`, `VolumeResponse`, `HeatmapResponse`, `FraudAnalytics`, `GeoResponse`, `LiveItem / LiveResponse`, `TransactionDetail`, `RiskProfile`, `UserRiskResponse`, `AlertsResponse`, `SystemHealth`, `LiveEvent`). Regenerable from the live OpenAPI spec via `npm run gen:api`.
 - **TanStack Query hooks**: Twelve hooks covering all REST endpoints — `useMetricsOverview`, `useVolume(range)`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk(risk?)`, `useUserProfile(entityId)`, `useAlerts(status?)`, `useAckAlert` (mutation), `useTransactionDetail(id)`, `useLiveRecent(limit?)`, `useSystemHealth`. Mutations invalidate relevant query keys on success.
 
@@ -262,7 +262,7 @@ PII is masked server-side before responses leave the Backend API. View Component
 
 ### Simulation Controls (removed)
 
-The dashboard no longer contains any simulation controls. `SimulationControl`, the `/simulation` route, the `SimState` type, and the `useSimState` / `useSimControl` hooks were all deleted in the Phase 5 sim-shedding work, and `sim_now` was dropped from the `LiveEvent` payload. Replay is driven entirely outside the dashboard by the `garda-ai-sim` producer, so there is no client-side sim clock, speed selector, or admin role gate.
+The dashboard no longer contains any simulation controls. `SimulationControl`, the `/simulation` route, the `SimState` type, and the `useSimState` / `useSimControl` hooks were all deleted in the Phase 5 sim-shedding work, and `sim_now` was dropped from the `LiveEvent` payload. Replay is driven entirely outside the dashboard by the `grafin-ai-sim` producer, so there is no client-side sim clock, speed selector, or admin role gate.
 
 > **History:** these controls originally lived in `Header`, were relocated to a dedicated admin-only `SimulationControl` page on 2026-06-23, and were removed altogether in Phase 5. The `Sidebar` briefly gained a `useAuth` dependency for admin gating during that period; it no longer has one.
 

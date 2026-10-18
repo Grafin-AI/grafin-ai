@@ -379,7 +379,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 1, email: 'admin@garda.local', role: 'admin' } }),
+  useAuth: () => ({ user: { id: 1, email: 'admin@grafin.local', role: 'admin' } }),
 }));
 
 import { Header } from './Header';
@@ -388,7 +388,7 @@ describe('Header', () => {
   it('renders the title and the user, with NO simulation element', () => {
     render(<Header />);
     expect(screen.getByText('Fraud Detection Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('admin@garda.local')).toBeInTheDocument();
+    expect(screen.getByText('admin@grafin.local')).toBeInTheDocument();
     // sim controls/indicator are gone (now on the Simulation page)
     expect(screen.queryByLabelText('Simulation speed')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /pause|resume/i })).not.toBeInTheDocument();
@@ -450,7 +450,7 @@ git commit -m "refactor: remove simulation bar from Header (moved to Simulation 
 **Files:**
 - Modify: `docs/c4/03-component.md`, `docs/c4/04-code.md`
 - Modify: `docs/superpowers/specs/2026-06-22-frontend-integration-design.md`
-- Modify: `../garda-ai-deploy/README.md`
+- Modify: `../grafin-ai-deploy/README.md`
 
 - [ ] **Step 1: Full suite + build**
 
@@ -467,7 +467,7 @@ In `docs/superpowers/specs/2026-06-22-frontend-integration-design.md`, update th
 
 - [ ] **Step 4: Update the deploy README**
 
-In `../garda-ai-deploy/README.md` (the "Simulation clock" section), change "Control it from the header (admin only)" to "Control it from the **Simulation** page (admin-only sidebar item), or the API".
+In `../grafin-ai-deploy/README.md` (the "Simulation clock" section), change "Control it from the header (admin only)" to "Control it from the **Simulation** page (admin-only sidebar item), or the API".
 
 - [ ] **Step 5: Commit**
 
@@ -475,7 +475,7 @@ In `../garda-ai-deploy/README.md` (the "Simulation clock" section), change "Cont
 git add docs/c4/ docs/superpowers/specs/2026-06-22-frontend-integration-design.md
 git commit -m "docs: simulation controls moved to dedicated page (C4 + frontend spec)"
 # deploy repo is separate — commit there too:
-cd ../garda-ai-deploy && git add README.md && git commit -m "docs: control the simulation from the Simulation page, not the header" && cd -
+cd ../grafin-ai-deploy && git add README.md && git commit -m "docs: control the simulation from the Simulation page, not the header" && cd -
 ```
 
 ---

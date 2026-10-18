@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Remove the simulation UI from `garda-ai-dashboard-web`: delete the admin Simulation page, its Sidebar nav item, the `useSimState`/`useSimControl` hooks, the `SimState` type, and the now-removed `sim_now` field on the live-event type — matching the backend Phase 5 ① contract changes.
+**Goal:** Remove the simulation UI from `grafin-ai-dashboard-web`: delete the admin Simulation page, its Sidebar nav item, the `useSimState`/`useSimControl` hooks, the `SimState` type, and the now-removed `sim_now` field on the live-event type — matching the backend Phase 5 ① contract changes.
 
 **Architecture:** Pure removal + dangling-reference cleanup. No new UI, no new deps.
 
 **Tech Stack:** React 18 + TypeScript, TanStack Query, Vitest.
 
-**Spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-shed-simulation-design.md`
+**Spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-shed-simulation-design.md`
 
 **Guardrail — do NOT remove:** the `model_accuracy_simulated` → "Simulated (Phase 1)" banner in `App.tsx` (scorer honesty, unrelated to the sim clock).
 

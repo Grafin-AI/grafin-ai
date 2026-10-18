@@ -1,12 +1,12 @@
-# C4 Code Level: garda-ai-dashboard-web Integration Layer
+# C4 Code Level: grafin-ai-dashboard-web Integration Layer
 
 ## Overview
 
-- **Name**: Garda AI Dashboard Web — Integration & Auth Layer
-- **Description**: React 18 + TypeScript single-page application that connects a real-time AML dashboard to the Garda AI backend. This document covers the integration layer (HTTP client, token store, response types, TanStack Query hooks, WebSocket live-transaction hook), the authentication subsystem (AuthContext, LoginPage, RequireAuth), the provider wiring (main.tsx, queryClient.ts), and every wired view component. Presentational Radix/shadcn primitives in `components/ui/` are summarised as a shared UI-kit group.
+- **Name**: Grafin AI Dashboard Web — Integration & Auth Layer
+- **Description**: React 18 + TypeScript single-page application that connects a real-time AML dashboard to the Grafin AI backend. This document covers the integration layer (HTTP client, token store, response types, TanStack Query hooks, WebSocket live-transaction hook), the authentication subsystem (AuthContext, LoginPage, RequireAuth), the provider wiring (main.tsx, queryClient.ts), and every wired view component. Presentational Radix/shadcn primitives in `components/ui/` are summarised as a shared UI-kit group.
 - **Location**: [`src/`](../../src/)
 - **Language**: TypeScript 5 / React 18
-- **Purpose**: Provide authenticated, real-time visibility into transaction flows, fraud scores, geographic risk, user-risk profiles, and system health. All data is fetched from the Garda AI FastAPI backend over REST (TanStack Query) and WebSocket (useLiveTransactions).
+- **Purpose**: Provide authenticated, real-time visibility into transaction flows, fraud scores, geographic risk, user-risk profiles, and system health. All data is fetched from the Grafin AI FastAPI backend over REST (TanStack Query) and WebSocket (useLiveTransactions).
 
 ---
 
@@ -34,12 +34,12 @@
 
 ### `src/api/tokenStore.ts`
 
-**Purpose**: Thin localStorage accessor/mutator for access and refresh tokens. Keys are namespaced under `garda.*`.
+**Purpose**: Thin localStorage accessor/mutator for access and refresh tokens. Keys are namespaced under `grafin.*`.
 
 | Symbol | Signature | Description |
 |---|---|---|
-| `tokenStore.getAccess` | `(): string \| null` | Reads `localStorage["garda.access"]`. |
-| `tokenStore.getRefresh` | `(): string \| null` | Reads `localStorage["garda.refresh"]`. |
+| `tokenStore.getAccess` | `(): string \| null` | Reads `localStorage["grafin.access"]`. |
+| `tokenStore.getRefresh` | `(): string \| null` | Reads `localStorage["grafin.refresh"]`. |
 | `tokenStore.set` | `(tokens: Pick<TokenResponse, 'access_token' \| 'refresh_token'>): void` | Writes both tokens to localStorage. |
 | `tokenStore.clear` | `(): void` | Removes both keys from localStorage (called on logout or auth failure). |
 
@@ -401,7 +401,7 @@ api/client.ts      → api/tokenStore.ts, api/types.ts
 
 ```mermaid
 ---
-title: Garda AI Dashboard — Integration Layer Dependency Diagram
+title: Grafin AI Dashboard — Integration Layer Dependency Diagram
 ---
 flowchart TB
     subgraph Entry["Entry / Wiring"]
@@ -417,7 +417,7 @@ flowchart TB
 
     subgraph API["src/api/"]
         CL["client.ts\n(api axios instance\nrequest interceptor\nrefresh-on-401 single-flight\nonAuthFailure)"]
-        TS["tokenStore.ts\n(localStorage garda.access\ngarda.refresh)"]
+        TS["tokenStore.ts\n(localStorage grafin.access\ngrafin.refresh)"]
         TY["types.ts\n(response model mirrors)"]
         QS["queries.ts\n(TanStack Query hooks\nREST endpoints)"]
         WS["useLiveTransactions.ts\n(WS seed+append\ncursor dedup\nresync-on-reconnect)"]
@@ -443,7 +443,7 @@ flowchart TB
         UI["Radix/shadcn primitives\n(Badge Card Dialog Table\nSkeleton ScrollArea etc.)"]
     end
 
-    subgraph Backend["Backend (Garda AI FastAPI)"]
+    subgraph Backend["Backend (Grafin AI FastAPI)"]
         REST["REST API\n/api/v1/*"]
         WSBE["WebSocket\n/api/v1/ws/live\n(auth via ?token=)"]
     end
@@ -503,7 +503,7 @@ Three changes landed to keep the dashboard tracking the advancing simulation:
 
 - **Aggregate polling** (`src/api/queries.ts`): A shared `LIVE = { refetchInterval: 4000 }` const is now spread into `useMetricsOverview`, `useVolume`, `useHeatmap`, `useFraudAnalytics`, `useProvinces`, `useUserRisk`, `useAlerts`, and `useSystemHealth`. Previously only `useSimState` polled, so aggregate views froze at their initial (often empty) load while the sim clock advanced. The backend caches aggregate responses ~5 s, so a 4 s client interval is cheap. Detail/profile hooks (`useTransactionDetail`, `useUserProfile`) remain un-polled — they are on-demand modals.
 - **REST safety-net in useLiveTransactions** (`src/api/useLiveTransactions.ts`): A `setInterval(resync, 4000)` is started inside the `useEffect` (cleared on unmount) alongside the existing WebSocket connection. This ensures the live monitor stays current via REST even when the WS is silently stalled by a proxy or upgrade failure. WS push still prepends events with `seq > cursor` immediately; the interval is a fallback, not a replacement.
-- **Real user identity in Header** (`src/components/Header.tsx`): The user panel now renders `user?.email` and `user?.role` (CSS `capitalize`) from the `/auth/me` response. A leftover hardcoded `{role}@gardaai.com` mock line was removed.
+- **Real user identity in Header** (`src/components/Header.tsx`): The user panel now renders `user?.email` and `user?.role` (CSS `capitalize`) from the `/auth/me` response. A leftover hardcoded `{role}@grafinai.com` mock line was removed.
 
 ### WS Authentication
 
@@ -530,7 +530,7 @@ The simulation clock and controls were extracted out of `Header` into a new dedi
 
 ### Phase 5 — Simulation feature removed from the frontend
 
-The dashboard-side simulation feature was deleted in the Phase 5 sim-shedding work. `src/components/SimulationControl.tsx`, the `SimState` type, and the `useSimState` / `useSimControl` hooks no longer exist, and `sim_now` is no longer part of the `LiveEvent` WebSocket payload. `Sidebar` lost the `useAuth` dependency it had gained for admin gating and is now a static nav list; `App.tsx` no longer routes `/simulation`, so that path falls through to the placeholder view. Simulation is now driven entirely outside the dashboard by the `garda-ai-sim` producer.
+The dashboard-side simulation feature was deleted in the Phase 5 sim-shedding work. `src/components/SimulationControl.tsx`, the `SimState` type, and the `useSimState` / `useSimControl` hooks no longer exist, and `sim_now` is no longer part of the `LiveEvent` WebSocket payload. `Sidebar` lost the `useAuth` dependency it had gained for admin gating and is now a static nav list; `App.tsx` no longer routes `/simulation`, so that path falls through to the placeholder view. Simulation is now driven entirely outside the dashboard by the `grafin-ai-sim` producer.
 
 *(Recorded 2026-08-12 during a docs sync — these C4 documents had continued to describe the feature as live well after the code was removed.)*
 

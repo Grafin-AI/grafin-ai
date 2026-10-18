@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give `garda-ai-dashboard-web` the data + auth foundation it currently lacks: Vitest test tooling, a typed API client (axios + token-attach + refresh-on-401), a token store, TanStack Query setup, an auth context with login/logout, a login page + `RequireAuth` gate, and the provider wiring in `main.tsx`. View wiring (replacing the mock arrays in the 12 components) is Plan 4B.
+**Goal:** Give `grafin-ai-dashboard-web` the data + auth foundation it currently lacks: Vitest test tooling, a typed API client (axios + token-attach + refresh-on-401), a token store, TanStack Query setup, an auth context with login/logout, a login page + `RequireAuth` gate, and the provider wiring in `main.tsx`. View wiring (replacing the mock arrays in the 12 components) is Plan 4B.
 
 **Architecture:** Keep the existing Vite/React 18 app and its `currentView` navigation untouched. Add a thin `src/api/` layer (types mirror the backend Pydantic responses; a `gen:api` script can regenerate from the live backend's OpenAPI later) and `src/auth/`. The app is gated by `RequireAuth`: unauthenticated → `LoginPage`; authenticated → the existing dashboard. Tokens live in a small `tokenStore` (localStorage); the axios client attaches the access token and transparently refreshes once on 401.
 
@@ -13,7 +13,7 @@
 ## File structure
 
 ```
-garda-ai-dashboard-web/
+grafin-ai-dashboard-web/
 ├── package.json                 # MODIFY: add deps + test scripts
 ├── vite.config.ts               # MODIFY: add vitest test config
 ├── vitest.setup.ts              # CREATE: jest-dom + localStorage reset
@@ -294,8 +294,8 @@ Expected: FAIL.
 ```ts
 import type { TokenResponse } from './types';
 
-const ACCESS = 'garda.access';
-const REFRESH = 'garda.refresh';
+const ACCESS = 'grafin.access';
+const REFRESH = 'grafin.refresh';
 
 export const tokenStore = {
   getAccess(): string | null {
@@ -603,7 +603,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <form onSubmit={submit} className="w-80 space-y-4 p-6 bg-white rounded-lg border">
-        <h1 className="text-xl font-semibold text-gray-900">Garda AI — Sign in</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Grafin AI — Sign in</h1>
         <input
           type="email" required placeholder="Email" value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -695,7 +695,7 @@ describe('app shell', () => {
         </AuthProvider>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('Garda AI — Sign in')).toBeInTheDocument();
+    expect(await screen.findByText('Grafin AI — Sign in')).toBeInTheDocument();
     expect(screen.queryByText('secret dashboard')).not.toBeInTheDocument();
   });
 });

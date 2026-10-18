@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-23
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-dashboard-web`
+**Repo:** `grafin-ai-dashboard-web`
 
 ## Purpose
 
@@ -95,7 +95,7 @@ Query hooks are mocked (`vi.spyOn(api, ...)` / mocked hook returns) as in the ex
   `SimulationControl` component; Sidebar gains the admin-only item.
 - `docs/superpowers/specs/2026-06-22-frontend-integration-design.md`: the sim-clock indicator +
   admin controls move from the Header to the dedicated Simulation page.
-- `garda-ai-deploy/README.md`: "control the simulation from the **Simulation page** (admin)",
+- `grafin-ai-deploy/README.md`: "control the simulation from the **Simulation page** (admin)",
   not the header.
 
 ## Out of scope (YAGNI)

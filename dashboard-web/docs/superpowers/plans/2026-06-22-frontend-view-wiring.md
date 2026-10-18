@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace every hardcoded mock array in `garda-ai-dashboard-web`'s components with real data from the backend: a typed TanStack Query hook per view, a `useLiveTransactions` WebSocket hook (with REST resync), the live transaction monitor, all dashboard views, the modals, the sim-clock indicator, and role-gated admin controls.
+**Goal:** Replace every hardcoded mock array in `grafin-ai-dashboard-web`'s components with real data from the backend: a typed TanStack Query hook per view, a `useLiveTransactions` WebSocket hook (with REST resync), the live transaction monitor, all dashboard views, the modals, the sim-clock indicator, and role-gated admin controls.
 
 **Architecture:** Builds on Plan 4A (`api/client`, `api/types`, `auth/`, QueryClient). One `api/queries.ts` exposes a typed hook per endpoint. `useLiveTransactions` seeds from `GET /transactions/live`, opens the WS (`VITE_WS_URL`), appends events with `seq > cursor` into a bounded list, and re-fetches `?after_seq=cursor` on reconnect (the consistency contract). Each component keeps its existing JSX/markup; only its **data source** changes (mock array → hook), plus loading/error/empty states. No router change — the existing `currentView` nav stays.
 
@@ -357,7 +357,7 @@ VITE_WS_URL=/api/v1/ws/live
 ```
 
 - [ ] **Step 2: Full gate** — `npm test` (all green) and `npm run build` (compiles). Fix any remaining type errors from the wiring.
-- [ ] **Step 3: C4 docs** — generate `docs/c4/04-code.md` (c4-code over `src/api/`, `src/auth/`, the wired components) and `docs/c4/03-component.md` (c4-component: Data Layer, Auth, Live Feed hook, View Components) via the c4-architecture plugin. Note the frontend is the Dashboard Web container in `garda-ai-deploy/docs/c4/02-container.md`.
+- [ ] **Step 3: C4 docs** — generate `docs/c4/04-code.md` (c4-code over `src/api/`, `src/auth/`, the wired components) and `docs/c4/03-component.md` (c4-component: Data Layer, Auth, Live Feed hook, View Components) via the c4-architecture plugin. Note the frontend is the Dashboard Web container in `grafin-ai-deploy/docs/c4/02-container.md`.
 - [ ] **Step 4: Commit**
 
 ```bash

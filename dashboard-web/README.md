@@ -1,5 +1,5 @@
 
-  # Garda AI
+  # Grafin AI
 
   ## Running the code
 

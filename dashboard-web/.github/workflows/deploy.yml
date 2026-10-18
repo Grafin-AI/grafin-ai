@@ -4,8 +4,8 @@ on:
 env:
   REGION: ${{ vars.GCP_REGION }}
   PROJECT: ${{ vars.GCP_PROJECT }}
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/garda/frontend
-  SERVICE: garda-frontend
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/grafin/frontend
+  SERVICE: grafin-frontend
 jobs:
   deploy:
     runs-on: ubuntu-latest

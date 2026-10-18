@@ -1,11 +1,11 @@
-# Garda AI — Frontend Integration Design
+# Grafin AI — Frontend Integration Design
 
 **Date:** 2026-06-22
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-dashboard-web`
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
+**Repo:** `grafin-ai-dashboard-web`
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-22-system-architecture-design.md`
 
-Replace every hardcoded mock array with real data from `garda-ai-backend`, add auth, and make the live monitor stream over WebSocket — without redesigning the existing UI. Components keep their markup; only their data source changes.
+Replace every hardcoded mock array with real data from `grafin-ai-backend`, add auth, and make the live monitor stream over WebSocket — without redesigning the existing UI. Components keep their markup; only their data source changes.
 
 ---
 
@@ -72,7 +72,7 @@ PII shown is whatever the API returns (already masked server-side); the frontend
 
 ## 8. Build/deploy
 
-- Existing Vite build + `nginx.conf`/Dockerfile retained; nginx also terminates TLS and proxies `/api` + `/ws` to backend (config finalized in `garda-ai-deploy`).
+- Existing Vite build + `nginx.conf`/Dockerfile retained; nginx also terminates TLS and proxies `/api` + `/ws` to backend (config finalized in `grafin-ai-deploy`).
 - `npm run gen:api` wired into CI so types never drift from the backend contract.
 
 ## 9. Testing
@@ -83,9 +83,9 @@ PII shown is whatever the API returns (already masked server-side); the frontend
 
 ## 10. C4 documentation (deliverable)
 
-After integration, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `garda-ai-dashboard-web/docs/c4/`. System-wide Context + Container live in `garda-ai-deploy/docs/c4/`.
+After integration, generate **C4 Component + Code** docs via the c4-architecture plugin (bottom-up against this repo's code) into `grafin-ai-dashboard-web/docs/c4/`. System-wide Context + Container live in `grafin-ai-deploy/docs/c4/`.
 
 ## 11. Out of scope here
 
-- API/aggregation, auth issuance, masking → `garda-ai-backend`.
-- Scoring/replay → `garda-ai-pipeline`.
+- API/aggregation, auth issuance, masking → `grafin-ai-backend`.
+- Scoring/replay → `grafin-ai-pipeline`.
