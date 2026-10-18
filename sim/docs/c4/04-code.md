@@ -1,4 +1,4 @@
-# garda-ai-sim — C4 Code
+# grafin-ai-sim — C4 Code
 
 ## `config.py`
 - `Settings(BaseSettings)` — `ingest_url`, `ingest_token` (required, min_length 1), `data_dir`,

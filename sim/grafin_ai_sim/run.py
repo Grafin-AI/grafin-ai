@@ -4,7 +4,7 @@ Streams the HI-Small transactions CSV as batches to the backend POST /api/v1/ing
 CSV's real inter-arrival gaps (compressed by ``speed``, clamped by ``max_gap_s``). Each row is sent
 with its own CSV timestamp as ``event_time``. Local-only; never deployed.
 
-Invoke: ``uv run garda-sim`` or ``uv run python -m garda_ai_sim.run``.
+Invoke: ``uv run grafin-sim`` or ``uv run python -m grafin_ai_sim.run``.
 
 Exit codes: 0 ok / interrupted · 1 backend rejected or unreachable · 2 Trans CSV not found.
 """
@@ -16,11 +16,11 @@ import time
 import httpx
 import structlog
 
-from garda_ai_sim.client import IngestClient, IngestError, IngestUnavailable
-from garda_ai_sim.config import Settings, get_settings
-from garda_ai_sim.observability import configure_logging
-from garda_ai_sim.producer import Producer
-from garda_ai_sim.reader import stream_transactions
+from grafin_ai_sim.client import IngestClient, IngestError, IngestUnavailable
+from grafin_ai_sim.config import Settings, get_settings
+from grafin_ai_sim.observability import configure_logging
+from grafin_ai_sim.producer import Producer
+from grafin_ai_sim.reader import stream_transactions
 
 log = structlog.get_logger()
 

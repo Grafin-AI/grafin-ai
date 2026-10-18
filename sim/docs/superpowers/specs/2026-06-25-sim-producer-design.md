@@ -1,9 +1,9 @@
-# garda-ai-sim — Local Simulation Producer (Phase 4)
+# grafin-ai-sim — Local Simulation Producer (Phase 4)
 
 **Date:** 2026-06-25
 **Status:** Approved (brainstorming)
-**Repo:** `garda-ai-sim` (NEW)
-**Anchor spec:** `garda-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
+**Repo:** `grafin-ai-sim` (NEW)
+**Anchor spec:** `grafin-ai-deploy/docs/superpowers/specs/2026-06-25-platform-rearchitecture-design.md`
 **Depends on:** the backend `POST /api/v1/ingest` HTTP contract (Phase 2) — by contract, not by code.
 
 Phase 4 of the platform re-architecture. Extract the pipeline's replay/producer into a
@@ -34,15 +34,15 @@ publishes; the sim only **produces input**. So the sim sheds the DB, Redis, the 
   control server and **no** `sim_state` (the admin Simulation UI is removed in Phase 5). This is the
   anchor spec's "owns the clock, speed, and play/pause locally (CLI flags / config)".
 
-## Configuration — `garda_ai_sim/config.py`
+## Configuration — `grafin_ai_sim/config.py`
 
-pydantic-settings, `env_prefix="GARDA_"`, `.env` supported, `extra="ignore"`:
+pydantic-settings, `env_prefix="GRAFIN_"`, `.env` supported, `extra="ignore"`:
 
 - `ingest_url: str = "http://localhost:8000/api/v1/ingest"` — the backend ingest **endpoint** URL
   (full URL; repoint at a deployed backend via env).
 - `ingest_token: str` — **required** (`min_length=1`), presented as `Authorization: Bearer`.
   Fail-fast: a misconfigured run crashes at startup rather than hammering the backend with 401s.
-- `data_dir: str = "../garda-ai-data/HI-Small"` — directory holding the Trans CSV parts.
+- `data_dir: str = "../grafin-ai-data/HI-Small"` — directory holding the Trans CSV parts.
 - `trans_files: list[str] = ["HI-Small_Trans_part1.csv", "HI-Small_Trans_part2.csv"]` — read in
   order; the `transaction_id` ordinal is **continuous across parts** (so ids stay unique + stable).
 - `batch_size: int = 100` — transactions per `/ingest` POST (`≤ 1000`, the ingest cap).
@@ -52,7 +52,7 @@ pydantic-settings, `env_prefix="GARDA_"`, `.env` supported, `extra="ignore"`:
 - `dry_run: bool = False` — build + log batches but do **not** POST.
 - `request_timeout_s: float = 30.0`, `retries: int = 3` — HTTP client resilience knobs.
 
-## CSV reader — `garda_ai_sim/reader.py`
+## CSV reader — `grafin_ai_sim/reader.py`
 
 Ported/adapted from the pipeline's `etl.transactions._rows` (same column contract: `Timestamp`
 `%Y/%m/%d %H:%M` → UTC, `From Bank`/`Account`/`To Bank`/`To Account`, `Amount Paid`/`Amount
@@ -74,7 +74,7 @@ across runs (same file order) ⇒ a retried batch is idempotent on the backend (
 `ON CONFLICT DO NOTHING`). `amount_*` are serialized as strings so the backend's `Decimal` fields
 parse exactly (no float rounding).
 
-## Ingest client — `garda_ai_sim/client.py`
+## Ingest client — `grafin_ai_sim/client.py`
 
 A thin wrapper over a **pooled** httpx `AsyncClient`:
 ```
@@ -96,7 +96,7 @@ class IngestClient:
 - Reuses one `AsyncClient` created at startup and closed on shutdown (connection pooling; no
   per-request client).
 
-## Producer — `garda_ai_sim/producer.py`
+## Producer — `grafin_ai_sim/producer.py`
 
 The pacing loop. Dependency-injects `sleep` and `now` so pacing is deterministically testable:
 ```
@@ -122,9 +122,9 @@ Algorithm (batch by count, delay by the CSV span the batch advanced):
 
 `speed` must be `> 0` (validated in config). The whole run is bounded by `limit` if set.
 
-## Orchestration + CLI — `garda_ai_sim/run.py`
+## Orchestration + CLI — `grafin_ai_sim/run.py`
 
-Console entrypoint (`garda-sim` + `python -m garda_ai_sim.run`):
+Console entrypoint (`grafin-sim` + `python -m grafin_ai_sim.run`):
 - `configure_logging(settings.log_level)`; resolve the Trans paths under `data_dir`.
 - **Missing CSV** (no part files exist) → clear `sim.error` log + `SystemExit(2)`.
 - Build the pooled `AsyncClient` (with `request_timeout_s`), the `IngestClient`, and the `Producer`;
@@ -137,7 +137,7 @@ Console entrypoint (`garda-sim` + `python -m garda_ai_sim.run`):
 
 Exit codes: `0` ok / interrupted · `1` backend rejected or unreachable · `2` Trans CSV not found.
 
-## Observability — `garda_ai_sim/observability.py`
+## Observability — `grafin_ai_sim/observability.py`
 
 Structured logging only (a local CLI tool, no metrics server — same rationale as the ingest job):
 `configure_logging(level)` mirroring the scoring/ingest structlog JSON config. Per-batch throughput
@@ -188,9 +188,9 @@ Same bar as Phases 1–3 (`backend-development`, `python-development`, `observab
 
 - `pyproject.toml` (hatchling, uv) mirroring the scoring/ingest bar: deps `httpx`,
   `pydantic-settings`, `structlog`; dev `pytest`, `pytest-asyncio`, `ruff`, `mypy`.
-  `[project.scripts] garda-sim = "garda_ai_sim.run:main"`.
+  `[project.scripts] grafin-sim = "grafin_ai_sim.run:main"`.
 - `Dockerfile` — **for local `docker compose` convenience only** (Phase 6 compose runs it against
-  the local backend); clearly marked local-only, non-root, runs `garda-sim` to completion.
+  the local backend); clearly marked local-only, non-root, runs `grafin-sim` to completion.
 - `.github/workflows/ci.yml` — ruff + mypy + pytest (mirrors scoring/ingest). `README.md`,
   `.env.example`, `.gitignore`, `.dockerignore`, `.python-version`.
 - `docs/c4/{03-component,04-code}.md`.
@@ -210,5 +210,5 @@ the pattern that caught real issues in Phases 1–2).
 - **A message queue between sim and backend** — direct HTTP `/ingest` batches (anchor decision).
 - **Retry/resume from a checkpoint** — a re-run restarts from the top; idempotent ids mean already-
   ingested transactions are no-ops on the backend, so a restart is safe without checkpointing.
-- **Reference/account seeding** — that is `garda-ai-ingest` (Phase 3); the sim assumes accounts are
+- **Reference/account seeding** — that is `grafin-ai-ingest` (Phase 3); the sim assumes accounts are
   seeded (HI-Small has 0 orphan account/bank refs, verified) and the backend 400s on any unknown ref.

@@ -1,7 +1,7 @@
 import os
 from datetime import UTC, datetime
 
-from garda_ai_sim.reader import SimTxn, stream_transactions
+from grafin_ai_sim.reader import SimTxn, stream_transactions
 
 
 def _paths():

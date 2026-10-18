@@ -7,8 +7,8 @@ from typing import Protocol
 
 import structlog
 
-from garda_ai_sim.client import IngestSummary
-from garda_ai_sim.reader import SimTxn
+from grafin_ai_sim.client import IngestSummary
+from grafin_ai_sim.reader import SimTxn
 
 log = structlog.get_logger()
 

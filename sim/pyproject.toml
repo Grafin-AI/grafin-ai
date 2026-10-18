@@ -1,5 +1,5 @@
 [project]
-name = "garda-ai-sim"
+name = "grafin-ai-sim"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-garda-sim = "garda_ai_sim.run:main"
+grafin-sim = "grafin_ai_sim.run:main"
 
 [dependency-groups]
 dev = [

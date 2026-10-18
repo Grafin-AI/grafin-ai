@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
-from garda_ai_sim.client import IngestSummary
-from garda_ai_sim.producer import Producer, SimStats
-from garda_ai_sim.reader import SimTxn
+from grafin_ai_sim.client import IngestSummary
+from grafin_ai_sim.producer import Producer, SimStats
+from grafin_ai_sim.reader import SimTxn
 
 
 class StubClient:

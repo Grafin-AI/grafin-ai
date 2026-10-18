@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from garda_ai_sim.client import IngestClient, IngestError, IngestSummary, IngestUnavailable
+from grafin_ai_sim.client import IngestClient, IngestError, IngestSummary, IngestUnavailable
 
 
 async def test_maps_response_and_sends_headers():
@@ -46,7 +46,7 @@ async def test_4xx_raises_without_retry():
 
 
 async def test_5xx_retries_then_unavailable(monkeypatch):
-    import garda_ai_sim.client as client_mod
+    import grafin_ai_sim.client as client_mod
 
     async def no_sleep(_seconds: float) -> None:
         return None

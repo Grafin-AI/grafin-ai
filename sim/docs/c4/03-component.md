@@ -1,11 +1,11 @@
-# garda-ai-sim — C4 Component
+# grafin-ai-sim — C4 Component
 
-**Container:** `garda-ai-sim` — a **local-only** CLI producer (never deployed). Reads the HI-Small
+**Container:** `grafin-ai-sim` — a **local-only** CLI producer (never deployed). Reads the HI-Small
 Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 
 ## Components
 
-- **CLI / Orchestrator** (`run.py`) — the `garda-sim` entrypoint. Configures logging, resolves the
+- **CLI / Orchestrator** (`run.py`) — the `grafin-sim` entrypoint. Configures logging, resolves the
   Trans CSV paths, builds the pooled httpx client + `IngestClient` + `Producer`, runs the stream,
   logs the run summary, maps outcomes to exit codes (0/1/2), handles Ctrl-C.
 - **Reader** (`reader.py`) — streams the Trans CSV parts into `SimTxn`s, assigning a stable 1-based
@@ -18,7 +18,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 - **IngestClient** (`client.py`) — pooled httpx wrapper for `POST /api/v1/ingest`; bearer token +
   per-batch correlation id; bounded retry with backoff (4xx → `IngestError` fail-fast; transport/5xx
   → retry → `IngestUnavailable`).
-- **Config** (`config.py`) — `GARDA_` settings; `ingest_token` required (fail-fast); pacing knobs.
+- **Config** (`config.py`) — `GRAFIN_` settings; `ingest_token` required (fail-fast); pacing knobs.
 - **Observability** (`observability.py`) — structlog JSON logging.
 
 ## Relationships & boundaries
@@ -26,7 +26,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 - Talks to the backend **only** over the `/api/v1/ingest` HTTP contract (shared by contract, not by
   code — **no import of any other service**). No DB, no Redis, no scorer.
 - The backend does all scoring / persistence / publishing; the sim only produces input.
-- Runs **after** the reference seed (`garda-ai-ingest`, Phase 3) so account/bank FKs resolve; the
+- Runs **after** the reference seed (`grafin-ai-ingest`, Phase 3) so account/bank FKs resolve; the
   backend 400s on any unknown reference.
 - Owns pacing/speed/start-stop locally — this is where the old replay worker's controls now live
   (no `sim_state`, no `/sim/*`).

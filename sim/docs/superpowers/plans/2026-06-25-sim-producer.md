@@ -1,8 +1,8 @@
-# garda-ai-sim Local Producer Implementation Plan
+# grafin-ai-sim Local Producer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `garda-ai-sim`, a local-only CLI producer that streams the HI-Small transactions CSV as batches to the backend `POST /api/v1/ingest`, pacing by the CSV's real inter-arrival gaps (compressed by `speed`, clamped by `max_gap_s`) and stamping `event_time = now`.
+**Goal:** Build `grafin-ai-sim`, a local-only CLI producer that streams the HI-Small transactions CSV as batches to the backend `POST /api/v1/ingest`, pacing by the CSV's real inter-arrival gaps (compressed by `speed`, clamped by `max_gap_s`) and stamping `event_time = now`.
 
 **Architecture:** A standalone repo (no DB, no Redis, no scorer). A streaming CSV reader assigns a stable ordinal `transaction_id`; a paced producer loop batches rows and POSTs them via a pooled, retrying httpx `IngestClient`; a CLI wires config → reader → producer with a clear exit-code taxonomy. The backend does all scoring/persist/publish.
 
@@ -15,13 +15,13 @@
 ## File Structure
 
 ```
-garda-ai-sim/
+grafin-ai-sim/
   pyproject.toml  .python-version  .env.example  .dockerignore  README.md   (.gitignore committed)
   Dockerfile                       # LOCAL-ONLY (compose convenience), non-root
   .github/workflows/ci.yml
-  garda_ai_sim/
+  grafin_ai_sim/
     __init__.py
-    config.py                      # GARDA_ settings: ingest_url, ingest_token (req), pacing knobs
+    config.py                      # GRAFIN_ settings: ingest_url, ingest_token (req), pacing knobs
     observability.py               # configure_logging (structlog JSON)
     reader.py                      # stream_transactions -> SimTxn (ordinal id, csv_ts, fields)
     client.py                      # IngestClient (pooled httpx, bounded retry) + IngestError/Unavailable
@@ -44,13 +44,13 @@ garda-ai-sim/
 
 **Files:**
 - Create: `pyproject.toml`, `.python-version`, `.dockerignore`, `.env.example`, `README.md`
-- Create: `garda_ai_sim/__init__.py`, `tests/__init__.py`, `tests/conftest.py`
+- Create: `grafin_ai_sim/__init__.py`, `tests/__init__.py`, `tests/conftest.py`
 
 - [ ] **Step 1: Write `pyproject.toml`**
 
 ```toml
 [project]
-name = "garda-ai-sim"
+name = "grafin-ai-sim"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -60,7 +60,7 @@ dependencies = [
 ]
 
 [project.scripts]
-garda-sim = "garda_ai_sim.run:main"
+grafin-sim = "grafin_ai_sim.run:main"
 
 [dependency-groups]
 dev = [
@@ -110,19 +110,19 @@ docs
 
 `.env.example`:
 ```
-GARDA_INGEST_URL=http://localhost:8000/api/v1/ingest
-GARDA_INGEST_TOKEN=change-me-to-the-backend-ingest-token
-GARDA_DATA_DIR=../garda-ai-data/HI-Small
-GARDA_SPEED=60.0
-GARDA_BATCH_SIZE=100
-GARDA_LOG_LEVEL=INFO
+GRAFIN_INGEST_URL=http://localhost:8000/api/v1/ingest
+GRAFIN_INGEST_TOKEN=change-me-to-the-backend-ingest-token
+GRAFIN_DATA_DIR=../grafin-ai-data/HI-Small
+GRAFIN_SPEED=60.0
+GRAFIN_BATCH_SIZE=100
+GRAFIN_LOG_LEVEL=INFO
 ```
 
 `README.md`:
 ```markdown
-# garda-ai-sim
+# grafin-ai-sim
 
-Local-only simulation producer for the Garda AML platform. Streams the HI-Small
+Local-only simulation producer for the Grafin AML platform. Streams the HI-Small
 transactions CSV as batches to the backend `POST /api/v1/ingest` (bearer ingest token),
 pacing by the CSV's real inter-arrival gaps compressed by `speed` (capped by `max_gap_s`)
 and stamping `event_time = now`. Owns pacing/speed/start-stop locally. **Never deployed.**
@@ -131,14 +131,14 @@ and stamping `event_time = now`. Owns pacing/speed/start-stop locally. **Never d
 
 ```bash
 uv sync
-GARDA_INGEST_TOKEN=<the backend GARDA_INGEST_TOKEN> \
-GARDA_INGEST_URL=http://localhost:8000/api/v1/ingest \
-GARDA_DATA_DIR=../garda-ai-data/HI-Small \
-  uv run garda-sim
+GRAFIN_INGEST_TOKEN=<the backend GRAFIN_INGEST_TOKEN> \
+GRAFIN_INGEST_URL=http://localhost:8000/api/v1/ingest \
+GRAFIN_DATA_DIR=../grafin-ai-data/HI-Small \
+  uv run grafin-sim
 ```
 
-Useful knobs: `GARDA_SPEED` (pacing multiplier), `GARDA_BATCH_SIZE` (≤1000),
-`GARDA_MAX_GAP_S` (cap on any single wait), `GARDA_LIMIT` (stop after N), `GARDA_DRY_RUN=true`
+Useful knobs: `GRAFIN_SPEED` (pacing multiplier), `GRAFIN_BATCH_SIZE` (≤1000),
+`GRAFIN_MAX_GAP_S` (cap on any single wait), `GRAFIN_LIMIT` (stop after N), `GRAFIN_DRY_RUN=true`
 (build+log batches, don't POST). Ctrl-C stops gracefully.
 
 Exit codes: `0` ok / interrupted · `1` backend rejected or unreachable · `2` Trans CSV not found.
@@ -152,7 +152,7 @@ uv run pytest -q
 
 - [ ] **Step 3: Create the package skeleton**
 
-Create empty `garda_ai_sim/__init__.py`, `tests/__init__.py`, and `tests/conftest.py` (empty — no DB fixtures needed).
+Create empty `grafin_ai_sim/__init__.py`, `tests/__init__.py`, and `tests/conftest.py` (empty — no DB fixtures needed).
 
 - [ ] **Step 4: Resolve the lockfile**
 
@@ -163,7 +163,7 @@ Expected: creates `.venv` + `uv.lock`, no errors.
 
 ```bash
 git add -A
-git commit -m "chore: scaffold garda-ai-sim (pyproject, tooling, package skeleton)"
+git commit -m "chore: scaffold grafin-ai-sim (pyproject, tooling, package skeleton)"
 ```
 
 ---
@@ -171,7 +171,7 @@ git commit -m "chore: scaffold garda-ai-sim (pyproject, tooling, package skeleto
 ## Task 2: `config.py` — settings (fail-fast on ingest_token)
 
 **Files:**
-- Create: `garda_ai_sim/config.py`
+- Create: `grafin_ai_sim/config.py`
 - Test: `tests/test_config.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -181,23 +181,23 @@ git commit -m "chore: scaffold garda-ai-sim (pyproject, tooling, package skeleto
 import pytest
 from pydantic import ValidationError
 
-from garda_ai_sim.config import Settings
+from grafin_ai_sim.config import Settings
 
 
 def test_requires_ingest_token(monkeypatch):
-    monkeypatch.delenv("GARDA_INGEST_TOKEN", raising=False)
+    monkeypatch.delenv("GRAFIN_INGEST_TOKEN", raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
 
 def test_rejects_empty_token(monkeypatch):
-    monkeypatch.setenv("GARDA_INGEST_TOKEN", "")
+    monkeypatch.setenv("GRAFIN_INGEST_TOKEN", "")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
 
 def test_defaults(monkeypatch):
-    monkeypatch.setenv("GARDA_INGEST_TOKEN", "tok")
+    monkeypatch.setenv("GRAFIN_INGEST_TOKEN", "tok")
     s = Settings(_env_file=None)
     assert s.ingest_url.endswith("/api/v1/ingest")
     assert s.batch_size == 100
@@ -209,8 +209,8 @@ def test_defaults(monkeypatch):
 
 
 def test_rejects_nonpositive_speed(monkeypatch):
-    monkeypatch.setenv("GARDA_INGEST_TOKEN", "tok")
-    monkeypatch.setenv("GARDA_SPEED", "0")
+    monkeypatch.setenv("GRAFIN_INGEST_TOKEN", "tok")
+    monkeypatch.setenv("GRAFIN_SPEED", "0")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 ```
@@ -218,12 +218,12 @@ def test_rejects_nonpositive_speed(monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_config.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_sim.config`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_sim.config`
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# garda_ai_sim/config.py
+# grafin_ai_sim/config.py
 from functools import lru_cache
 
 from pydantic import Field
@@ -231,11 +231,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GARDA_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="GRAFIN_", env_file=".env", extra="ignore")
 
     ingest_url: str = "http://localhost:8000/api/v1/ingest"
     ingest_token: str = Field(min_length=1)  # required, non-empty
-    data_dir: str = "../garda-ai-data/HI-Small"
+    data_dir: str = "../grafin-ai-data/HI-Small"
     trans_files: list[str] = ["HI-Small_Trans_part1.csv", "HI-Small_Trans_part2.csv"]
     batch_size: int = Field(default=100, gt=0, le=1000)
     speed: float = Field(default=60.0, gt=0)
@@ -269,13 +269,13 @@ git commit -m "feat: fail-fast settings (ingest_token required, pacing knobs)"
 ## Task 3: `observability.py` — structlog config
 
 **Files:**
-- Create: `garda_ai_sim/observability.py`
+- Create: `grafin_ai_sim/observability.py`
 - Test: none (config-only; exercised via the run tests)
 
 - [ ] **Step 1: Write the implementation**
 
 ```python
-# garda_ai_sim/observability.py
+# grafin_ai_sim/observability.py
 import logging
 
 import structlog
@@ -297,7 +297,7 @@ def configure_logging(level: str = "INFO") -> None:
 
 - [ ] **Step 2: Verify it imports**
 
-Run: `uv run python -c "from garda_ai_sim.observability import configure_logging; configure_logging('INFO')"`
+Run: `uv run python -c "from grafin_ai_sim.observability import configure_logging; configure_logging('INFO')"`
 Expected: no output, exit 0.
 
 - [ ] **Step 3: Commit**
@@ -312,7 +312,7 @@ git commit -m "feat: structlog JSON logging config"
 ## Task 4: `reader.py` — streaming CSV reader (ordinal id, csv_ts, fields)
 
 **Files:**
-- Create: `garda_ai_sim/reader.py`, `tests/data/trans_sample_part1.csv`, `tests/data/trans_sample_part2.csv`
+- Create: `grafin_ai_sim/reader.py`, `tests/data/trans_sample_part1.csv`, `tests/data/trans_sample_part2.csv`
 - Test: `tests/test_reader.py`
 
 - [ ] **Step 1: Write the sample CSV fixtures**
@@ -338,7 +338,7 @@ Timestamp,From Bank,Account,To Bank,To Account,Amount Received,Receiving Currenc
 import os
 from datetime import UTC, datetime
 
-from garda_ai_sim.reader import SimTxn, stream_transactions
+from grafin_ai_sim.reader import SimTxn, stream_transactions
 
 
 def _paths():
@@ -379,12 +379,12 @@ def test_limit_respected():
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_reader.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_sim.reader`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_sim.reader`
 
 - [ ] **Step 4: Write the implementation**
 
 ```python
-# garda_ai_sim/reader.py
+# grafin_ai_sim/reader.py
 import csv
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -445,7 +445,7 @@ git commit -m "feat: streaming CSV reader (continuous ordinal id, pacing timesta
 ## Task 5: `client.py` — pooled, retrying ingest client
 
 **Files:**
-- Create: `garda_ai_sim/client.py`
+- Create: `grafin_ai_sim/client.py`
 - Test: `tests/test_client.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -455,7 +455,7 @@ git commit -m "feat: streaming CSV reader (continuous ordinal id, pacing timesta
 import httpx
 import pytest
 
-from garda_ai_sim.client import IngestClient, IngestError, IngestSummary, IngestUnavailable
+from grafin_ai_sim.client import IngestClient, IngestError, IngestSummary, IngestUnavailable
 
 
 async def test_maps_response_and_sends_headers():
@@ -491,7 +491,7 @@ async def test_4xx_raises_without_retry():
 
 
 async def test_5xx_retries_then_unavailable(monkeypatch):
-    import garda_ai_sim.client as client_mod
+    import grafin_ai_sim.client as client_mod
 
     async def no_sleep(_seconds: float) -> None:
         return None
@@ -514,12 +514,12 @@ async def test_5xx_retries_then_unavailable(monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_client.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_sim.client`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_sim.client`
 
 - [ ] **Step 3: Write the implementation (mirrors the backend `ScoringClient` resilience pattern)**
 
 ```python
-# garda_ai_sim/client.py
+# grafin_ai_sim/client.py
 import asyncio
 from typing import NamedTuple
 
@@ -611,7 +611,7 @@ git commit -m "feat: pooled retrying ingest client (4xx fail-fast, 5xx/transport
 ## Task 6: `producer.py` — paced batch loop
 
 **Files:**
-- Create: `garda_ai_sim/producer.py`
+- Create: `grafin_ai_sim/producer.py`
 - Test: `tests/test_producer.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -620,9 +620,9 @@ git commit -m "feat: pooled retrying ingest client (4xx fail-fast, 5xx/transport
 # tests/test_producer.py
 from datetime import UTC, datetime
 
-from garda_ai_sim.client import IngestSummary
-from garda_ai_sim.producer import Producer, SimStats
-from garda_ai_sim.reader import SimTxn
+from grafin_ai_sim.client import IngestSummary
+from grafin_ai_sim.producer import Producer, SimStats
+from grafin_ai_sim.reader import SimTxn
 
 
 class StubClient:
@@ -687,12 +687,12 @@ async def _noop_sleep(_d: float) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_producer.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_sim.producer`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_sim.producer`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# garda_ai_sim/producer.py
+# grafin_ai_sim/producer.py
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
@@ -702,8 +702,8 @@ from typing import Protocol
 
 import structlog
 
-from garda_ai_sim.client import IngestSummary
-from garda_ai_sim.reader import SimTxn
+from grafin_ai_sim.client import IngestSummary
+from grafin_ai_sim.reader import SimTxn
 
 log = structlog.get_logger()
 
@@ -810,7 +810,7 @@ git commit -m "feat: paced batch producer (CSV-cadence pacing, now-stamped event
 ## Task 7: `run.py` — CLI orchestration + exit codes
 
 **Files:**
-- Create: `garda_ai_sim/run.py`
+- Create: `grafin_ai_sim/run.py`
 - Test: `tests/test_run.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -821,8 +821,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from garda_ai_sim import run as run_mod
-from garda_ai_sim.client import IngestUnavailable
+from grafin_ai_sim import run as run_mod
+from grafin_ai_sim.client import IngestUnavailable
 
 _HEADER = (
     "Timestamp,From Bank,Account,To Bank,To Account,Amount Received,"
@@ -869,19 +869,19 @@ async def test_happy_dry_run(tmp_path):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/test_run.py -v`
-Expected: FAIL with `ModuleNotFoundError: garda_ai_sim.run`
+Expected: FAIL with `ModuleNotFoundError: grafin_ai_sim.run`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# garda_ai_sim/run.py
+# grafin_ai_sim/run.py
 """Local simulation producer entrypoint.
 
 Streams the HI-Small transactions CSV as batches to the backend POST /api/v1/ingest, paced by the
 CSV's real inter-arrival gaps (compressed by ``speed``, clamped by ``max_gap_s``) and stamped with
 ``event_time = now``. Local-only; never deployed.
 
-Invoke: ``uv run garda-sim`` or ``uv run python -m garda_ai_sim.run``.
+Invoke: ``uv run grafin-sim`` or ``uv run python -m grafin_ai_sim.run``.
 
 Exit codes: 0 ok / interrupted · 1 backend rejected or unreachable · 2 Trans CSV not found.
 """
@@ -893,11 +893,11 @@ import time
 import httpx
 import structlog
 
-from garda_ai_sim.client import IngestClient, IngestError, IngestUnavailable
-from garda_ai_sim.config import Settings, get_settings
-from garda_ai_sim.observability import configure_logging
-from garda_ai_sim.producer import Producer
-from garda_ai_sim.reader import stream_transactions
+from grafin_ai_sim.client import IngestClient, IngestError, IngestUnavailable
+from grafin_ai_sim.config import Settings, get_settings
+from grafin_ai_sim.observability import configure_logging
+from grafin_ai_sim.producer import Producer
+from grafin_ai_sim.reader import stream_transactions
 
 log = structlog.get_logger()
 
@@ -961,7 +961,7 @@ Expected: PASS (3 tests)
 
 - [ ] **Step 5: Run the full suite + lint + type-check**
 
-Run: `uv run pytest -q && uv run ruff check . && uv run mypy garda_ai_sim`
+Run: `uv run pytest -q && uv run ruff check . && uv run mypy grafin_ai_sim`
 Expected: all pass; mypy clean under `--strict`.
 
 - [ ] **Step 6: Commit**
@@ -986,13 +986,13 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
-COPY garda_ai_sim ./garda_ai_sim
+COPY grafin_ai_sim ./grafin_ai_sim
 RUN uv sync --frozen --no-dev
-# LOCAL-ONLY (docker compose convenience). Needs GARDA_INGEST_TOKEN + GARDA_INGEST_URL and the
-# Trans CSVs mounted (set GARDA_DATA_DIR). NEVER deployed to production.
-RUN useradd --system --uid 1001 garda
-USER garda
-CMD ["uv", "run", "--no-sync", "garda-sim"]
+# LOCAL-ONLY (docker compose convenience). Needs GRAFIN_INGEST_TOKEN + GRAFIN_INGEST_URL and the
+# Trans CSVs mounted (set GRAFIN_DATA_DIR). NEVER deployed to production.
+RUN useradd --system --uid 1001 grafin
+USER grafin
+CMD ["uv", "run", "--no-sync", "grafin-sim"]
 ```
 
 - [ ] **Step 2: Write the CI workflow**
@@ -1015,24 +1015,24 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Type-check
-        run: uv run mypy garda_ai_sim
+        run: uv run mypy grafin_ai_sim
       - name: Test
         env:
-          GARDA_INGEST_TOKEN: ci-token
+          GRAFIN_INGEST_TOKEN: ci-token
         run: uv run pytest -q
 ```
 
 - [ ] **Step 3: Write `docs/c4/03-component.md`**
 
 ```markdown
-# garda-ai-sim — C4 Component
+# grafin-ai-sim — C4 Component
 
-**Container:** `garda-ai-sim` — a **local-only** CLI producer (never deployed). Reads the HI-Small
+**Container:** `grafin-ai-sim` — a **local-only** CLI producer (never deployed). Reads the HI-Small
 Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 
 ## Components
 
-- **CLI / Orchestrator** (`run.py`) — the `garda-sim` entrypoint. Configures logging, resolves the
+- **CLI / Orchestrator** (`run.py`) — the `grafin-sim` entrypoint. Configures logging, resolves the
   Trans CSV paths, builds the pooled httpx client + `IngestClient` + `Producer`, runs the stream,
   logs the run summary, maps outcomes to exit codes (0/1/2), handles Ctrl-C.
 - **Reader** (`reader.py`) — streams the Trans CSV parts into `SimTxn`s, assigning a stable 1-based
@@ -1044,7 +1044,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 - **IngestClient** (`client.py`) — pooled httpx wrapper for `POST /api/v1/ingest`; bearer token +
   per-batch correlation id; bounded retry with backoff (4xx → `IngestError` fail-fast; transport/5xx
   → retry → `IngestUnavailable`).
-- **Config** (`config.py`) — `GARDA_` settings; `ingest_token` required (fail-fast); pacing knobs.
+- **Config** (`config.py`) — `GRAFIN_` settings; `ingest_token` required (fail-fast); pacing knobs.
 - **Observability** (`observability.py`) — structlog JSON logging.
 
 ## Relationships & boundaries
@@ -1052,7 +1052,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 - Talks to the backend **only** over the `/api/v1/ingest` HTTP contract (shared by contract, not by
   code — **no import of any other service**). No DB, no Redis, no scorer.
 - The backend does all scoring / persistence / publishing; the sim only produces input.
-- Runs **after** the reference seed (`garda-ai-ingest`, Phase 3) so account/bank FKs resolve; the
+- Runs **after** the reference seed (`grafin-ai-ingest`, Phase 3) so account/bank FKs resolve; the
   backend 400s on any unknown reference.
 - Owns pacing/speed/start-stop locally — this is where the old replay worker's controls now live
   (no `sim_state`, no `/sim/*`).
@@ -1061,7 +1061,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 - [ ] **Step 4: Write `docs/c4/04-code.md`**
 
 ```markdown
-# garda-ai-sim — C4 Code
+# grafin-ai-sim — C4 Code
 
 ## `config.py`
 - `Settings(BaseSettings)` — `ingest_url`, `ingest_token` (required, min_length 1), `data_dir`,
@@ -1096,7 +1096,7 @@ Trans CSV and streams scored-input batches to the backend `POST /api/v1/ingest`.
 
 - [ ] **Step 5: Verify CI steps locally**
 
-Run: `uv run ruff check . && uv run mypy garda_ai_sim && uv run pytest -q`
+Run: `uv run ruff check . && uv run mypy grafin_ai_sim && uv run pytest -q`
 Expected: all green.
 
 - [ ] **Step 6: Commit**
@@ -1111,8 +1111,8 @@ git commit -m "chore: Dockerfile (local-only), CI, C4 component + code docs"
 ## Definition of Done
 
 - `uv run pytest -q` green (config, reader, client, producer, run — ~16 tests).
-- `uv run ruff check .` clean; `uv run mypy garda_ai_sim` clean under `--strict`.
-- `garda-sim` streams the Trans CSV as paced batches to `/api/v1/ingest`; `event_time = now`;
+- `uv run ruff check .` clean; `uv run mypy grafin_ai_sim` clean under `--strict`.
+- `grafin-sim` streams the Trans CSV as paced batches to `/api/v1/ingest`; `event_time = now`;
   `transaction_id` = stable ordinal; pacing = `clamp(csv_gap / speed, 0, max_gap_s)`.
 - Exit codes: 0 ok / interrupted · 1 backend rejected/unreachable · 2 missing CSV — all reachable.
 - No import of any other service; the backend is reached only via the `/api/v1/ingest` HTTP contract.

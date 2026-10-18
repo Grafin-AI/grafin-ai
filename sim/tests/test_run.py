@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from garda_ai_sim import run as run_mod
-from garda_ai_sim.client import IngestUnavailable
+from grafin_ai_sim import run as run_mod
+from grafin_ai_sim.client import IngestUnavailable
 
 _HEADER = (
     "Timestamp,From Bank,Account,To Bank,To Account,Amount Received,"
