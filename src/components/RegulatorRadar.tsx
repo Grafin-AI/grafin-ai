@@ -177,21 +177,13 @@ export function RegulatorRadar() {
   const notAvailable = isError && isAxiosError(error) && error.response?.status === 404;
 
   return (
-    <div className="flex flex-col gap-[18px] p-6 min-w-0">
-      <header className="flex flex-wrap justify-between items-center gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="m-0 text-2xl font-semibold flex items-center gap-2">
-            <Radar className="w-6 h-6 text-[#139EF6]" aria-hidden="true" />
-            Radar Regulator
-          </h1>
-          <span className="text-sm text-muted-foreground">
-            Pandangan lintas institusi untuk BI / OJK — aliran dana mencurigakan antar bank
-          </span>
-        </div>
+    <div className="flex flex-col gap-[18px] min-w-0">
+      {/* Page title and subtitle come from the app header. */}
+      <div className="flex justify-end">
         <span role="note" className="px-3 py-2 rounded-lg bg-flagged-bg text-flagged text-[13px] max-w-[520px]">
           {FEDERATION_NOTE}
         </span>
-      </header>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3" aria-label="Memuat data institusi">

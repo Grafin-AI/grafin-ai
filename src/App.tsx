@@ -102,7 +102,7 @@ export function SystemHealthCards() {
 // ── Views ────────────────────────────────────────────────────────────────────
 const VIEWS: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Monitoring Transaksi', subtitle: 'Pemantauan real-time BI-FAST, QRIS, transfer antarbank' },
-  '/radar': { title: 'Radar Regulator', subtitle: 'Pandangan lintas institusi untuk pengawasan OJK/BI' },
+  '/radar': { title: 'Radar Regulator', subtitle: 'Pandangan lintas institusi untuk BI / OJK — aliran dana mencurigakan antar bank' },
   '/user-risk-profiling': { title: 'Profil Risiko', subtitle: 'Skor risiko nasabah dan entitas dari model' },
   '/analytics': { title: 'Analitik', subtitle: 'Kinerja deteksi model dan nominal per tipologi' },
 };
