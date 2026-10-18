@@ -3,8 +3,9 @@
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
 
-  export default defineConfig({
-    plugins: [react()],
+  // @tailwindcss/vite is ESM-only and this package is CJS, so load it lazily.
+  export default defineConfig(async () => ({
+    plugins: [react(), (await import('@tailwindcss/vite')).default()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
@@ -64,4 +65,4 @@
       port: 3000,
       open: true,
     },
-  });
+  }));
