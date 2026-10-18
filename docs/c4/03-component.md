@@ -452,7 +452,7 @@ The component is composed of seven FastAPI routers and six query repositories. R
 | `/api/v1/metrics` | `api/metrics.py` | `GET /overview`, `GET /volume`, `GET /heatmap` | Yes (TTL 5 s) |
 | `/api/v1/analytics` | `api/analytics.py` | `GET /fraud` | Yes (TTL 5 s) |
 | `/api/v1/geo` | `api/geo.py` | `GET /provinces` | Yes (TTL 10 s) |
-| `/api/v1/transactions` | `api/transactions.py` | `GET /live`, `GET /{transaction_id}`, `GET /{transaction_id}/explanation` | Explanation only (`expl:{id}`, 24h) |
+| `/api/v1/transactions` | `api/transactions.py` | `GET /live`, `GET /{transaction_id}`, `GET/POST /{transaction_id}/explanation`, `POST /{transaction_id}/str-draft`, `GET /{transaction_id}/network` | None (explanations persisted in Postgres `transaction_explanations`) |
 | `/api/v1/users` | `api/users_view.py` | `GET /risk`, `GET /{entity_id}/profile` | No |
 | `/api/v1/alerts` | `api/alerts.py` | `GET /` (list), `POST /{alert_id}/ack` | No |
 | `/api/v1/system` | `api/system.py` | `GET /health` | No |
@@ -506,7 +506,7 @@ The component is composed of seven FastAPI routers and six query repositories. R
 | `GET` | `/api/v1/geo/provinces` | Any authenticated | Province-level fraud counts with risk levels | `200 GeoResponse` |
 | `GET` | `/api/v1/transactions/live` | Any authenticated | Cursor-paginated live event feed (`after_seq`, `limit`) — also the backfill endpoint for WebSocket clients after a reconnect | `200 LiveResponse` |
 | `GET` | `/api/v1/transactions/{id}` | Any authenticated | Single transaction detail with both parties (entity names masked unless admin + `?unmasked=true`); never includes `is_laundering` | `200 TransactionDetail` or `404` |
-| `GET` | `/api/v1/transactions/{id}/explanation` | Any authenticated | Evidence (24h point-in-time window), rule-based risk factors and an Indonesian narrative (LLM or deterministic rules fallback); cached in Redis `expl:{id}` | `200 TransactionExplanation` or `404` |
+| `GET` | `/api/v1/transactions/{id}/explanation` | Any authenticated | Stored explanation (Postgres `transaction_explanations`); POST generates it (LLM persisted, rules fallback returned unpersisted) | `200 TransactionExplanation`, `404 explanation_not_generated` or `404` |
 | `GET` | `/api/v1/users/risk` | Any authenticated | Entity risk list (`risk`, `unmasked`, `limit`) | `200 UserRiskResponse` |
 | `GET` | `/api/v1/users/{entity_id}/profile` | Any authenticated | Single entity risk profile | `200 RiskProfile` or `404` |
 | `GET` | `/api/v1/alerts` | Any authenticated | Alert list (`status=all\|active`) | `200 AlertsResponse` |

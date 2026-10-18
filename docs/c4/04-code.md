@@ -1435,7 +1435,7 @@ async def detail(
 
 ### Route: `GET /api/v1/transactions/{transaction_id}/explanation`
 
-- **Description**: `services.explain.explain_transaction`: Redis `expl:{id}` (24h; 5 min when an LLM failure fell back to rules; Redis errors → compute) → `evidence.compute_evidence` (24h window ending at the transaction's `event_time`, inclusive; never reads `is_laundering`; uses the `(from_account, event_time)` / `(to_account, event_time)` indexes) → `rules.risk_factors` → LLM narrative (`GARDA_LLM_PROVIDER`; anthropic/gemini/ollama via httpx) or `rules.rules_narrative`. Raises HTTP 404 if not found.
+- **Description**: `services.explain.generate_explanation`: stored row in `transaction_explanations` (returned without an LLM call) → `evidence.compute_evidence` (24h window ending at the transaction's `event_time`, inclusive; never reads `is_laundering`; uses the `(from_account, event_time)` / `(to_account, event_time)` indexes) → `rules.risk_factors` → LLM narrative (`GARDA_LLM_PROVIDER`; anthropic/gemini/ollama via httpx) or `rules.rules_narrative`. Raises HTTP 404 if not found.
 - **Role gate**: any authenticated user
 
 ---
