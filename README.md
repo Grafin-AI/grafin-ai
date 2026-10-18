@@ -56,7 +56,14 @@ in plain Bahasa Indonesia.
 | **Firebase Hosting** | Serves the React dashboard, which calls the Cloud Run API directly with CORS. |
 | **Cloud SQL** (PostgreSQL 16) | Transactions, accounts, banks, scores, alerts, users |
 | **Artifact Registry** | Container images |
-| **Compute Engine** (4× NVIDIA T4) | Model training |
+| **Vertex AI Workbench** (4× NVIDIA T4) | Multi-GNN training notebooks/runs; experiments tracked in **MLflow** (`training/docs/mlflow.md`) |
+| **Cloud Storage** | Datasets (HI-Small-ID), model run artifacts, test outputs and the MLflow store (`gs://garda-ai-dev-01-grafin-artifacts`) |
+| **Cloud Logging** | API, access and Insight Narrator tool-call logs from Cloud Run |
+| **Secret Manager + IAM** | App secrets (Gemini key, JWT, DB URL, service tokens) in Secret Manager; a dedicated least-privilege runtime service account |
+
+Insight Narrator uses **Gemini function calling**: the model calls `get_transaction_evidence`
+and `get_policy_references` to pull evidence and regulation references before it writes the
+case summary.
 
 ```
  Bank app ─▶ Node SDK (hash + vectorise) ─▶ Cloud Run: grafin-api ─┬─▶ Cloud SQL (Postgres)
@@ -106,5 +113,5 @@ the offline validation F1. There is no train/serve skew. Details and caveats are
 ## Roadmap
 
 - Live GNN inference on GPU (Cloud Run GPU / GCE T4) in place of exported scores
-- GNN + XGBoost hybrid scorer
+- Tree-based ML (XGBoost) layer for GNN + tree hybrid scoring (in progress)
 - Production federated SDK with secure aggregation
