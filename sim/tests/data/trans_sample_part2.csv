@@ -1,0 +1,2 @@
+Timestamp,From Bank,Account,To Bank,To Account,Amount Received,Receiving Currency,Amount Paid,Payment Currency,Payment Format,Is Laundering
+2025/09/01 00:01,10,8000EBD30,20,8000F4580,150000.00,IDR,150000.00,IDR,ACH,0
