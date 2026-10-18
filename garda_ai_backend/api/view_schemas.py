@@ -208,6 +208,7 @@ class UserRiskResponse(BaseModel):
 class AlertItem(BaseModel):
     id: int
     event_seq: int
+    transaction_id: int  # opens the transaction detail from the alert card
     severity: str
     typology: str | None
     created_at: str  # real ingestion (wall-clock) time

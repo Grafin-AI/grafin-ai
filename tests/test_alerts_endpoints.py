@@ -48,6 +48,9 @@ async def test_list_alerts(client):
     assert fan_out["event_time"] == "2025-09-01T09:00:00+00:00"
     # created_at is kept: it is real ingestion (wall-clock) time.
     assert fan_out["created_at"].startswith("2026-08-12")
+    # The card opens the transaction detail, so the alert carries its transaction id.
+    detail = await client.get(f"/api/v1/transactions/{fan_out['transaction_id']}", headers=_auth())
+    assert detail.status_code == 200 and detail.json()["typology"] == "Fan-Out"
 
 
 async def test_alerts_ordered_by_event_time_not_created_at(client):
